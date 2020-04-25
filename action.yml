@@ -1,6 +1,6 @@
 ---
 name: 'Run golangci-lint'
-description: '🐶Run golangci-lint (WIP)'
+description: 'Run golangci-lint (WIP)'
 author: 'golangci'
 inputs:
   github_token:

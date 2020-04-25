@@ -1,0 +1,14 @@
+---
+name: 'Run golangci-lint'
+description: '🐶 Run golangci-lint (WIP)'
+author: 'golangci'
+inputs:
+  github_token:
+    description: 'GITHUB_TOKEN'
+    required: true
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
+branding:
+  icon: 'check-circle'
+  color: 'blue'

@@ -5,7 +5,7 @@ author: 'golangci'
 inputs:
   github_token:
     description: 'GITHUB_TOKEN'
-    required: true
+    required: false
   flags:
     description: 'GolangCI command line flags'
     required: false

@@ -9,6 +9,11 @@ inputs:
   flags:
     description: 'GolangCI command line flags'
     required: false
+  directory:
+    description: 'Working directory'
+    required: false
+    default: ''
+
 runs:
   using: 'docker'
   image: 'Dockerfile'

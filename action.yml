@@ -13,6 +13,11 @@ inputs:
     description: 'Working directory'
     required: false
     default: ''
+  format:
+    description: 'Output format of issues'
+    default: 'github-actions'
+    required: false
+
 
 runs:
   using: 'docker'

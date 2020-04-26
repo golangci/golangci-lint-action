@@ -12,4 +12,5 @@ jobs:
         with:
           github_token: ${{ secrets.github_token }}
           directory: sample
+          format: colored-line-number
           flags: --issues-exit-code 0

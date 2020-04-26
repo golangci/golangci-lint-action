@@ -6,6 +6,9 @@ inputs:
   github_token:
     description: 'GITHUB_TOKEN'
     required: true
+  flags:
+    description: 'GolangCI command line flags'
+    required: false
 runs:
   using: 'docker'
   image: 'Dockerfile'

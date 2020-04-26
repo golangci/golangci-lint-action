@@ -1,8 +1,8 @@
-name: golangci-lint
+name: golangci
 on: [pull_request]
 jobs:
   golangci-lint-dockerfile:
-    name: golangci-lint
+    name: lint
     runs-on: ubuntu-latest
     steps:
       - name: Check out code into the Go module directory

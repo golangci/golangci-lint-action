@@ -17,9 +17,6 @@ jobs:
         uses: actions/checkout@v1
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v0.0.2
-        with:
-          github_token: ${{ secrets.github_token }}
-
 ```
 
 Based on [reviewdog action](https://github.com/reviewdog/action-golangci-lint).

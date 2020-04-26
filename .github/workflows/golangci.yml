@@ -11,4 +11,4 @@ jobs:
         uses: ./
         with:
           github_token: ${{ secrets.github_token }}
-          flags: "./testdata"
+          directory: sample

@@ -1,0 +1,16 @@
+name: golangci
+on: [pull_request]
+jobs:
+  golangci-lint-dockerfile:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v1
+      - name: golangci-lint
+        uses: ./
+        with:
+          github_token: ${{ secrets.github_token }}
+          directory: sample
+          format: colored-line-number
+          flags: --issues-exit-code 0

@@ -6,6 +6,19 @@ inputs:
   github_token:
     description: 'GITHUB_TOKEN'
     required: true
+  flags:
+    description: 'GolangCI command line flags'
+    required: false
+  directory:
+    description: 'Working directory'
+    required: false
+    default: ''
+  format:
+    description: 'Output format of issues'
+    default: 'github-actions'
+    required: false
+
+
 runs:
   using: 'docker'
   image: 'Dockerfile'

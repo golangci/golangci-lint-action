@@ -22,7 +22,7 @@ jobs:
           # github_token: ${{ secrets.github_token }} #Optional Default: ''
           # flags: --timeout 30m (golang-ci-lint flags) #Optional Default: ''
           # directory: Working Directory #Optional Default: ''
-          # format: Output format of issues #Optional Default: 'githu-actions'
+          # format: Output format of issues #Optional Default: 'github-actions'
 ```
 
 Based on [reviewdog action](https://github.com/reviewdog/action-golangci-lint).

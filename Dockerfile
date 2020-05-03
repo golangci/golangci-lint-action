@@ -1,4 +1,4 @@
-FROM golangci/golangci-lint:v1.25
+FROM golangci/golangci-lint:v1.26
 
 COPY entrypoint.sh /entrypoint.sh
 

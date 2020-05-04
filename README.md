@@ -1,6 +1,6 @@
 # golangci-lint-action
 
-[![Build Status](https://github.com/golangci/golangci-lint-action/workflows/build-test/badge.svg)](https://github.com/golangci/golangci-lint-action/actions)
+[![Build Status](https://github.com/golangci/golangci-lint-action/workflows/build-and-test/badge.svg)](https://github.com/golangci/golangci-lint-action/actions)
 
 ![GitHub Annotations](./static/annotations.png)
 

@@ -1,4 +1,4 @@
-name: "build-test"
+name: "build-and-test"
 on: # rebuild any PRs and main branch changes
   pull_request:
   push:

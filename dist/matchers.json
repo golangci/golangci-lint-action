@@ -1,0 +1,16 @@
+{
+    "problemMatcher": [
+        {
+            "owner": "golangci-lint-action",
+            "pattern": [
+                {
+                    "regexp": "^\\s*(\\.{0,2}[\\/\\\\].+\\.go):(?:(\\d+):(\\d+):)? (.*)",
+                    "file": 1,
+                    "line": 2,
+                    "column": 3,
+                    "message": 4
+                }
+            ]
+        }
+    ]
+}

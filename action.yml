@@ -3,25 +3,21 @@ name: 'Run golangci-lint'
 description: 'Run golangci-lint (WIP)'
 author: 'golangci'
 inputs:
-  github_token:
-    description: 'GITHUB_TOKEN'
-    required: false
-  flags:
-    description: 'GolangCI command line flags'
-    required: false
-  directory:
-    description: 'Working directory'
-    required: false
+  version:
+    description: 'version of golangci-lint to use in form of v1.2.3'
+    required: true
+  args:
+    description: 'golangci-lint command line arguments'
     default: ''
-  format:
-    description: 'Output format of issues'
-    default: 'github-actions'
     required: false
-
+  github-token:
+    description: 'GitHub token with scope `repo.public_repo`. Used for fetching a list of releases of golangci-lint.'
+    required: true
 
 runs:
-  using: 'docker'
-  image: 'Dockerfile'
+  using: 'node12'
+  main: 'dist/run/index.js'
+  post: 'dist/post_run/index.js'
 branding:
   icon: 'check-circle'
   color: 'blue'

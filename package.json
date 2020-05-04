@@ -1,0 +1,49 @@
+{
+  "name": "golanci-lint-action",
+  "version": "1.1.2",
+  "private": true,
+  "description": "golangci-lint github action",
+  "main": "dist/main.js",
+  "scripts": {
+    "prepare-setup-go": "cd node_modules/setup-go && npm run build",
+    "prepare-cache": "cd node_modules/cache && npm run build",
+    "prepare-deps": "npm run prepare-setup-go && npm run prepare-cache",
+    "build": "tsc && ncc build -o dist/run/ src/main.ts && ncc build -o dist/post_run/ src/post_main.ts",
+    "type-check": "tsc",
+    "lint": "eslint **/*.ts --cache",
+    "lint-fix": "eslint **/*.ts --cache --fix",
+    "format": "prettier --write **/*.ts",
+    "format-check": "prettier --check **/*.ts",
+    "all": "npm run build && npm run format-check && npm run lint",
+    "local": "npm run build && act -j test -s GOLANGCI_LINT_GITHUB_TOKEN=$GITHUB_TOKEN"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/golangci/golangci-lint-action.git"
+  },
+  "author": "GitHub",
+  "license": "MIT",
+  "dependencies": {
+    "@actions/core": "^1.2.0",
+    "@actions/exec": "^1.0.1",
+    "@actions/github": "^2.1.1",
+    "@actions/tool-cache": "^1.3.4",
+    "@types/semver": "^7.1.0",
+    "cache": "git+https://github.com/golangci/cache.git",
+    "setup-go": "git+https://github.com/actions/setup-go.git"
+  },
+  "devDependencies": {
+    "@types/node": "^12.0.4",
+    "@types/uuid": "^3.4.5",
+    "@typescript-eslint/eslint-plugin": "^2.7.0",
+    "@typescript-eslint/parser": "^2.7.0",
+    "@zeit/ncc": "^0.20.5",
+    "eslint": "^6.6.0",
+    "eslint-config-prettier": "^6.5.0",
+    "eslint-plugin-import": "^2.18.2",
+    "eslint-plugin-prettier": "^3.1.1",
+    "eslint-plugin-simple-import-sort": "^5.0.2",
+    "prettier": "^1.19.1",
+    "typescript": "^3.8.3"
+  }
+}

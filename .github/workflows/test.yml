@@ -1,0 +1,27 @@
+name: "build-test"
+on: # rebuild any PRs and main branch changes
+  pull_request:
+  push:
+    branches:
+      - master
+      - 'releases/*'
+
+jobs:
+  build: # make sure build/ci work properly
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - run: |
+        npm install
+        npm run prepare-deps
+        npm run all
+        git diff && git diff --cached
+  test: # make sure the action works on a clean machine without building
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - uses: ./
+      with:
+        version: v1.26
+        args: --issues-exit-code=0 ./sample/...
+        github-token: ${{ secrets.GOLANGCI_LINT_GITHUB_TOKEN }}

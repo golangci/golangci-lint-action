@@ -1,7 +1,7 @@
 {
     "problemMatcher": [
         {
-            "owner": "golangci-lint-action",
+            "owner": "go",
             "pattern": [
                 {
                     "regexp": "^\\s*(\\.{0,2}[\\/\\\\].+\\.go):(?:(\\d+):(\\d+):)? (.*)",

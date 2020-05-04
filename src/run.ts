@@ -55,7 +55,7 @@ async function runLint(lintPath: string): Promise<void> {
     throw new Error(`please, don't change out-format for golangci-lint: it can be broken in a future`)
   }
 
-  const cmd = `${lintPath} run ${args}`.trimRight()
+  const cmd = `${lintPath} run --out-format=github-actions ${args}`.trimRight()
   core.info(`Running [${cmd}] ...`)
   const startedAt = Date.now()
   try {

@@ -19,5 +19,5 @@ runs:
   main: 'dist/run/index.js'
   post: 'dist/post_run/index.js'
 branding:
-  icon: 'check-circle'
-  color: 'blue'
+  icon: 'shield'
+  color: 'yellow'

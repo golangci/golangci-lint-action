@@ -2,9 +2,10 @@
 
 [![Build Status](https://github.com/golangci/golangci-lint-action/workflows/build-and-test/badge.svg)](https://github.com/golangci/golangci-lint-action/actions)
 
-![GitHub Annotations](./static/annotations.png)
+It's the official GitHub action for [golangci-lint](https://github.com/golangci/golangci-lint) from it's authors.
+The action runs [golangci-lint](https://github.com/golangci/golangci-lint) and reports issues from linters.
 
-The action that runs [golangci-lint](https://github.com/golangci/golangci-lint) and reports issues from linters.
+![GitHub Annotations](./static/annotations.png)
 
 ## How to use
 
@@ -57,13 +58,12 @@ The action was implemented with performance in mind:
 2. We don't use Docker because image pulling is slow.
 3. We do as much as we can in parallel, e.g. we download cache, go and golangci-lint binary in parallel.
 
-For example, in a repository of [golangci-lint](https://github.com/golangci/golangci-lint) running this action without the cache takes 35s, but with cache takes 800ms.
-But the total execution time of the action on [golangci-lint](https://github.com/golangci/golangci-lint) repository is 14s:
+For example, in a repository of [golangci-lint](https://github.com/golangci/golangci-lint) running this action without the cache takes 50s, but with cache takes 14s:
   * in parallel:
     * 13s to download Go
-    * 3.7s to restore 50 MB of cache
+    * 4s to restore 50 MB of cache
     * 1s to find and install `golangci-lint`
-  * 1s to run `golangci-lint`
+  * 1s to run `golangci-lint` (it takes 35s without cache)
 
 ## Internals
 

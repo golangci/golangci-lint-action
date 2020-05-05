@@ -57,6 +57,14 @@ The action was implemented with performance in mind:
 2. We don't use Docker because image pulling is slow.
 3. We do as much as we can in parallel, e.g. we download cache, go and golangci-lint binary in parallel.
 
+For example, in a repository of [golangci-lint](https://github.com/golangci/golangci-lint) running this action without the cache takes 35s, but with cache takes 800ms.
+But the total execution time of the action on [golangci-lint](https://github.com/golangci/golangci-lint) repository is 14s:
+  * in parallel:
+    * 13s to download Go
+    * 3.7s to restore 50 MB of cache
+    * 1s to find and install `golangci-lint`
+  * 1s to run `golangci-lint`
+
 ## Internals
 
 We use JavaScript-based action. We don't use Docker-based action because:

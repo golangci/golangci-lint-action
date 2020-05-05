@@ -27916,7 +27916,7 @@ function buildCacheKeys() {
         keys.push(cacheKey);
         if (yield pathExists(`go.mod`)) {
             // Add checksum to key to invalidate a cache when dependencies change.
-            cacheKey += yield checksumFile(`cache-key`, `go.mod`);
+            cacheKey += yield checksumFile(`sha1`, `go.mod`);
         }
         else {
             cacheKey += `nogomod`;

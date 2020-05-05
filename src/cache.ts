@@ -42,7 +42,7 @@ async function buildCacheKeys(): Promise<string[]> {
 
   if (await pathExists(`go.mod`)) {
     // Add checksum to key to invalidate a cache when dependencies change.
-    cacheKey += await checksumFile(`cache-key`, `go.mod`)
+    cacheKey += await checksumFile(`sha1`, `go.mod`)
   } else {
     cacheKey += `nogomod`
   }

@@ -27870,29 +27870,73 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const core = __importStar(__webpack_require__(470));
 const restore_1 = __importDefault(__webpack_require__(206));
 const save_1 = __importDefault(__webpack_require__(781));
-// TODO: ensure dir exists, have access, etc
-const getCacheDir = () => `${process.env.HOME}/.cache/golangci-lint`;
-const setCacheInputs = () => {
-    process.env.INPUT_KEY = `golangci-lint.analysis-cache`;
-    process.env.INPUT_PATH = getCacheDir();
+const crypto = __importStar(__webpack_require__(417));
+const fs = __importStar(__webpack_require__(747));
+function checksumFile(hashName, path) {
+    return new Promise((resolve, reject) => {
+        const hash = crypto.createHash(hashName);
+        const stream = fs.createReadStream(path);
+        stream.on("error", err => reject(err));
+        stream.on("data", chunk => hash.update(chunk));
+        stream.on("end", () => resolve(hash.digest("hex")));
+    });
+}
+const pathExists = (path) => __awaiter(void 0, void 0, void 0, function* () { return !!(yield fs.promises.stat(path).catch(e => false)); });
+const getLintCacheDir = () => `${process.env.HOME}/.cache/golangci-lint`;
+const getCacheDirs = () => {
+    // Not existing dirs are ok here: it works.
+    return [getLintCacheDir(), `${process.env.HOME}/.cache/go-build`, `${process.env.HOME}/go/pkg`];
 };
+const getIntervalKey = (invalidationIntervalDays) => {
+    const now = new Date();
+    const secondsSinceEpoch = now.getTime() / 1000;
+    const intervalNumber = Math.floor(secondsSinceEpoch / (invalidationIntervalDays * 86400));
+    return intervalNumber.toString();
+};
+function buildCacheKeys() {
+    return __awaiter(this, void 0, void 0, function* () {
+        const keys = [];
+        let cacheKey = `golangci-lint.cache-`;
+        keys.push(cacheKey);
+        // Periodically invalidate a cache because a new code being added.
+        // TODO: configure it via inputs.
+        cacheKey += `${getIntervalKey(7)}-`;
+        keys.push(cacheKey);
+        if (yield pathExists(`go.mod`)) {
+            // Add checksum to key to invalidate a cache when dependencies change.
+            cacheKey += yield checksumFile(`cache-key`, `go.mod`);
+        }
+        else {
+            cacheKey += `nogomod`;
+        }
+        keys.push(cacheKey);
+        return keys;
+    });
+}
 function restoreCache() {
     return __awaiter(this, void 0, void 0, function* () {
         const startedAt = Date.now();
-        setCacheInputs();
+        const keys = yield buildCacheKeys();
+        const primaryKey = keys.pop();
+        const restoreKeys = keys.reverse();
+        core.info(`Primary analysis cache key is '${primaryKey}', restore keys are '${restoreKeys.join(` | `)}'`);
+        process.env[`INPUT_RESTORE-KEYS`] = restoreKeys.join(`\n`);
+        process.env.INPUT_KEY = primaryKey;
+        process.env.INPUT_PATH = getCacheDirs().join(`\n`);
         // Tell golangci-lint to use our cache directory.
-        process.env.GOLANGCI_LINT_CACHE = getCacheDir();
+        process.env.GOLANGCI_LINT_CACHE = getLintCacheDir();
         yield restore_1.default();
-        core.info(`Restored golangci-lint analysis cache in ${Date.now() - startedAt}ms`);
+        core.info(`Restored cache for golangci-lint from key '${primaryKey}' in ${Date.now() - startedAt}ms`);
     });
 }
 exports.restoreCache = restoreCache;
 function saveCache() {
     return __awaiter(this, void 0, void 0, function* () {
         const startedAt = Date.now();
-        setCacheInputs();
+        const cacheDirs = getCacheDirs();
+        process.env.INPUT_PATH = cacheDirs.join(`\n`);
         yield save_1.default();
-        core.info(`Saved golangci-lint analysis cache in ${Date.now() - startedAt}ms`);
+        core.info(`Saved cache for golangci-lint from paths '${cacheDirs.join(`, `)}' in ${Date.now() - startedAt}ms`);
     });
 }
 exports.saveCache = saveCache;

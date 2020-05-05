@@ -1,6 +1,6 @@
 ---
 name: 'Run golangci-lint'
-description: 'Official golangci-lint runner. Works very fast: uses caching and parallelization. Creates line-attached GitHub annotations for found issues. Beta version.'
+description: 'Official golangci-lint action with line-attached annotations for found issues, caching and parallel execution. Beta version.'
 author: 'golangci'
 inputs:
   version:

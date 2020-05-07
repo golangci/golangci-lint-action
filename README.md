@@ -9,9 +9,7 @@ The action runs [golangci-lint](https://github.com/golangci/golangci-lint) and r
 
 ## How to use
 
-1. Create a [GitHub token](https://github.com/settings/tokens/new) with scope `repo.public_repo`.
-2. Add it to a [repository secrets](https://help.github.com/en/actions/configuring-and-managing-workflows/creating-and-storing-encrypted-secrets#creating-encrypted-secrets): repository -> `Settings` -> `Secrets`.
-3. Add `.github/workflows/golangci-lint.yml` with the following contents:
+Add `.github/workflows/golangci-lint.yml` with the following contents:
 
 ```yaml
 name: golangci-lint
@@ -37,8 +35,11 @@ jobs:
           # Optional: golangci-lint command line arguments.
           # args: ./the-only-dir-to-analyze/...
 
-          # Required: GitHub token with scope `repo.public_repo`. Used for fetching a list of releases of golangci-lint.
-          github-token: ${{ secrets.GOLANGCI_LINT_GITHUB_TOKEN }}
+          # Required: the token is used for fetching a list of releases of golangci-lint.
+          # The secret `GITHUB_TOKEN` is automatically created by GitHub,
+          # no need to create it manually.
+          # https://help.github.com/en/actions/configuring-and-managing-workflows/authenticating-with-the-github_token#about-the-github_token-secret
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 ## Comments and Annotations
@@ -95,6 +96,5 @@ This scheme is basic and needs improvements. Pull requests and ideas are welcome
 
 1. Install [act](https://github.com/nektos/act#installation)
 2. Make a symlink for `act` to work properly: `ln -s . golangci-lint-action`
-3. Get a [GitHub token](https://github.com/settings/tokens/new) with the scope `repo.public_repo`. Export it by `export GITHUB_TOKEN=YOUR_TOKEN`.
-4. Prepare deps once: `npm run prepare-deps`
-5. Run `npm run local` after any change to test it
+3. Prepare deps once: `npm run prepare-deps`
+4. Run `npm run local` after any change to test it

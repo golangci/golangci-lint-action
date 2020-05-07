@@ -20,6 +20,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v1
+    - run: |
+        echo "::warning::Some warning message"
+        echo "::error::Some error message"
     - uses: ./
       with:
         version: v1.26

@@ -15,7 +15,7 @@ jobs:
         npm install
         npm run prepare-deps
         npm run all
-        git diff && git diff --cached
+        git diff --exit-code
   test: # make sure the action works on a clean machine without building
     runs-on: ubuntu-latest
     steps:
@@ -24,4 +24,3 @@ jobs:
       with:
         version: v1.26
         args: --issues-exit-code=0 ./sample/...
-        github-token: ${{ secrets.GITHUB_TOKEN }}

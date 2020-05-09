@@ -10,12 +10,12 @@
     "prepare-deps": "npm run prepare-setup-go && npm run prepare-cache",
     "build": "tsc && ncc build -o dist/run/ src/main.ts && ncc build -o dist/post_run/ src/post_main.ts",
     "type-check": "tsc",
-    "lint": "eslint **/*.ts --cache",
+    "lint": "eslint --max-warnings 1 **/*.ts --cache",
     "lint-fix": "eslint **/*.ts --cache --fix",
     "format": "prettier --write **/*.ts",
     "format-check": "prettier --check **/*.ts",
     "all": "npm run build && npm run format-check && npm run lint",
-    "local": "npm run build && act -j test -s GOLANGCI_LINT_GITHUB_TOKEN=$GITHUB_TOKEN"
+    "local": "npm run build && act -j test -b"
   },
   "repository": {
     "type": "git",

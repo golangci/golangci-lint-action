@@ -9,8 +9,8 @@ import { findLintVersion } from "./version"
 const execShellCommand = promisify(exec)
 
 async function prepareLint(): Promise<string> {
-  const lintVersion = await findLintVersion()
-  return await installLint(lintVersion)
+  const versionConfig = await findLintVersion()
+  return await installLint(versionConfig)
 }
 
 async function prepareEnv(): Promise<string> {

@@ -1,24 +1,5 @@
 import * as core from "@actions/core"
-import * as github from "@actions/github"
-import { Octokit } from "@actions/github/node_modules/@octokit/rest"
-
-async function performResilientGitHubRequest<T>(opName: string, execFn: () => Promise<Octokit.Response<T>>): Promise<T> {
-  let lastError = ``
-  for (let i = 0; i < 3; i++) {
-    // TODO: configurable params, timeouts, random jitters, exponential back-off, etc
-    try {
-      const res = await execFn()
-      if (res.status === 200) {
-        return res.data
-      }
-      lastError = `GitHub returned HTTP code ${res.status}`
-    } catch (exc) {
-      lastError = exc.message
-    }
-  }
-
-  throw new Error(`failed to execute github operation '${opName}': ${lastError}`)
-}
+import * as httpm from "@actions/http-client"
 
 // TODO: make a class
 export type Version = {
@@ -84,40 +65,61 @@ const getRequestedLintVersion = (): Version => {
   return parsedRequestedLintVersion
 }
 
-export async function findLintVersion(): Promise<Version> {
+export type VersionConfig = {
+  Error?: string
+  TargetVersion: string
+  AssetURL: string
+}
+
+type Config = {
+  MinorVersionToConfig: {
+    [minorVersion: string]: VersionConfig
+  }
+}
+
+const getConfig = async (): Promise<Config> => {
+  const http = new httpm.HttpClient(`golangci/golangci-lint-action`, [], {
+    allowRetries: true,
+    maxRetries: 5,
+  })
+  try {
+    const url = `https://raw.githubusercontent.com/golangci/golangci-lint/master/assets/github-action-config.json`
+    const response: httpm.HttpClientResponse = await http.get(url)
+    if (response.message.statusCode !== 200) {
+      throw new Error(`failed to download from "${url}". Code(${response.message.statusCode}) Message(${response.message.statusMessage})`)
+    }
+
+    const body = await response.readBody()
+    return JSON.parse(body)
+  } catch (exc) {
+    throw new Error(`failed to get action config: ${exc.message}`)
+  }
+}
+
+export async function findLintVersion(): Promise<VersionConfig> {
   core.info(`Finding needed golangci-lint version...`)
   const startedAt = Date.now()
   const reqLintVersion = getRequestedLintVersion()
 
-  const githubToken = core.getInput(`github-token`, { required: true })
-  const octokit = new github.GitHub(githubToken)
+  const config = await getConfig()
 
-  // TODO: fetch all pages, not only the first one.
-  const releasesPage = await performResilientGitHubRequest(`fetch releases of golangci-lint`, function() {
-    return octokit.repos.listReleases({ owner: `golangci`, repo: `golangci-lint`, [`per_page`]: 100 })
-  })
-
-  // TODO: use semver and semver.satisfies
-  let latestPatchVersion: number | null = null
-  for (const rel of releasesPage) {
-    const ver = parseVersion(rel.tag_name)
-    if (ver.patch === null) {
-      // < minVersion
-      continue
-    }
-
-    if (ver.major == reqLintVersion.major && ver.minor == reqLintVersion.minor) {
-      latestPatchVersion = latestPatchVersion !== null ? Math.max(latestPatchVersion, ver.patch) : ver.patch
-    }
+  if (!config.MinorVersionToConfig) {
+    core.warning(JSON.stringify(config))
+    throw new Error(`invalid config: no MinorVersionToConfig field`)
   }
 
-  if (latestPatchVersion === null) {
-    throw new Error(
-      `requested golangci-lint lint version ${stringifyVersion(reqLintVersion)} doesn't exist in list of golangci-lint releases`
-    )
+  const versionConfig = config.MinorVersionToConfig[stringifyVersion(reqLintVersion)]
+  if (!versionConfig) {
+    throw new Error(`requested golangci-lint version '${stringifyVersion(reqLintVersion)}' doesn't exist`)
   }
 
-  const neededVersion = { ...reqLintVersion, patch: latestPatchVersion }
-  core.info(`Calculated needed golangci-lint version ${stringifyVersion(neededVersion)} in ${Date.now() - startedAt}ms`)
-  return neededVersion
+  if (versionConfig.Error) {
+    throw new Error(`failed to use requested golangci-lint version '${stringifyVersion(reqLintVersion)}': ${versionConfig.Error}`)
+  }
+
+  core.info(
+    `Requested golangci-lint '${stringifyVersion(reqLintVersion)}', using '${versionConfig.TargetVersion}', calculation took ${Date.now() -
+      startedAt}ms`
+  )
+  return versionConfig
 }

@@ -3,17 +3,19 @@ import * as tc from "@actions/tool-cache"
 import path from "path"
 import { run as setupGo } from "setup-go/lib/main"
 
-import { stringifyVersion, Version } from "./version"
+import { VersionConfig } from "./version"
 
 // The installLint returns path to installed binary of golangci-lint.
-export async function installLint(ver: Version): Promise<string> {
-  core.info(`Installing golangci-lint ${stringifyVersion(ver)}...`)
+export async function installLint(versionConfig: VersionConfig): Promise<string> {
+  core.info(`Installing golangci-lint ${versionConfig.TargetVersion}...`)
   const startedAt = Date.now()
-  const dirName = `golangci-lint-${ver.major}.${ver.minor}.${ver.patch}-linux-amd64`
-  const assetUrl = `https://github.com/golangci/golangci-lint/releases/download/${stringifyVersion(ver)}/${dirName}.tar.gz`
 
-  const tarGzPath = await tc.downloadTool(assetUrl)
+  core.info(`Downloading ${versionConfig.AssetURL} ...`)
+  const tarGzPath = await tc.downloadTool(versionConfig.AssetURL)
   const extractedDir = await tc.extractTar(tarGzPath, process.env.HOME)
+
+  const urlParts = versionConfig.AssetURL.split(`/`)
+  const dirName = urlParts[urlParts.length - 1].replace(/\.tar\.gz$/, ``)
   const lintPath = path.join(extractedDir, dirName, `golangci-lint`)
   core.info(`Installed golangci-lint into ${lintPath} in ${Date.now() - startedAt}ms`)
   return lintPath

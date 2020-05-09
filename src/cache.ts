@@ -4,7 +4,7 @@ import save from "cache/lib/save"
 import * as crypto from "crypto"
 import * as fs from "fs"
 
-function checksumFile(hashName: string, path: string) {
+function checksumFile(hashName: string, path: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const hash = crypto.createHash(hashName)
     const stream = fs.createReadStream(path)
@@ -14,7 +14,7 @@ function checksumFile(hashName: string, path: string) {
   })
 }
 
-const pathExists = async (path: string) => !!(await fs.promises.stat(path).catch(e => false))
+const pathExists = async (path: string): Promise<boolean> => !!(await fs.promises.stat(path).catch(() => false))
 
 const getLintCacheDir = (): string => `${process.env.HOME}/.cache/golangci-lint`
 

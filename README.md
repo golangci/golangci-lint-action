@@ -27,19 +27,13 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v0.1.7
+        uses: golangci/golangci-lint-action@v0.2.0
         with:
           # Required: the version of golangci-lint is required and must be specified without patch version: we always use the latest patch version.
           version: v1.26
 
           # Optional: golangci-lint command line arguments.
           # args: ./the-only-dir-to-analyze/...
-
-          # Required: the token is used for fetching a list of releases of golangci-lint.
-          # The secret `GITHUB_TOKEN` is automatically created by GitHub,
-          # no need to create it manually.
-          # https://help.github.com/en/actions/configuring-and-managing-workflows/authenticating-with-the-github_token#about-the-github_token-secret
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 ## Comments and Annotations
@@ -77,8 +71,8 @@ Inside our action we perform 3 steps:
 
 1. Setup environment running in parallel:
   * restore [cache](https://github.com/actions/cache) of previous analyzes
-  * list [releases of golangci-lint](https://github.com/golangci/golangci-lint/releases) and find the latest patch version
-    for needed version (users of this action can specify only minor version). After that install [golangci-lint](https://github.com/golangci/golangci-lint) using [@actions/tool-cache](https://github.com/actions/toolkit/tree/master/packages/tool-cache)
+  * fetch [action config](https://github.com/golangci/golangci-lint/blob/master/assets/github-action-config.json) and find the latest `golangci-lint` patch version
+    for needed version (users of this action can specify only minor version of `golangci-lint`). After that install [golangci-lint](https://github.com/golangci/golangci-lint) using [@actions/tool-cache](https://github.com/actions/toolkit/tree/master/packages/tool-cache)
   * install the latest Go 1.x version using [@actions/setup-go](https://github.com/actions/setup-go)
 2. Run `golangci-lint` with specified by user `args`
 3. Save cache for later builds

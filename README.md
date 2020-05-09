@@ -36,6 +36,9 @@ jobs:
           # args: ./the-only-dir-to-analyze/...
 ```
 
+We recommend running this action in a job separate from other jobs (`go test`, etc)
+because different jobs [run in parallel](https://help.github.com/en/actions/getting-started-with-github-actions/core-concepts-for-github-actions#job).
+
 ## Comments and Annotations
 
 Currently, GitHub parses the action's output and creates [annotations](https://github.community/t5/GitHub-Actions/What-are-annotations/td-p/30770).

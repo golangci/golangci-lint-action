@@ -1,6 +1,6 @@
 ---
 name: 'Run golangci-lint'
-description: 'Official golangci-lint action with line-attached annotations for found issues, caching and parallel execution. Beta version.'
+description: 'Official golangci-lint action with line-attached annotations for found issues, caching and parallel execution.'
 author: 'golangci'
 inputs:
   version:

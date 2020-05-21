@@ -15,7 +15,6 @@ jobs:
         npm install
         npm run prepare-deps
         npm run all
-        git diff --exit-code
   test: # make sure the action works on a clean machine without building
     runs-on: ubuntu-latest
     steps:
@@ -23,5 +22,5 @@ jobs:
     - uses: ./
       with:
         version: v1.26
-        args: --issues-exit-code=0 ./...
-        working-directory: sample
+        args: --issues-exit-code=0 ./sample/...
+        only-new-issues: true

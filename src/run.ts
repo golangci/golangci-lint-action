@@ -63,7 +63,7 @@ async function runLint(lintPath: string): Promise<void> {
   }
 
   const cmd = `${lintPath} run --out-format=github-actions ${args}`.trimRight()
-  core.info(`Running [${cmd}] ...`)
+  core.info(`Running [${cmd}] in [${workingDirectory}] ...`)
   const startedAt = Date.now()
   try {
     const res = await execShellCommand(cmd, { cwd: workingDirectory })

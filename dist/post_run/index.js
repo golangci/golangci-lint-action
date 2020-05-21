@@ -2403,7 +2403,7 @@ function runLint(lintPath) {
             throw new Error(`working-directory (${workingDirectory}) was not a path`);
         }
         const cmd = `${lintPath} run --out-format=github-actions ${args}`.trimRight();
-        core.info(`Running [${cmd}] ...`);
+        core.info(`Running [${cmd}] in [${workingDirectory}] ...`);
         const startedAt = Date.now();
         try {
             const res = yield execShellCommand(cmd, { cwd: workingDirectory });

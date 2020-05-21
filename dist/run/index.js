@@ -2364,6 +2364,8 @@ var __importStar = (this && this.__importStar) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const core = __importStar(__webpack_require__(470));
 const child_process_1 = __webpack_require__(129);
+const fs = __importStar(__webpack_require__(747));
+const path = __importStar(__webpack_require__(622));
 const util_1 = __webpack_require__(669);
 const cache_1 = __webpack_require__(722);
 const install_1 = __webpack_require__(655);
@@ -2408,11 +2410,15 @@ function runLint(lintPath) {
         if (args.includes(`-out-format`)) {
             throw new Error(`please, don't change out-format for golangci-lint: it can be broken in a future`);
         }
+        const workingDirectory = path.resolve(core.getInput(`working-directory`));
+        if (!fs.existsSync(workingDirectory) || !fs.lstatSync(workingDirectory).isDirectory()) {
+            throw new Error(`working-directory (${workingDirectory}) was not a path`);
+        }
         const cmd = `${lintPath} run --out-format=github-actions ${args}`.trimRight();
         core.info(`Running [${cmd}] ...`);
         const startedAt = Date.now();
         try {
-            const res = yield execShellCommand(cmd);
+            const res = yield execShellCommand(cmd, { cwd: workingDirectory });
             printOutput(res);
             core.info(`golangci-lint found no issues`);
         }

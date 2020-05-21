@@ -2398,15 +2398,19 @@ function runLint(lintPath) {
         if (args.includes(`-out-format`)) {
             throw new Error(`please, don't change out-format for golangci-lint: it can be broken in a future`);
         }
-        const workingDirectory = path.resolve(core.getInput(`working-directory`));
-        if (!fs.existsSync(workingDirectory) || !fs.lstatSync(workingDirectory).isDirectory()) {
-            throw new Error(`working-directory (${workingDirectory}) was not a path`);
+        const workingDirectory = core.getInput(`working-directory`);
+        const cmdArgs = {};
+        if (workingDirectory != ``) {
+            if (!fs.existsSync(workingDirectory) || !fs.lstatSync(workingDirectory).isDirectory()) {
+                throw new Error(`working-directory (${workingDirectory}) was not a path`);
+            }
+            cmdArgs.cwd = path.resolve(workingDirectory);
         }
         const cmd = `${lintPath} run --out-format=github-actions ${args}`.trimRight();
-        core.info(`Running [${cmd}] in [${workingDirectory}] ...`);
+        core.info(`Running [${cmd}] in [${cmdArgs.cwd}] ...`);
         const startedAt = Date.now();
         try {
-            const res = yield execShellCommand(cmd, { cwd: workingDirectory });
+            const res = yield execShellCommand(cmd, cmdArgs);
             printOutput(res);
             core.info(`golangci-lint found no issues`);
         }

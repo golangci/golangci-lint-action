@@ -23,4 +23,5 @@ jobs:
     - uses: ./
       with:
         version: v1.26
-        args: --issues-exit-code=0 ./sample/...
+        args: --issues-exit-code=0 ./...
+        working-directory: sample

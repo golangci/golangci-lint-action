@@ -10,9 +10,9 @@ inputs:
     description: 'golangci-lint command line arguments'
     default: ''
     required: false
-  github-token:
-    description: 'GitHub token with scope `repo.public_repo`. Used for fetching a list of releases of golangci-lint.'
-    required: true
+  working-directory:
+    description: 'golangci-lint working directory, default is project root'
+    required: false
 
 runs:
   using: 'node12'

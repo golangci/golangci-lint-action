@@ -1,5 +1,7 @@
 import * as core from "@actions/core"
-import { exec } from "child_process"
+import { exec, ExecOptions } from "child_process"
+import * as fs from "fs"
+import * as path from "path"
 import { promisify } from "util"
 
 import { restoreCache, saveCache } from "./cache"
@@ -55,11 +57,21 @@ async function runLint(lintPath: string): Promise<void> {
     throw new Error(`please, don't change out-format for golangci-lint: it can be broken in a future`)
   }
 
+  const workingDirectory = core.getInput(`working-directory`)
+  const cmdArgs: ExecOptions = {}
+  if (workingDirectory != ``) {
+    if (!fs.existsSync(workingDirectory) || !fs.lstatSync(workingDirectory).isDirectory()) {
+      throw new Error(`working-directory (${workingDirectory}) was not a path`)
+    }
+
+    cmdArgs.cwd = path.resolve(workingDirectory)
+  }
+
   const cmd = `${lintPath} run --out-format=github-actions ${args}`.trimRight()
-  core.info(`Running [${cmd}] ...`)
+  core.info(`Running [${cmd}] in [${cmdArgs.cwd}] ...`)
   const startedAt = Date.now()
   try {
-    const res = await execShellCommand(cmd)
+    const res = await execShellCommand(cmd, cmdArgs)
     printOutput(res)
     core.info(`golangci-lint found no issues`)
   } catch (exc) {

@@ -31,9 +31,12 @@ jobs:
         with:
           # Required: the version of golangci-lint is required and must be specified without patch version: we always use the latest patch version.
           version: v1.26
+          
+          # Optional: working directory, useful for monorepos
+          # working-directory: somedir
 
           # Optional: golangci-lint command line arguments.
-          # args: ./the-only-dir-to-analyze/...
+          # args: --issues-exit-code=0
 ```
 
 We recommend running this action in a job separate from other jobs (`go test`, etc)

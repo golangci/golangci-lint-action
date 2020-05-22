@@ -1,6 +1,5 @@
+import * as cache from "@actions/cache"
 import * as core from "@actions/core"
-import restore from "cache/lib/restore"
-import save from "cache/lib/save"
 import * as crypto from "crypto"
 import * as fs from "fs"
 
@@ -57,25 +56,42 @@ export async function restoreCache(): Promise<void> {
   const keys = await buildCacheKeys()
   const primaryKey = keys.pop()
   const restoreKeys = keys.reverse()
-  core.info(`Primary analysis cache key is '${primaryKey}', restore keys are '${restoreKeys.join(` | `)}'`)
-  process.env[`INPUT_RESTORE-KEYS`] = restoreKeys.join(`\n`)
-  process.env.INPUT_KEY = primaryKey
-
-  process.env.INPUT_PATH = getCacheDirs().join(`\n`)
 
   // Tell golangci-lint to use our cache directory.
   process.env.GOLANGCI_LINT_CACHE = getLintCacheDir()
-
-  await restore()
-  core.info(`Restored cache for golangci-lint from key '${primaryKey}' in ${Date.now() - startedAt}ms`)
+  if (primaryKey !== undefined) {
+    try {
+      await cache.restoreCache(getCacheDirs(), primaryKey, restoreKeys)
+      core.info(`Restored cache for golangci-lint from key '${primaryKey}' in ${Date.now() - startedAt}ms`)
+    } catch (error) {
+      if (error.name === cache.ValidationError.name) {
+        throw error
+      } else {
+        core.warning(error.message)
+      }
+    }
+  }
 }
 
 export async function saveCache(): Promise<void> {
   const startedAt = Date.now()
 
   const cacheDirs = getCacheDirs()
-  process.env.INPUT_PATH = cacheDirs.join(`\n`)
+  const keys = await buildCacheKeys()
+  const primaryKey = keys.pop()
 
-  await save()
-  core.info(`Saved cache for golangci-lint from paths '${cacheDirs.join(`, `)}' in ${Date.now() - startedAt}ms`)
+  if (primaryKey !== undefined) {
+    try {
+      await cache.saveCache(cacheDirs, primaryKey)
+      core.info(`Saved cache for golangci-lint from paths '${cacheDirs.join(`, `)}' in ${Date.now() - startedAt}ms`)
+    } catch (error) {
+      if (error.name === cache.ValidationError.name) {
+        throw error
+      } else if (error.name === cache.ReserveCacheError.name) {
+        core.info(error.message)
+      } else {
+        core.info(`[warning] ${error.message}`)
+      }
+    }
+  }
 }

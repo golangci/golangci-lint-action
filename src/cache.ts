@@ -3,6 +3,9 @@ import * as core from "@actions/core"
 import * as crypto from "crypto"
 import * as fs from "fs"
 
+import { Events, State } from "./constants"
+import * as utils from "./utils/actionUtils"
+
 function checksumFile(hashName: string, path: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const hash = crypto.createHash(hashName)
@@ -51,6 +54,13 @@ async function buildCacheKeys(): Promise<string[]> {
 }
 
 export async function restoreCache(): Promise<void> {
+  if (!utils.isValidEvent()) {
+    utils.logWarning(
+      `Event Validation Error: The event type ${process.env[Events.Key]} is not supported because it's not tied to a branch or tag ref.`
+    )
+    return
+  }
+
   const startedAt = Date.now()
 
   const keys = await buildCacheKeys()
@@ -59,39 +69,68 @@ export async function restoreCache(): Promise<void> {
 
   // Tell golangci-lint to use our cache directory.
   process.env.GOLANGCI_LINT_CACHE = getLintCacheDir()
-  if (primaryKey !== undefined) {
-    try {
-      await cache.restoreCache(getCacheDirs(), primaryKey, restoreKeys)
-      core.info(`Restored cache for golangci-lint from key '${primaryKey}' in ${Date.now() - startedAt}ms`)
-    } catch (error) {
-      if (error.name === cache.ValidationError.name) {
-        throw error
-      } else {
-        core.warning(error.message)
-      }
+
+  if (!primaryKey) {
+    utils.logWarning(`Invalid primary key`)
+    return
+  }
+  core.saveState(State.CachePrimaryKey, primaryKey)
+  try {
+    const cacheKey = await cache.restoreCache(getCacheDirs(), primaryKey, restoreKeys)
+    if (!cacheKey) {
+      core.info(`Cache not found for input keys: ${[primaryKey, ...restoreKeys].join(", ")}`)
+      return
+    }
+    // Store the matched cache key
+    utils.setCacheState(cacheKey)
+    const isExactKeyMatch = utils.isExactKeyMatch(primaryKey, cacheKey)
+    utils.setCacheHitOutput(isExactKeyMatch)
+    core.info(`Cache restored from key: ${cacheKey}`)
+    core.info(`Restored cache for golangci-lint from key '${primaryKey}' in ${Date.now() - startedAt}ms`)
+  } catch (error) {
+    if (error.name === cache.ValidationError.name) {
+      throw error
+    } else {
+      core.warning(error.message)
     }
   }
 }
 
 export async function saveCache(): Promise<void> {
+  // Validate inputs, this can cause task failure
+  if (!utils.isValidEvent()) {
+    utils.logWarning(
+      `Event Validation Error: The event type ${process.env[Events.Key]} is not supported because it's not tied to a branch or tag ref.`
+    )
+    return
+  }
+
   const startedAt = Date.now()
 
   const cacheDirs = getCacheDirs()
-  const keys = await buildCacheKeys()
-  const primaryKey = keys.pop()
+  const primaryKey = core.getState(State.CachePrimaryKey)
+  if (!primaryKey) {
+    utils.logWarning(`Error retrieving key from state.`)
+    return
+  }
 
-  if (primaryKey !== undefined) {
-    try {
-      await cache.saveCache(cacheDirs, primaryKey)
-      core.info(`Saved cache for golangci-lint from paths '${cacheDirs.join(`, `)}' in ${Date.now() - startedAt}ms`)
-    } catch (error) {
-      if (error.name === cache.ValidationError.name) {
-        throw error
-      } else if (error.name === cache.ReserveCacheError.name) {
-        core.info(error.message)
-      } else {
-        core.info(`[warning] ${error.message}`)
-      }
+  const state = utils.getCacheState()
+
+  if (utils.isExactKeyMatch(primaryKey, state)) {
+    core.info(`Cache hit occurred on the primary key ${primaryKey}, not saving cache.`)
+    return
+  }
+
+  try {
+    await cache.saveCache(cacheDirs, primaryKey)
+    core.info(`Saved cache for golangci-lint from paths '${cacheDirs.join(`, `)}' in ${Date.now() - startedAt}ms`)
+  } catch (error) {
+    if (error.name === cache.ValidationError.name) {
+      throw error
+    } else if (error.name === cache.ReserveCacheError.name) {
+      core.info(error.message)
+    } else {
+      core.info(`[warning] ${error.message}`)
     }
   }
 }

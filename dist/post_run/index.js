@@ -10683,6 +10683,66 @@ exports.createTar = createTar;
 
 /***/ }),
 
+/***/ 443:
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+"use strict";
+
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
+    result["default"] = mod;
+    return result;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const core = __importStar(__webpack_require__(470));
+const constants_1 = __webpack_require__(694);
+function isExactKeyMatch(key, cacheKey) {
+    return !!(cacheKey &&
+        cacheKey.localeCompare(key, undefined, {
+            sensitivity: "accent",
+        }) === 0);
+}
+exports.isExactKeyMatch = isExactKeyMatch;
+function setCacheState(state) {
+    core.saveState(constants_1.State.CacheMatchedKey, state);
+}
+exports.setCacheState = setCacheState;
+function setCacheHitOutput(isCacheHit) {
+    core.setOutput(constants_1.Outputs.CacheHit, isCacheHit.toString());
+}
+exports.setCacheHitOutput = setCacheHitOutput;
+function setOutputAndState(key, cacheKey) {
+    setCacheHitOutput(isExactKeyMatch(key, cacheKey));
+    // Store the matched cache key if it exists
+    cacheKey && setCacheState(cacheKey);
+}
+exports.setOutputAndState = setOutputAndState;
+function getCacheState() {
+    const cacheKey = core.getState(constants_1.State.CacheMatchedKey);
+    if (cacheKey) {
+        core.debug(`Cache state/key: ${cacheKey}`);
+        return cacheKey;
+    }
+    return undefined;
+}
+exports.getCacheState = getCacheState;
+function logWarning(message) {
+    const warningPrefix = "[warning]";
+    core.info(`${warningPrefix}${message}`);
+}
+exports.logWarning = logWarning;
+// Cache token authorized for all events that are tied to a ref
+// See GitHub Context https://help.github.com/actions/automating-your-workflow-with-github-actions/contexts-and-expression-syntax-for-github-actions#github-context
+function isValidEvent() {
+    return constants_1.RefKey in process.env && Boolean(process.env[constants_1.RefKey]);
+}
+exports.isValidEvent = isValidEvent;
+
+
+/***/ }),
+
 /***/ 446:
 /***/ (function(module, __unusedexports, __webpack_require__) {
 
@@ -29622,6 +29682,38 @@ exports.Deprecation = Deprecation;
 
 /***/ }),
 
+/***/ 694:
+/***/ (function(__unusedmodule, exports) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+var Inputs;
+(function (Inputs) {
+    Inputs["Key"] = "key";
+    Inputs["Path"] = "path";
+    Inputs["RestoreKeys"] = "restore-keys";
+})(Inputs = exports.Inputs || (exports.Inputs = {}));
+var Outputs;
+(function (Outputs) {
+    Outputs["CacheHit"] = "cache-hit";
+})(Outputs = exports.Outputs || (exports.Outputs = {}));
+var State;
+(function (State) {
+    State["CachePrimaryKey"] = "CACHE_KEY";
+    State["CacheMatchedKey"] = "CACHE_RESULT";
+})(State = exports.State || (exports.State = {}));
+var Events;
+(function (Events) {
+    Events["Key"] = "GITHUB_EVENT_NAME";
+    Events["Push"] = "push";
+    Events["PullRequest"] = "pull_request";
+})(Events = exports.Events || (exports.Events = {}));
+exports.RefKey = "GITHUB_REF";
+
+
+/***/ }),
+
 /***/ 696:
 /***/ (function(module) {
 
@@ -29727,6 +29819,8 @@ const cache = __importStar(__webpack_require__(638));
 const core = __importStar(__webpack_require__(470));
 const crypto = __importStar(__webpack_require__(417));
 const fs = __importStar(__webpack_require__(747));
+const constants_1 = __webpack_require__(694);
+const utils = __importStar(__webpack_require__(443));
 function checksumFile(hashName, path) {
     return new Promise((resolve, reject) => {
         const hash = crypto.createHash(hashName);
@@ -29770,24 +29864,40 @@ function buildCacheKeys() {
 }
 function restoreCache() {
     return __awaiter(this, void 0, void 0, function* () {
+        if (!utils.isValidEvent()) {
+            utils.logWarning(`Event Validation Error: The event type ${process.env[constants_1.Events.Key]} is not supported because it's not tied to a branch or tag ref.`);
+            return;
+        }
         const startedAt = Date.now();
         const keys = yield buildCacheKeys();
         const primaryKey = keys.pop();
         const restoreKeys = keys.reverse();
         // Tell golangci-lint to use our cache directory.
         process.env.GOLANGCI_LINT_CACHE = getLintCacheDir();
-        if (primaryKey !== undefined) {
-            try {
-                yield cache.restoreCache(getCacheDirs(), primaryKey, restoreKeys);
-                core.info(`Restored cache for golangci-lint from key '${primaryKey}' in ${Date.now() - startedAt}ms`);
+        if (!primaryKey) {
+            utils.logWarning(`Invalid primary key`);
+            return;
+        }
+        core.saveState(constants_1.State.CachePrimaryKey, primaryKey);
+        try {
+            const cacheKey = yield cache.restoreCache(getCacheDirs(), primaryKey, restoreKeys);
+            if (!cacheKey) {
+                core.info(`Cache not found for input keys: ${[primaryKey, ...restoreKeys].join(", ")}`);
+                return;
             }
-            catch (error) {
-                if (error.name === cache.ValidationError.name) {
-                    throw error;
-                }
-                else {
-                    core.warning(error.message);
-                }
+            // Store the matched cache key
+            utils.setCacheState(cacheKey);
+            const isExactKeyMatch = utils.isExactKeyMatch(primaryKey, cacheKey);
+            utils.setCacheHitOutput(isExactKeyMatch);
+            core.info(`Cache restored from key: ${cacheKey}`);
+            core.info(`Restored cache for golangci-lint from key '${primaryKey}' in ${Date.now() - startedAt}ms`);
+        }
+        catch (error) {
+            if (error.name === cache.ValidationError.name) {
+                throw error;
+            }
+            else {
+                core.warning(error.message);
             }
         }
     });
@@ -29795,25 +29905,36 @@ function restoreCache() {
 exports.restoreCache = restoreCache;
 function saveCache() {
     return __awaiter(this, void 0, void 0, function* () {
+        // Validate inputs, this can cause task failure
+        if (!utils.isValidEvent()) {
+            utils.logWarning(`Event Validation Error: The event type ${process.env[constants_1.Events.Key]} is not supported because it's not tied to a branch or tag ref.`);
+            return;
+        }
         const startedAt = Date.now();
         const cacheDirs = getCacheDirs();
-        const keys = yield buildCacheKeys();
-        const primaryKey = keys.pop();
-        if (primaryKey !== undefined) {
-            try {
-                yield cache.saveCache(cacheDirs, primaryKey);
-                core.info(`Saved cache for golangci-lint from paths '${cacheDirs.join(`, `)}' in ${Date.now() - startedAt}ms`);
+        const primaryKey = core.getState(constants_1.State.CachePrimaryKey);
+        if (!primaryKey) {
+            utils.logWarning(`Error retrieving key from state.`);
+            return;
+        }
+        const state = utils.getCacheState();
+        if (utils.isExactKeyMatch(primaryKey, state)) {
+            core.info(`Cache hit occurred on the primary key ${primaryKey}, not saving cache.`);
+            return;
+        }
+        try {
+            yield cache.saveCache(cacheDirs, primaryKey);
+            core.info(`Saved cache for golangci-lint from paths '${cacheDirs.join(`, `)}' in ${Date.now() - startedAt}ms`);
+        }
+        catch (error) {
+            if (error.name === cache.ValidationError.name) {
+                throw error;
             }
-            catch (error) {
-                if (error.name === cache.ValidationError.name) {
-                    throw error;
-                }
-                else if (error.name === cache.ReserveCacheError.name) {
-                    core.info(error.message);
-                }
-                else {
-                    core.info(`[warning] ${error.message}`);
-                }
+            else if (error.name === cache.ReserveCacheError.name) {
+                core.info(error.message);
+            }
+            else {
+                core.info(`[warning] ${error.message}`);
             }
         }
     });

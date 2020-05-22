@@ -9,6 +9,8 @@
     "prepare-cache": "cd node_modules/cache && npm run build",
     "prepare-deps": "npm run prepare-setup-go && npm run prepare-cache",
     "build": "tsc && ncc build -o dist/run/ src/main.ts && ncc build -o dist/post_run/ src/post_main.ts",
+    "watched_build_main": "tsc && ncc build -w -o dist/run/ src/main.ts",
+    "watched_build_post_main": "tsc && ncc build -w -o dist/post_run/ src/post_main.ts",
     "type-check": "tsc",
     "lint": "eslint --max-warnings 1 **/*.ts --cache",
     "lint-fix": "eslint **/*.ts --cache --fix",
@@ -29,8 +31,10 @@
     "@actions/github": "^2.1.1",
     "@actions/tool-cache": "^1.3.4",
     "@types/semver": "^7.1.0",
+    "@types/tmp": "^0.2.0",
     "cache": "git+https://github.com/golangci/cache.git",
-    "setup-go": "git+https://github.com/actions/setup-go.git"
+    "setup-go": "git+https://github.com/actions/setup-go.git",
+    "tmp": "^0.2.1"
   },
   "devDependencies": {
     "@types/node": "^12.0.4",

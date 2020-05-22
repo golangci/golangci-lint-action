@@ -37,6 +37,9 @@ jobs:
 
           # Optional: golangci-lint command line arguments.
           # args: --issues-exit-code=0
+
+          # Optional: show only new issues if it's a pull request. The default value is `false`.
+          # only-new-issues: true
 ```
 
 We recommend running this action in a job separate from other jobs (`go test`, etc)

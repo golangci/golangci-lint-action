@@ -13,6 +13,14 @@ inputs:
   working-directory:
     description: 'golangci-lint working directory, default is project root'
     required: false
+  github-token:
+    description: 'the token is used for fetching patch of a pull request to show only new issues'
+    default: ${{ github.token }}
+    required: true
+  only-new-issues:
+    description: 'if set to true and the action runs on a pull request - the action outputs only newly found issues'
+    default: false
+    required: true
 
 runs:
   using: 'node12'

@@ -23,4 +23,4 @@ jobs:
       with:
         version: v1.26
         args: --issues-exit-code=0 ./sample/...
-        only-new-issues: true
+        only-new-issues: true # ww

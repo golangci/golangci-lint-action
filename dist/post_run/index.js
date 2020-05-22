@@ -6647,13 +6647,15 @@ function runLint(lintPath, patchPath) {
             throw new Error(`please, don't change out-format for golangci-lint: it can be broken in a future`);
         }
         addedArgs.push(`--out-format=github-actions`);
-        if (patchPath && (userArgNames.has(`new`) || userArgNames.has(`new-from-rev`) || userArgNames.has(`new-from-patch`))) {
-            throw new Error(`please, don't specify manually --new* args when requesting only new issues`);
+        if (patchPath) {
+            if (userArgNames.has(`new`) || userArgNames.has(`new-from-rev`) || userArgNames.has(`new-from-patch`)) {
+                throw new Error(`please, don't specify manually --new* args when requesting only new issues`);
+            }
+            addedArgs.push(`--new-from-patch=${patchPath}`);
+            // Override config values.
+            addedArgs.push(`--new=false`);
+            addedArgs.push(`--new-from-rev=`);
         }
-        addedArgs.push(`--new-from-patch=${patchPath}`);
-        // Override config values.
-        addedArgs.push(`--new=false`);
-        addedArgs.push(`--new-from-rev=`);
         const workingDirectory = core.getInput(`working-directory`);
         const cmdArgs = {};
         if (workingDirectory) {
@@ -6667,7 +6669,7 @@ function runLint(lintPath, patchPath) {
             cmdArgs.cwd = path.resolve(workingDirectory);
         }
         const cmd = `${lintPath} run ${addedArgs.join(` `)} ${userArgs}`.trimRight();
-        core.info(`Running [${cmd}] in [${cmdArgs.cwd}] ...`);
+        core.info(`Running [${cmd}] in [${cmdArgs.cwd || ``}] ...`);
         const startedAt = Date.now();
         try {
             const res = yield execShellCommand(cmd, cmdArgs);

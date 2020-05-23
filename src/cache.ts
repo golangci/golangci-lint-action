@@ -83,8 +83,6 @@ export async function restoreCache(): Promise<void> {
     }
     // Store the matched cache key
     utils.setCacheState(cacheKey)
-    const isExactKeyMatch = utils.isExactKeyMatch(primaryKey, cacheKey)
-    utils.setCacheHitOutput(isExactKeyMatch)
     core.info(`Restored cache for golangci-lint from key '${primaryKey}' in ${Date.now() - startedAt}ms`)
   } catch (error) {
     if (error.name === cache.ValidationError.name) {

@@ -902,6 +902,174 @@ rimraf.sync = rimrafSync
 
 /***/ }),
 
+/***/ 15:
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+"use strict";
+
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __asyncValues = (this && this.__asyncValues) || function (o) {
+    if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
+    var m = o[Symbol.asyncIterator], i;
+    return m ? m.call(o) : (o = typeof __values === "function" ? __values(o) : o[Symbol.iterator](), i = {}, verb("next"), verb("throw"), verb("return"), i[Symbol.asyncIterator] = function () { return this; }, i);
+    function verb(n) { i[n] = o[n] && function (v) { return new Promise(function (resolve, reject) { v = o[n](v), settle(resolve, reject, v.done, v.value); }); }; }
+    function settle(resolve, reject, d, v) { Promise.resolve(v).then(function(v) { resolve({ value: v, done: d }); }, reject); }
+};
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
+    result["default"] = mod;
+    return result;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const core = __importStar(__webpack_require__(470));
+const exec = __importStar(__webpack_require__(986));
+const glob = __importStar(__webpack_require__(281));
+const io = __importStar(__webpack_require__(1));
+const fs = __importStar(__webpack_require__(747));
+const path = __importStar(__webpack_require__(622));
+const semver = __importStar(__webpack_require__(864));
+const util = __importStar(__webpack_require__(669));
+const uuid_1 = __webpack_require__(930);
+const constants_1 = __webpack_require__(931);
+// From https://github.com/actions/toolkit/blob/master/packages/tool-cache/src/tool-cache.ts#L23
+function createTempDirectory() {
+    return __awaiter(this, void 0, void 0, function* () {
+        const IS_WINDOWS = process.platform === 'win32';
+        let tempDirectory = process.env['RUNNER_TEMP'] || '';
+        if (!tempDirectory) {
+            let baseLocation;
+            if (IS_WINDOWS) {
+                // On Windows use the USERPROFILE env variable
+                baseLocation = process.env['USERPROFILE'] || 'C:\\';
+            }
+            else {
+                if (process.platform === 'darwin') {
+                    baseLocation = '/Users';
+                }
+                else {
+                    baseLocation = '/home';
+                }
+            }
+            tempDirectory = path.join(baseLocation, 'actions', 'temp');
+        }
+        const dest = path.join(tempDirectory, uuid_1.v4());
+        yield io.mkdirP(dest);
+        return dest;
+    });
+}
+exports.createTempDirectory = createTempDirectory;
+function getArchiveFileSizeIsBytes(filePath) {
+    return fs.statSync(filePath).size;
+}
+exports.getArchiveFileSizeIsBytes = getArchiveFileSizeIsBytes;
+function resolvePaths(patterns) {
+    var e_1, _a;
+    var _b;
+    return __awaiter(this, void 0, void 0, function* () {
+        const paths = [];
+        const workspace = (_b = process.env['GITHUB_WORKSPACE']) !== null && _b !== void 0 ? _b : process.cwd();
+        const globber = yield glob.create(patterns.join('\n'), {
+            implicitDescendants: false
+        });
+        try {
+            for (var _c = __asyncValues(globber.globGenerator()), _d; _d = yield _c.next(), !_d.done;) {
+                const file = _d.value;
+                const relativeFile = path.relative(workspace, file);
+                core.debug(`Matched: ${relativeFile}`);
+                // Paths are made relative so the tar entries are all relative to the root of the workspace.
+                paths.push(`${relativeFile}`);
+            }
+        }
+        catch (e_1_1) { e_1 = { error: e_1_1 }; }
+        finally {
+            try {
+                if (_d && !_d.done && (_a = _c.return)) yield _a.call(_c);
+            }
+            finally { if (e_1) throw e_1.error; }
+        }
+        return paths;
+    });
+}
+exports.resolvePaths = resolvePaths;
+function unlinkFile(filePath) {
+    return __awaiter(this, void 0, void 0, function* () {
+        return util.promisify(fs.unlink)(filePath);
+    });
+}
+exports.unlinkFile = unlinkFile;
+function getVersion(app) {
+    return __awaiter(this, void 0, void 0, function* () {
+        core.debug(`Checking ${app} --version`);
+        let versionOutput = '';
+        try {
+            yield exec.exec(`${app} --version`, [], {
+                ignoreReturnCode: true,
+                silent: true,
+                listeners: {
+                    stdout: (data) => (versionOutput += data.toString()),
+                    stderr: (data) => (versionOutput += data.toString())
+                }
+            });
+        }
+        catch (err) {
+            core.debug(err.message);
+        }
+        versionOutput = versionOutput.trim();
+        core.debug(versionOutput);
+        return versionOutput;
+    });
+}
+// Use zstandard if possible to maximize cache performance
+function getCompressionMethod() {
+    return __awaiter(this, void 0, void 0, function* () {
+        if (process.platform === 'win32' && !(yield isGnuTarInstalled())) {
+            // Disable zstd due to bug https://github.com/actions/cache/issues/301
+            return constants_1.CompressionMethod.Gzip;
+        }
+        const versionOutput = yield getVersion('zstd');
+        const version = semver.clean(versionOutput);
+        if (!versionOutput.toLowerCase().includes('zstd command line interface')) {
+            // zstd is not installed
+            return constants_1.CompressionMethod.Gzip;
+        }
+        else if (!version || semver.lt(version, 'v1.3.2')) {
+            // zstd is installed but using a version earlier than v1.3.2
+            // v1.3.2 is required to use the `--long` options in zstd
+            return constants_1.CompressionMethod.ZstdWithoutLong;
+        }
+        else {
+            return constants_1.CompressionMethod.Zstd;
+        }
+    });
+}
+exports.getCompressionMethod = getCompressionMethod;
+function getCacheFileName(compressionMethod) {
+    return compressionMethod === constants_1.CompressionMethod.Gzip
+        ? constants_1.CacheFilename.Gzip
+        : constants_1.CacheFilename.Zstd;
+}
+exports.getCacheFileName = getCacheFileName;
+function isGnuTarInstalled() {
+    return __awaiter(this, void 0, void 0, function* () {
+        const versionOutput = yield getVersion('tar');
+        return versionOutput.toLowerCase().includes('gnu tar');
+    });
+}
+exports.isGnuTarInstalled = isGnuTarInstalled;
+//# sourceMappingURL=cacheUtils.js.map
+
+/***/ }),
+
 /***/ 16:
 /***/ (function(module) {
 
@@ -2947,6 +3115,122 @@ function withAuthorizationPrefix(authorization) {
 
 /***/ }),
 
+/***/ 86:
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var rng = __webpack_require__(139);
+var bytesToUuid = __webpack_require__(105);
+
+// **`v1()` - Generate time-based UUID**
+//
+// Inspired by https://github.com/LiosK/UUID.js
+// and http://docs.python.org/library/uuid.html
+
+var _nodeId;
+var _clockseq;
+
+// Previous uuid creation time
+var _lastMSecs = 0;
+var _lastNSecs = 0;
+
+// See https://github.com/uuidjs/uuid for API details
+function v1(options, buf, offset) {
+  var i = buf && offset || 0;
+  var b = buf || [];
+
+  options = options || {};
+  var node = options.node || _nodeId;
+  var clockseq = options.clockseq !== undefined ? options.clockseq : _clockseq;
+
+  // node and clockseq need to be initialized to random values if they're not
+  // specified.  We do this lazily to minimize issues related to insufficient
+  // system entropy.  See #189
+  if (node == null || clockseq == null) {
+    var seedBytes = rng();
+    if (node == null) {
+      // Per 4.5, create and 48-bit node id, (47 random bits + multicast bit = 1)
+      node = _nodeId = [
+        seedBytes[0] | 0x01,
+        seedBytes[1], seedBytes[2], seedBytes[3], seedBytes[4], seedBytes[5]
+      ];
+    }
+    if (clockseq == null) {
+      // Per 4.2.2, randomize (14 bit) clockseq
+      clockseq = _clockseq = (seedBytes[6] << 8 | seedBytes[7]) & 0x3fff;
+    }
+  }
+
+  // UUID timestamps are 100 nano-second units since the Gregorian epoch,
+  // (1582-10-15 00:00).  JSNumbers aren't precise enough for this, so
+  // time is handled internally as 'msecs' (integer milliseconds) and 'nsecs'
+  // (100-nanoseconds offset from msecs) since unix epoch, 1970-01-01 00:00.
+  var msecs = options.msecs !== undefined ? options.msecs : new Date().getTime();
+
+  // Per 4.2.1.2, use count of uuid's generated during the current clock
+  // cycle to simulate higher resolution clock
+  var nsecs = options.nsecs !== undefined ? options.nsecs : _lastNSecs + 1;
+
+  // Time since last uuid creation (in msecs)
+  var dt = (msecs - _lastMSecs) + (nsecs - _lastNSecs)/10000;
+
+  // Per 4.2.1.2, Bump clockseq on clock regression
+  if (dt < 0 && options.clockseq === undefined) {
+    clockseq = clockseq + 1 & 0x3fff;
+  }
+
+  // Reset nsecs if clock regresses (new clockseq) or we've moved onto a new
+  // time interval
+  if ((dt < 0 || msecs > _lastMSecs) && options.nsecs === undefined) {
+    nsecs = 0;
+  }
+
+  // Per 4.2.1.2 Throw error if too many uuids are requested
+  if (nsecs >= 10000) {
+    throw new Error('uuid.v1(): Can\'t create more than 10M uuids/sec');
+  }
+
+  _lastMSecs = msecs;
+  _lastNSecs = nsecs;
+  _clockseq = clockseq;
+
+  // Per 4.1.4 - Convert from unix epoch to Gregorian epoch
+  msecs += 12219292800000;
+
+  // `time_low`
+  var tl = ((msecs & 0xfffffff) * 10000 + nsecs) % 0x100000000;
+  b[i++] = tl >>> 24 & 0xff;
+  b[i++] = tl >>> 16 & 0xff;
+  b[i++] = tl >>> 8 & 0xff;
+  b[i++] = tl & 0xff;
+
+  // `time_mid`
+  var tmh = (msecs / 0x100000000 * 10000) & 0xfffffff;
+  b[i++] = tmh >>> 8 & 0xff;
+  b[i++] = tmh & 0xff;
+
+  // `time_high_and_version`
+  b[i++] = tmh >>> 24 & 0xf | 0x10; // include version
+  b[i++] = tmh >>> 16 & 0xff;
+
+  // `clock_seq_hi_and_reserved` (Per 4.2.2 - include variant)
+  b[i++] = clockseq >>> 8 | 0x80;
+
+  // `clock_seq_low`
+  b[i++] = clockseq & 0xff;
+
+  // `node`
+  for (var n = 0; n < 6; ++n) {
+    b[i + n] = node[n];
+  }
+
+  return buf ? buf : bytesToUuid(b);
+}
+
+module.exports = v1;
+
+
+/***/ }),
+
 /***/ 87:
 /***/ (function(module) {
 
@@ -3977,6 +4261,307 @@ function bytesToUuid(buf, offset) {
 
 module.exports = bytesToUuid;
 
+
+/***/ }),
+
+/***/ 114:
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+"use strict";
+
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
+    result["default"] = mod;
+    return result;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const core = __importStar(__webpack_require__(470));
+const http_client_1 = __webpack_require__(539);
+const auth_1 = __webpack_require__(226);
+const crypto = __importStar(__webpack_require__(417));
+const fs = __importStar(__webpack_require__(747));
+const stream = __importStar(__webpack_require__(413));
+const util = __importStar(__webpack_require__(669));
+const utils = __importStar(__webpack_require__(15));
+const constants_1 = __webpack_require__(931);
+const versionSalt = '1.0';
+function isSuccessStatusCode(statusCode) {
+    if (!statusCode) {
+        return false;
+    }
+    return statusCode >= 200 && statusCode < 300;
+}
+function isServerErrorStatusCode(statusCode) {
+    if (!statusCode) {
+        return true;
+    }
+    return statusCode >= 500;
+}
+function isRetryableStatusCode(statusCode) {
+    if (!statusCode) {
+        return false;
+    }
+    const retryableStatusCodes = [
+        http_client_1.HttpCodes.BadGateway,
+        http_client_1.HttpCodes.ServiceUnavailable,
+        http_client_1.HttpCodes.GatewayTimeout
+    ];
+    return retryableStatusCodes.includes(statusCode);
+}
+function getCacheApiUrl(resource) {
+    // Ideally we just use ACTIONS_CACHE_URL
+    const baseUrl = (process.env['ACTIONS_CACHE_URL'] ||
+        process.env['ACTIONS_RUNTIME_URL'] ||
+        '').replace('pipelines', 'artifactcache');
+    if (!baseUrl) {
+        throw new Error('Cache Service Url not found, unable to restore cache.');
+    }
+    const url = `${baseUrl}_apis/artifactcache/${resource}`;
+    core.debug(`Resource Url: ${url}`);
+    return url;
+}
+function createAcceptHeader(type, apiVersion) {
+    return `${type};api-version=${apiVersion}`;
+}
+function getRequestOptions() {
+    const requestOptions = {
+        headers: {
+            Accept: createAcceptHeader('application/json', '6.0-preview.1')
+        }
+    };
+    return requestOptions;
+}
+function createHttpClient() {
+    const token = process.env['ACTIONS_RUNTIME_TOKEN'] || '';
+    const bearerCredentialHandler = new auth_1.BearerCredentialHandler(token);
+    return new http_client_1.HttpClient('actions/cache', [bearerCredentialHandler], getRequestOptions());
+}
+function getCacheVersion(paths, compressionMethod) {
+    const components = paths.concat(!compressionMethod || compressionMethod === constants_1.CompressionMethod.Gzip
+        ? []
+        : [compressionMethod]);
+    // Add salt to cache version to support breaking changes in cache entry
+    components.push(versionSalt);
+    return crypto
+        .createHash('sha256')
+        .update(components.join('|'))
+        .digest('hex');
+}
+exports.getCacheVersion = getCacheVersion;
+function retry(name, method, getStatusCode, maxAttempts = 2) {
+    return __awaiter(this, void 0, void 0, function* () {
+        let response = undefined;
+        let statusCode = undefined;
+        let isRetryable = false;
+        let errorMessage = '';
+        let attempt = 1;
+        while (attempt <= maxAttempts) {
+            try {
+                response = yield method();
+                statusCode = getStatusCode(response);
+                if (!isServerErrorStatusCode(statusCode)) {
+                    return response;
+                }
+                isRetryable = isRetryableStatusCode(statusCode);
+                errorMessage = `Cache service responded with ${statusCode}`;
+            }
+            catch (error) {
+                isRetryable = true;
+                errorMessage = error.message;
+            }
+            core.debug(`${name} - Attempt ${attempt} of ${maxAttempts} failed with error: ${errorMessage}`);
+            if (!isRetryable) {
+                core.debug(`${name} - Error is not retryable`);
+                break;
+            }
+            attempt++;
+        }
+        throw Error(`${name} failed: ${errorMessage}`);
+    });
+}
+exports.retry = retry;
+function retryTypedResponse(name, method, maxAttempts = 2) {
+    return __awaiter(this, void 0, void 0, function* () {
+        return yield retry(name, method, (response) => response.statusCode, maxAttempts);
+    });
+}
+exports.retryTypedResponse = retryTypedResponse;
+function retryHttpClientResponse(name, method, maxAttempts = 2) {
+    return __awaiter(this, void 0, void 0, function* () {
+        return yield retry(name, method, (response) => response.message.statusCode, maxAttempts);
+    });
+}
+exports.retryHttpClientResponse = retryHttpClientResponse;
+function getCacheEntry(keys, paths, options) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const httpClient = createHttpClient();
+        const version = getCacheVersion(paths, options === null || options === void 0 ? void 0 : options.compressionMethod);
+        const resource = `cache?keys=${encodeURIComponent(keys.join(','))}&version=${version}`;
+        const response = yield retryTypedResponse('getCacheEntry', () => __awaiter(this, void 0, void 0, function* () { return httpClient.getJson(getCacheApiUrl(resource)); }));
+        if (response.statusCode === 204) {
+            return null;
+        }
+        if (!isSuccessStatusCode(response.statusCode)) {
+            throw new Error(`Cache service responded with ${response.statusCode}`);
+        }
+        const cacheResult = response.result;
+        const cacheDownloadUrl = cacheResult === null || cacheResult === void 0 ? void 0 : cacheResult.archiveLocation;
+        if (!cacheDownloadUrl) {
+            throw new Error('Cache not found.');
+        }
+        core.setSecret(cacheDownloadUrl);
+        core.debug(`Cache Result:`);
+        core.debug(JSON.stringify(cacheResult));
+        return cacheResult;
+    });
+}
+exports.getCacheEntry = getCacheEntry;
+function pipeResponseToStream(response, output) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const pipeline = util.promisify(stream.pipeline);
+        yield pipeline(response.message, output);
+    });
+}
+function downloadCache(archiveLocation, archivePath) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const writeStream = fs.createWriteStream(archivePath);
+        const httpClient = new http_client_1.HttpClient('actions/cache');
+        const downloadResponse = yield retryHttpClientResponse('downloadCache', () => __awaiter(this, void 0, void 0, function* () { return httpClient.get(archiveLocation); }));
+        // Abort download if no traffic received over the socket.
+        downloadResponse.message.socket.setTimeout(constants_1.SocketTimeout, () => {
+            downloadResponse.message.destroy();
+            core.debug(`Aborting download, socket timed out after ${constants_1.SocketTimeout} ms`);
+        });
+        yield pipeResponseToStream(downloadResponse, writeStream);
+        // Validate download size.
+        const contentLengthHeader = downloadResponse.message.headers['content-length'];
+        if (contentLengthHeader) {
+            const expectedLength = parseInt(contentLengthHeader);
+            const actualLength = utils.getArchiveFileSizeIsBytes(archivePath);
+            if (actualLength !== expectedLength) {
+                throw new Error(`Incomplete download. Expected file size: ${expectedLength}, actual file size: ${actualLength}`);
+            }
+        }
+        else {
+            core.debug('Unable to validate download, no Content-Length header');
+        }
+    });
+}
+exports.downloadCache = downloadCache;
+// Reserve Cache
+function reserveCache(key, paths, options) {
+    var _a, _b;
+    return __awaiter(this, void 0, void 0, function* () {
+        const httpClient = createHttpClient();
+        const version = getCacheVersion(paths, options === null || options === void 0 ? void 0 : options.compressionMethod);
+        const reserveCacheRequest = {
+            key,
+            version
+        };
+        const response = yield retryTypedResponse('reserveCache', () => __awaiter(this, void 0, void 0, function* () {
+            return httpClient.postJson(getCacheApiUrl('caches'), reserveCacheRequest);
+        }));
+        return (_b = (_a = response === null || response === void 0 ? void 0 : response.result) === null || _a === void 0 ? void 0 : _a.cacheId) !== null && _b !== void 0 ? _b : -1;
+    });
+}
+exports.reserveCache = reserveCache;
+function getContentRange(start, end) {
+    // Format: `bytes start-end/filesize
+    // start and end are inclusive
+    // filesize can be *
+    // For a 200 byte chunk starting at byte 0:
+    // Content-Range: bytes 0-199/*
+    return `bytes ${start}-${end}/*`;
+}
+function uploadChunk(httpClient, resourceUrl, openStream, start, end) {
+    return __awaiter(this, void 0, void 0, function* () {
+        core.debug(`Uploading chunk of size ${end -
+            start +
+            1} bytes at offset ${start} with content range: ${getContentRange(start, end)}`);
+        const additionalHeaders = {
+            'Content-Type': 'application/octet-stream',
+            'Content-Range': getContentRange(start, end)
+        };
+        yield retryHttpClientResponse(`uploadChunk (start: ${start}, end: ${end})`, () => __awaiter(this, void 0, void 0, function* () {
+            return httpClient.sendStream('PATCH', resourceUrl, openStream(), additionalHeaders);
+        }));
+    });
+}
+function uploadFile(httpClient, cacheId, archivePath, options) {
+    var _a, _b;
+    return __awaiter(this, void 0, void 0, function* () {
+        // Upload Chunks
+        const fileSize = fs.statSync(archivePath).size;
+        const resourceUrl = getCacheApiUrl(`caches/${cacheId.toString()}`);
+        const fd = fs.openSync(archivePath, 'r');
+        const concurrency = (_a = options === null || options === void 0 ? void 0 : options.uploadConcurrency) !== null && _a !== void 0 ? _a : 4; // # of HTTP requests in parallel
+        const MAX_CHUNK_SIZE = (_b = options === null || options === void 0 ? void 0 : options.uploadChunkSize) !== null && _b !== void 0 ? _b : 32 * 1024 * 1024; // 32 MB Chunks
+        core.debug(`Concurrency: ${concurrency} and Chunk Size: ${MAX_CHUNK_SIZE}`);
+        const parallelUploads = [...new Array(concurrency).keys()];
+        core.debug('Awaiting all uploads');
+        let offset = 0;
+        try {
+            yield Promise.all(parallelUploads.map(() => __awaiter(this, void 0, void 0, function* () {
+                while (offset < fileSize) {
+                    const chunkSize = Math.min(fileSize - offset, MAX_CHUNK_SIZE);
+                    const start = offset;
+                    const end = offset + chunkSize - 1;
+                    offset += MAX_CHUNK_SIZE;
+                    yield uploadChunk(httpClient, resourceUrl, () => fs
+                        .createReadStream(archivePath, {
+                        fd,
+                        start,
+                        end,
+                        autoClose: false
+                    })
+                        .on('error', error => {
+                        throw new Error(`Cache upload failed because file read failed with ${error.Message}`);
+                    }), start, end);
+                }
+            })));
+        }
+        finally {
+            fs.closeSync(fd);
+        }
+        return;
+    });
+}
+function commitCache(httpClient, cacheId, filesize) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const commitCacheRequest = { size: filesize };
+        return yield retryTypedResponse('commitCache', () => __awaiter(this, void 0, void 0, function* () {
+            return httpClient.postJson(getCacheApiUrl(`caches/${cacheId.toString()}`), commitCacheRequest);
+        }));
+    });
+}
+function saveCache(cacheId, archivePath, options) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const httpClient = createHttpClient();
+        core.debug('Upload cache');
+        yield uploadFile(httpClient, cacheId, archivePath, options);
+        // Commit Cache
+        core.debug('Commiting cache');
+        const cacheSize = utils.getArchiveFileSizeIsBytes(archivePath);
+        const commitCacheResponse = yield commitCache(httpClient, cacheId, cacheSize);
+        if (!isSuccessStatusCode(commitCacheResponse.statusCode)) {
+            throw new Error(`Cache service responded with ${commitCacheResponse.statusCode} during commit cache.`);
+        }
+        core.info('Cache saved successfully');
+    });
+}
+exports.saveCache = saveCache;
+//# sourceMappingURL=cacheHttpClient.js.map
 
 /***/ }),
 
@@ -6779,113 +7364,6 @@ function checkMode (stat, options) {
 
 /***/ }),
 
-/***/ 206:
-/***/ (function(__unusedmodule, exports, __webpack_require__) {
-
-"use strict";
-
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
-    result["default"] = mod;
-    return result;
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const core = __importStar(__webpack_require__(470));
-const path = __importStar(__webpack_require__(622));
-const cacheHttpClient = __importStar(__webpack_require__(342));
-const constants_1 = __webpack_require__(573);
-const tar_1 = __webpack_require__(570);
-const utils = __importStar(__webpack_require__(867));
-function run() {
-    return __awaiter(this, void 0, void 0, function* () {
-        try {
-            // Validate inputs, this can cause task failure
-            if (!utils.isValidEvent()) {
-                utils.logWarning(`Event Validation Error: The event type ${process.env[constants_1.Events.Key]} is not supported. Only ${utils
-                    .getSupportedEvents()
-                    .join(", ")} events are supported at this time.`);
-                return;
-            }
-            const primaryKey = core.getInput(constants_1.Inputs.Key, { required: true });
-            core.saveState(constants_1.State.CacheKey, primaryKey);
-            const restoreKeys = core
-                .getInput(constants_1.Inputs.RestoreKeys)
-                .split("\n")
-                .filter(x => x !== "");
-            const keys = [primaryKey, ...restoreKeys];
-            core.debug("Resolved Keys:");
-            core.debug(JSON.stringify(keys));
-            if (keys.length > 10) {
-                core.setFailed(`Key Validation Error: Keys are limited to a maximum of 10.`);
-                return;
-            }
-            for (const key of keys) {
-                if (key.length > 512) {
-                    core.setFailed(`Key Validation Error: ${key} cannot be larger than 512 characters.`);
-                    return;
-                }
-                const regex = /^[^,]*$/;
-                if (!regex.test(key)) {
-                    core.setFailed(`Key Validation Error: ${key} cannot contain commas.`);
-                    return;
-                }
-            }
-            try {
-                const cacheEntry = yield cacheHttpClient.getCacheEntry(keys);
-                if (!(cacheEntry === null || cacheEntry === void 0 ? void 0 : cacheEntry.archiveLocation)) {
-                    core.info(`Cache not found for input keys: ${keys.join(", ")}`);
-                    return;
-                }
-                const archivePath = path.join(yield utils.createTempDirectory(), "cache.tgz");
-                core.debug(`Archive Path: ${archivePath}`);
-                // Store the cache result
-                utils.setCacheState(cacheEntry);
-                try {
-                    // Download the cache from the cache entry
-                    yield cacheHttpClient.downloadCache(cacheEntry.archiveLocation, archivePath);
-                    const archiveFileSize = utils.getArchiveFileSize(archivePath);
-                    core.info(`Cache Size: ~${Math.round(archiveFileSize / (1024 * 1024))} MB (${archiveFileSize} B)`);
-                    yield tar_1.extractTar(archivePath);
-                }
-                finally {
-                    // Try to delete the archive to save space
-                    try {
-                        yield utils.unlinkFile(archivePath);
-                    }
-                    catch (error) {
-                        core.debug(`Failed to delete archive: ${error}`);
-                    }
-                }
-                const isExactKeyMatch = utils.isExactKeyMatch(primaryKey, cacheEntry);
-                utils.setCacheHitOutput(isExactKeyMatch);
-                core.info(`Cache restored from key: ${cacheEntry && cacheEntry.cacheKey}`);
-            }
-            catch (error) {
-                utils.logWarning(error.message);
-                utils.setCacheHitOutput(false);
-            }
-        }
-        catch (error) {
-            core.setFailed(error.message);
-        }
-    });
-}
-exports.default = run;
-
-
-/***/ }),
-
 /***/ 211:
 /***/ (function(__unusedmodule, exports, __webpack_require__) {
 
@@ -8509,269 +8987,6 @@ function octokitValidate(octokit) {
 
 /***/ }),
 
-/***/ 342:
-/***/ (function(__unusedmodule, exports, __webpack_require__) {
-
-"use strict";
-
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
-    result["default"] = mod;
-    return result;
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const core = __importStar(__webpack_require__(470));
-const http_client_1 = __webpack_require__(539);
-const auth_1 = __webpack_require__(226);
-const crypto = __importStar(__webpack_require__(417));
-const fs = __importStar(__webpack_require__(747));
-const stream = __importStar(__webpack_require__(413));
-const util = __importStar(__webpack_require__(669));
-const constants_1 = __webpack_require__(573);
-const utils = __importStar(__webpack_require__(867));
-const versionSalt = "1.0";
-function isSuccessStatusCode(statusCode) {
-    if (!statusCode) {
-        return false;
-    }
-    return statusCode >= 200 && statusCode < 300;
-}
-function isRetryableStatusCode(statusCode) {
-    if (!statusCode) {
-        return false;
-    }
-    const retryableStatusCodes = [
-        http_client_1.HttpCodes.BadGateway,
-        http_client_1.HttpCodes.ServiceUnavailable,
-        http_client_1.HttpCodes.GatewayTimeout
-    ];
-    return retryableStatusCodes.includes(statusCode);
-}
-function getCacheApiUrl(resource) {
-    // Ideally we just use ACTIONS_CACHE_URL
-    const baseUrl = (process.env["ACTIONS_CACHE_URL"] ||
-        process.env["ACTIONS_RUNTIME_URL"] ||
-        "").replace("pipelines", "artifactcache");
-    if (!baseUrl) {
-        throw new Error("Cache Service Url not found, unable to restore cache.");
-    }
-    const url = `${baseUrl}_apis/artifactcache/${resource}`;
-    core.debug(`Resource Url: ${url}`);
-    return url;
-}
-function createAcceptHeader(type, apiVersion) {
-    return `${type};api-version=${apiVersion}`;
-}
-function getRequestOptions() {
-    const requestOptions = {
-        headers: {
-            Accept: createAcceptHeader("application/json", "6.0-preview.1")
-        }
-    };
-    return requestOptions;
-}
-function createHttpClient() {
-    const token = process.env["ACTIONS_RUNTIME_TOKEN"] || "";
-    const bearerCredentialHandler = new auth_1.BearerCredentialHandler(token);
-    return new http_client_1.HttpClient("actions/cache", [bearerCredentialHandler], getRequestOptions());
-}
-function getCacheVersion() {
-    // Add salt to cache version to support breaking changes in cache entry
-    const components = [
-        core.getInput(constants_1.Inputs.Path, { required: true }),
-        versionSalt
-    ];
-    return crypto
-        .createHash("sha256")
-        .update(components.join("|"))
-        .digest("hex");
-}
-exports.getCacheVersion = getCacheVersion;
-function getCacheEntry(keys) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const httpClient = createHttpClient();
-        const version = getCacheVersion();
-        const resource = `cache?keys=${encodeURIComponent(keys.join(","))}&version=${version}`;
-        const response = yield httpClient.getJson(getCacheApiUrl(resource));
-        if (response.statusCode === 204) {
-            return null;
-        }
-        if (!isSuccessStatusCode(response.statusCode)) {
-            throw new Error(`Cache service responded with ${response.statusCode}`);
-        }
-        const cacheResult = response.result;
-        const cacheDownloadUrl = cacheResult === null || cacheResult === void 0 ? void 0 : cacheResult.archiveLocation;
-        if (!cacheDownloadUrl) {
-            throw new Error("Cache not found.");
-        }
-        core.setSecret(cacheDownloadUrl);
-        core.debug(`Cache Result:`);
-        core.debug(JSON.stringify(cacheResult));
-        return cacheResult;
-    });
-}
-exports.getCacheEntry = getCacheEntry;
-function pipeResponseToStream(response, output) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const pipeline = util.promisify(stream.pipeline);
-        yield pipeline(response.message, output);
-    });
-}
-function downloadCache(archiveLocation, archivePath) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const stream = fs.createWriteStream(archivePath);
-        const httpClient = new http_client_1.HttpClient("actions/cache");
-        const downloadResponse = yield httpClient.get(archiveLocation);
-        // Abort download if no traffic received over the socket.
-        downloadResponse.message.socket.setTimeout(constants_1.SocketTimeout, () => {
-            downloadResponse.message.destroy();
-            core.debug(`Aborting download, socket timed out after ${constants_1.SocketTimeout} ms`);
-        });
-        yield pipeResponseToStream(downloadResponse, stream);
-        // Validate download size.
-        const contentLengthHeader = downloadResponse.message.headers["content-length"];
-        if (contentLengthHeader) {
-            const expectedLength = parseInt(contentLengthHeader);
-            const actualLength = utils.getArchiveFileSize(archivePath);
-            if (actualLength != expectedLength) {
-                throw new Error(`Incomplete download. Expected file size: ${expectedLength}, actual file size: ${actualLength}`);
-            }
-        }
-        else {
-            core.debug("Unable to validate download, no Content-Length header");
-        }
-    });
-}
-exports.downloadCache = downloadCache;
-// Reserve Cache
-function reserveCache(key) {
-    var _a, _b;
-    return __awaiter(this, void 0, void 0, function* () {
-        const httpClient = createHttpClient();
-        const version = getCacheVersion();
-        const reserveCacheRequest = {
-            key,
-            version
-        };
-        const response = yield httpClient.postJson(getCacheApiUrl("caches"), reserveCacheRequest);
-        return (_b = (_a = response === null || response === void 0 ? void 0 : response.result) === null || _a === void 0 ? void 0 : _a.cacheId) !== null && _b !== void 0 ? _b : -1;
-    });
-}
-exports.reserveCache = reserveCache;
-function getContentRange(start, end) {
-    // Format: `bytes start-end/filesize
-    // start and end are inclusive
-    // filesize can be *
-    // For a 200 byte chunk starting at byte 0:
-    // Content-Range: bytes 0-199/*
-    return `bytes ${start}-${end}/*`;
-}
-function uploadChunk(httpClient, resourceUrl, data, start, end) {
-    return __awaiter(this, void 0, void 0, function* () {
-        core.debug(`Uploading chunk of size ${end -
-            start +
-            1} bytes at offset ${start} with content range: ${getContentRange(start, end)}`);
-        const additionalHeaders = {
-            "Content-Type": "application/octet-stream",
-            "Content-Range": getContentRange(start, end)
-        };
-        const uploadChunkRequest = () => __awaiter(this, void 0, void 0, function* () {
-            return yield httpClient.sendStream("PATCH", resourceUrl, data, additionalHeaders);
-        });
-        const response = yield uploadChunkRequest();
-        if (isSuccessStatusCode(response.message.statusCode)) {
-            return;
-        }
-        if (isRetryableStatusCode(response.message.statusCode)) {
-            core.debug(`Received ${response.message.statusCode}, retrying chunk at offset ${start}.`);
-            const retryResponse = yield uploadChunkRequest();
-            if (isSuccessStatusCode(retryResponse.message.statusCode)) {
-                return;
-            }
-        }
-        throw new Error(`Cache service responded with ${response.message.statusCode} during chunk upload.`);
-    });
-}
-function parseEnvNumber(key) {
-    const value = Number(process.env[key]);
-    if (Number.isNaN(value) || value < 0) {
-        return undefined;
-    }
-    return value;
-}
-function uploadFile(httpClient, cacheId, archivePath) {
-    var _a, _b;
-    return __awaiter(this, void 0, void 0, function* () {
-        // Upload Chunks
-        const fileSize = fs.statSync(archivePath).size;
-        const resourceUrl = getCacheApiUrl(`caches/${cacheId.toString()}`);
-        const fd = fs.openSync(archivePath, "r");
-        const concurrency = (_a = parseEnvNumber("CACHE_UPLOAD_CONCURRENCY")) !== null && _a !== void 0 ? _a : 4; // # of HTTP requests in parallel
-        const MAX_CHUNK_SIZE = (_b = parseEnvNumber("CACHE_UPLOAD_CHUNK_SIZE")) !== null && _b !== void 0 ? _b : 32 * 1024 * 1024; // 32 MB Chunks
-        core.debug(`Concurrency: ${concurrency} and Chunk Size: ${MAX_CHUNK_SIZE}`);
-        const parallelUploads = [...new Array(concurrency).keys()];
-        core.debug("Awaiting all uploads");
-        let offset = 0;
-        try {
-            yield Promise.all(parallelUploads.map(() => __awaiter(this, void 0, void 0, function* () {
-                while (offset < fileSize) {
-                    const chunkSize = Math.min(fileSize - offset, MAX_CHUNK_SIZE);
-                    const start = offset;
-                    const end = offset + chunkSize - 1;
-                    offset += MAX_CHUNK_SIZE;
-                    const chunk = fs.createReadStream(archivePath, {
-                        fd,
-                        start,
-                        end,
-                        autoClose: false
-                    });
-                    yield uploadChunk(httpClient, resourceUrl, chunk, start, end);
-                }
-            })));
-        }
-        finally {
-            fs.closeSync(fd);
-        }
-        return;
-    });
-}
-function commitCache(httpClient, cacheId, filesize) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const commitCacheRequest = { size: filesize };
-        return yield httpClient.postJson(getCacheApiUrl(`caches/${cacheId.toString()}`), commitCacheRequest);
-    });
-}
-function saveCache(cacheId, archivePath) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const httpClient = createHttpClient();
-        core.debug("Upload cache");
-        yield uploadFile(httpClient, cacheId, archivePath);
-        // Commit Cache
-        core.debug("Commiting cache");
-        const cacheSize = utils.getArchiveFileSize(archivePath);
-        const commitCacheResponse = yield commitCache(httpClient, cacheId, cacheSize);
-        if (!isSuccessStatusCode(commitCacheResponse.statusCode)) {
-            throw new Error(`Cache service responded with ${commitCacheResponse.statusCode} during commit cache.`);
-        }
-        core.info("Cache saved successfully");
-    });
-}
-exports.saveCache = saveCache;
-
-
-/***/ }),
-
 /***/ 357:
 /***/ (function(module) {
 
@@ -10346,6 +10561,197 @@ function escapeProperty(s) {
         .replace(/,/g, '%2C');
 }
 //# sourceMappingURL=command.js.map
+
+/***/ }),
+
+/***/ 434:
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+"use strict";
+
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
+    result["default"] = mod;
+    return result;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const exec_1 = __webpack_require__(986);
+const io = __importStar(__webpack_require__(1));
+const fs_1 = __webpack_require__(747);
+const path = __importStar(__webpack_require__(622));
+const utils = __importStar(__webpack_require__(15));
+const constants_1 = __webpack_require__(931);
+function getTarPath(args, compressionMethod) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const IS_WINDOWS = process.platform === 'win32';
+        if (IS_WINDOWS) {
+            const systemTar = `${process.env['windir']}\\System32\\tar.exe`;
+            if (compressionMethod !== constants_1.CompressionMethod.Gzip) {
+                // We only use zstandard compression on windows when gnu tar is installed due to
+                // a bug with compressing large files with bsdtar + zstd
+                args.push('--force-local');
+            }
+            else if (fs_1.existsSync(systemTar)) {
+                return systemTar;
+            }
+            else if (yield utils.isGnuTarInstalled()) {
+                args.push('--force-local');
+            }
+        }
+        return yield io.which('tar', true);
+    });
+}
+function execTar(args, compressionMethod, cwd) {
+    return __awaiter(this, void 0, void 0, function* () {
+        try {
+            yield exec_1.exec(`"${yield getTarPath(args, compressionMethod)}"`, args, { cwd });
+        }
+        catch (error) {
+            throw new Error(`Tar failed with error: ${error === null || error === void 0 ? void 0 : error.message}`);
+        }
+    });
+}
+function getWorkingDirectory() {
+    var _a;
+    return (_a = process.env['GITHUB_WORKSPACE']) !== null && _a !== void 0 ? _a : process.cwd();
+}
+function extractTar(archivePath, compressionMethod) {
+    return __awaiter(this, void 0, void 0, function* () {
+        // Create directory to extract tar into
+        const workingDirectory = getWorkingDirectory();
+        yield io.mkdirP(workingDirectory);
+        // --d: Decompress.
+        // --long=#: Enables long distance matching with # bits. Maximum is 30 (1GB) on 32-bit OS and 31 (2GB) on 64-bit.
+        // Using 30 here because we also support 32-bit self-hosted runners.
+        function getCompressionProgram() {
+            switch (compressionMethod) {
+                case constants_1.CompressionMethod.Zstd:
+                    return ['--use-compress-program', 'zstd -d --long=30'];
+                case constants_1.CompressionMethod.ZstdWithoutLong:
+                    return ['--use-compress-program', 'zstd -d'];
+                default:
+                    return ['-z'];
+            }
+        }
+        const args = [
+            ...getCompressionProgram(),
+            '-xf',
+            archivePath.replace(new RegExp(`\\${path.sep}`, 'g'), '/'),
+            '-P',
+            '-C',
+            workingDirectory.replace(new RegExp(`\\${path.sep}`, 'g'), '/')
+        ];
+        yield execTar(args, compressionMethod);
+    });
+}
+exports.extractTar = extractTar;
+function createTar(archiveFolder, sourceDirectories, compressionMethod) {
+    return __awaiter(this, void 0, void 0, function* () {
+        // Write source directories to manifest.txt to avoid command length limits
+        const manifestFilename = 'manifest.txt';
+        const cacheFileName = utils.getCacheFileName(compressionMethod);
+        fs_1.writeFileSync(path.join(archiveFolder, manifestFilename), sourceDirectories.join('\n'));
+        const workingDirectory = getWorkingDirectory();
+        // -T#: Compress using # working thread. If # is 0, attempt to detect and use the number of physical CPU cores.
+        // --long=#: Enables long distance matching with # bits. Maximum is 30 (1GB) on 32-bit OS and 31 (2GB) on 64-bit.
+        // Using 30 here because we also support 32-bit self-hosted runners.
+        // Long range mode is added to zstd in v1.3.2 release, so we will not use --long in older version of zstd.
+        function getCompressionProgram() {
+            switch (compressionMethod) {
+                case constants_1.CompressionMethod.Zstd:
+                    return ['--use-compress-program', 'zstd -T0 --long=30'];
+                case constants_1.CompressionMethod.ZstdWithoutLong:
+                    return ['--use-compress-program', 'zstd -T0'];
+                default:
+                    return ['-z'];
+            }
+        }
+        const args = [
+            ...getCompressionProgram(),
+            '-cf',
+            cacheFileName.replace(new RegExp(`\\${path.sep}`, 'g'), '/'),
+            '-P',
+            '-C',
+            workingDirectory.replace(new RegExp(`\\${path.sep}`, 'g'), '/'),
+            '--files-from',
+            manifestFilename
+        ];
+        yield execTar(args, compressionMethod, archiveFolder);
+    });
+}
+exports.createTar = createTar;
+//# sourceMappingURL=tar.js.map
+
+/***/ }),
+
+/***/ 443:
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+"use strict";
+
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
+    result["default"] = mod;
+    return result;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const core = __importStar(__webpack_require__(470));
+const constants_1 = __webpack_require__(694);
+function isExactKeyMatch(key, cacheKey) {
+    return !!(cacheKey &&
+        cacheKey.localeCompare(key, undefined, {
+            sensitivity: "accent",
+        }) === 0);
+}
+exports.isExactKeyMatch = isExactKeyMatch;
+function setCacheState(state) {
+    core.saveState(constants_1.State.CacheMatchedKey, state);
+}
+exports.setCacheState = setCacheState;
+function setCacheHitOutput(isCacheHit) {
+    core.setOutput(constants_1.Outputs.CacheHit, isCacheHit.toString());
+}
+exports.setCacheHitOutput = setCacheHitOutput;
+function setOutputAndState(key, cacheKey) {
+    setCacheHitOutput(isExactKeyMatch(key, cacheKey));
+    // Store the matched cache key if it exists
+    cacheKey && setCacheState(cacheKey);
+}
+exports.setOutputAndState = setOutputAndState;
+function getCacheState() {
+    const cacheKey = core.getState(constants_1.State.CacheMatchedKey);
+    if (cacheKey) {
+        core.debug(`Cache state/key: ${cacheKey}`);
+        return cacheKey;
+    }
+    return undefined;
+}
+exports.getCacheState = getCacheState;
+function logWarning(message) {
+    const warningPrefix = "[warning]";
+    core.info(`${warningPrefix}${message}`);
+}
+exports.logWarning = logWarning;
+// Cache token authorized for all events that are tied to a ref
+// See GitHub Context https://help.github.com/actions/automating-your-workflow-with-github-actions/contexts-and-expression-syntax-for-github-actions#github-context
+function isValidEvent() {
+    return constants_1.RefKey in process.env && Boolean(process.env[constants_1.RefKey]);
+}
+exports.isValidEvent = isValidEvent;
+
 
 /***/ }),
 
@@ -27407,158 +27813,6 @@ module.exports = parse;
 
 /***/ }),
 
-/***/ 570:
-/***/ (function(__unusedmodule, exports, __webpack_require__) {
-
-"use strict";
-
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
-    result["default"] = mod;
-    return result;
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const core = __importStar(__webpack_require__(470));
-const exec_1 = __webpack_require__(986);
-const io = __importStar(__webpack_require__(1));
-const fs_1 = __webpack_require__(747);
-const path = __importStar(__webpack_require__(622));
-const constants_1 = __webpack_require__(573);
-function isGnuTar() {
-    return __awaiter(this, void 0, void 0, function* () {
-        core.debug("Checking tar --version");
-        let versionOutput = "";
-        yield exec_1.exec("tar --version", [], {
-            ignoreReturnCode: true,
-            silent: true,
-            listeners: {
-                stdout: (data) => (versionOutput += data.toString()),
-                stderr: (data) => (versionOutput += data.toString())
-            }
-        });
-        core.debug(versionOutput.trim());
-        return versionOutput.toUpperCase().includes("GNU TAR");
-    });
-}
-exports.isGnuTar = isGnuTar;
-function getTarPath(args) {
-    return __awaiter(this, void 0, void 0, function* () {
-        // Explicitly use BSD Tar on Windows
-        const IS_WINDOWS = process.platform === "win32";
-        if (IS_WINDOWS) {
-            const systemTar = `${process.env["windir"]}\\System32\\tar.exe`;
-            if (fs_1.existsSync(systemTar)) {
-                return systemTar;
-            }
-            else if (isGnuTar()) {
-                args.push("--force-local");
-            }
-        }
-        return yield io.which("tar", true);
-    });
-}
-function execTar(args, cwd) {
-    return __awaiter(this, void 0, void 0, function* () {
-        try {
-            yield exec_1.exec(`"${yield getTarPath(args)}"`, args, { cwd: cwd });
-        }
-        catch (error) {
-            throw new Error(`Tar failed with error: ${error === null || error === void 0 ? void 0 : error.message}`);
-        }
-    });
-}
-function getWorkingDirectory() {
-    var _a;
-    return (_a = process.env["GITHUB_WORKSPACE"]) !== null && _a !== void 0 ? _a : process.cwd();
-}
-function extractTar(archivePath) {
-    return __awaiter(this, void 0, void 0, function* () {
-        // Create directory to extract tar into
-        const workingDirectory = getWorkingDirectory();
-        yield io.mkdirP(workingDirectory);
-        const args = [
-            "-xz",
-            "-f",
-            archivePath.replace(new RegExp("\\" + path.sep, "g"), "/"),
-            "-P",
-            "-C",
-            workingDirectory.replace(new RegExp("\\" + path.sep, "g"), "/")
-        ];
-        yield execTar(args);
-    });
-}
-exports.extractTar = extractTar;
-function createTar(archiveFolder, sourceDirectories) {
-    return __awaiter(this, void 0, void 0, function* () {
-        // Write source directories to manifest.txt to avoid command length limits
-        const manifestFilename = "manifest.txt";
-        fs_1.writeFileSync(path.join(archiveFolder, manifestFilename), sourceDirectories.join("\n"));
-        const workingDirectory = getWorkingDirectory();
-        const args = [
-            "-cz",
-            "-f",
-            constants_1.CacheFilename.replace(new RegExp("\\" + path.sep, "g"), "/"),
-            "-P",
-            "-C",
-            workingDirectory.replace(new RegExp("\\" + path.sep, "g"), "/"),
-            "--files-from",
-            manifestFilename
-        ];
-        yield execTar(args, archiveFolder);
-    });
-}
-exports.createTar = createTar;
-
-
-/***/ }),
-
-/***/ 573:
-/***/ (function(__unusedmodule, exports) {
-
-"use strict";
-
-Object.defineProperty(exports, "__esModule", { value: true });
-var Inputs;
-(function (Inputs) {
-    Inputs["Key"] = "key";
-    Inputs["Path"] = "path";
-    Inputs["RestoreKeys"] = "restore-keys";
-})(Inputs = exports.Inputs || (exports.Inputs = {}));
-var Outputs;
-(function (Outputs) {
-    Outputs["CacheHit"] = "cache-hit";
-})(Outputs = exports.Outputs || (exports.Outputs = {}));
-var State;
-(function (State) {
-    State["CacheKey"] = "CACHE_KEY";
-    State["CacheResult"] = "CACHE_RESULT";
-})(State = exports.State || (exports.State = {}));
-var Events;
-(function (Events) {
-    Events["Key"] = "GITHUB_EVENT_NAME";
-    Events["Push"] = "push";
-    Events["PullRequest"] = "pull_request";
-})(Events = exports.Events || (exports.Events = {}));
-exports.CacheFilename = "cache.tgz";
-// Socket timeout in milliseconds during download.  If no traffic is received
-// over the socket during this period, the socket is destroyed and the download
-// is aborted.
-exports.SocketTimeout = 5000;
-
-
-/***/ }),
-
 /***/ 577:
 /***/ (function(module) {
 
@@ -27904,6 +28158,159 @@ function makeSemver(version) {
 }
 exports.makeSemver = makeSemver;
 
+
+/***/ }),
+
+/***/ 638:
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+"use strict";
+
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
+    result["default"] = mod;
+    return result;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const core = __importStar(__webpack_require__(470));
+const path = __importStar(__webpack_require__(622));
+const utils = __importStar(__webpack_require__(15));
+const cacheHttpClient = __importStar(__webpack_require__(114));
+const tar_1 = __webpack_require__(434);
+class ValidationError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = 'ValidationError';
+        Object.setPrototypeOf(this, ValidationError.prototype);
+    }
+}
+exports.ValidationError = ValidationError;
+class ReserveCacheError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = 'ReserveCacheError';
+        Object.setPrototypeOf(this, ReserveCacheError.prototype);
+    }
+}
+exports.ReserveCacheError = ReserveCacheError;
+function checkPaths(paths) {
+    if (!paths || paths.length === 0) {
+        throw new ValidationError(`Path Validation Error: At least one directory or file path is required`);
+    }
+}
+function checkKey(key) {
+    if (key.length > 512) {
+        throw new ValidationError(`Key Validation Error: ${key} cannot be larger than 512 characters.`);
+    }
+    const regex = /^[^,]*$/;
+    if (!regex.test(key)) {
+        throw new ValidationError(`Key Validation Error: ${key} cannot contain commas.`);
+    }
+}
+/**
+ * Restores cache from keys
+ *
+ * @param paths a list of file paths to restore from the cache
+ * @param primaryKey an explicit key for restoring the cache
+ * @param restoreKeys an optional ordered list of keys to use for restoring the cache if no cache hit occurred for key
+ * @returns string returns the key for the cache hit, otherwise returns undefined
+ */
+function restoreCache(paths, primaryKey, restoreKeys) {
+    return __awaiter(this, void 0, void 0, function* () {
+        checkPaths(paths);
+        restoreKeys = restoreKeys || [];
+        const keys = [primaryKey, ...restoreKeys];
+        core.debug('Resolved Keys:');
+        core.debug(JSON.stringify(keys));
+        if (keys.length > 10) {
+            throw new ValidationError(`Key Validation Error: Keys are limited to a maximum of 10.`);
+        }
+        for (const key of keys) {
+            checkKey(key);
+        }
+        const compressionMethod = yield utils.getCompressionMethod();
+        // path are needed to compute version
+        const cacheEntry = yield cacheHttpClient.getCacheEntry(keys, paths, {
+            compressionMethod
+        });
+        if (!(cacheEntry === null || cacheEntry === void 0 ? void 0 : cacheEntry.archiveLocation)) {
+            // Cache not found
+            return undefined;
+        }
+        const archivePath = path.join(yield utils.createTempDirectory(), utils.getCacheFileName(compressionMethod));
+        core.debug(`Archive Path: ${archivePath}`);
+        try {
+            // Download the cache from the cache entry
+            yield cacheHttpClient.downloadCache(cacheEntry.archiveLocation, archivePath);
+            const archiveFileSize = utils.getArchiveFileSizeIsBytes(archivePath);
+            core.info(`Cache Size: ~${Math.round(archiveFileSize / (1024 * 1024))} MB (${archiveFileSize} B)`);
+            yield tar_1.extractTar(archivePath, compressionMethod);
+        }
+        finally {
+            // Try to delete the archive to save space
+            try {
+                yield utils.unlinkFile(archivePath);
+            }
+            catch (error) {
+                core.debug(`Failed to delete archive: ${error}`);
+            }
+        }
+        return cacheEntry.cacheKey;
+    });
+}
+exports.restoreCache = restoreCache;
+/**
+ * Saves a list of files with the specified key
+ *
+ * @param paths a list of file paths to be cached
+ * @param key an explicit key for restoring the cache
+ * @param options cache upload options
+ * @returns number returns cacheId if the cache was saved successfully and throws an error if save fails
+ */
+function saveCache(paths, key, options) {
+    return __awaiter(this, void 0, void 0, function* () {
+        checkPaths(paths);
+        checkKey(key);
+        const compressionMethod = yield utils.getCompressionMethod();
+        core.debug('Reserving Cache');
+        const cacheId = yield cacheHttpClient.reserveCache(key, paths, {
+            compressionMethod
+        });
+        if (cacheId === -1) {
+            throw new ReserveCacheError(`Unable to reserve cache with key ${key}, another job may be creating this cache.`);
+        }
+        core.debug(`Cache ID: ${cacheId}`);
+        const cachePaths = yield utils.resolvePaths(paths);
+        core.debug('Cache Paths:');
+        core.debug(`${JSON.stringify(cachePaths)}`);
+        const archiveFolder = yield utils.createTempDirectory();
+        const archivePath = path.join(archiveFolder, utils.getCacheFileName(compressionMethod));
+        core.debug(`Archive Path: ${archivePath}`);
+        yield tar_1.createTar(archiveFolder, cachePaths, compressionMethod);
+        const fileSizeLimit = 5 * 1024 * 1024 * 1024; // 5GB per repo limit
+        const archiveFileSize = utils.getArchiveFileSizeIsBytes(archivePath);
+        core.debug(`File Size: ${archiveFileSize}`);
+        if (archiveFileSize > fileSizeLimit) {
+            throw new Error(`Cache size of ~${Math.round(archiveFileSize / (1024 * 1024))} MB (${archiveFileSize} B) is over the 5GB limit, not saving cache.`);
+        }
+        core.debug(`Saving Cache (ID: ${cacheId})`);
+        yield cacheHttpClient.saveCache(cacheId, archivePath, options);
+        return cacheId;
+    });
+}
+exports.saveCache = saveCache;
+//# sourceMappingURL=cache.js.map
 
 /***/ }),
 
@@ -29287,6 +29694,38 @@ exports.Deprecation = Deprecation;
 
 /***/ }),
 
+/***/ 694:
+/***/ (function(__unusedmodule, exports) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+var Inputs;
+(function (Inputs) {
+    Inputs["Key"] = "key";
+    Inputs["Path"] = "path";
+    Inputs["RestoreKeys"] = "restore-keys";
+})(Inputs = exports.Inputs || (exports.Inputs = {}));
+var Outputs;
+(function (Outputs) {
+    Outputs["CacheHit"] = "cache-hit";
+})(Outputs = exports.Outputs || (exports.Outputs = {}));
+var State;
+(function (State) {
+    State["CachePrimaryKey"] = "CACHE_KEY";
+    State["CacheMatchedKey"] = "CACHE_RESULT";
+})(State = exports.State || (exports.State = {}));
+var Events;
+(function (Events) {
+    Events["Key"] = "GITHUB_EVENT_NAME";
+    Events["Push"] = "push";
+    Events["PullRequest"] = "pull_request";
+})(Events = exports.Events || (exports.Events = {}));
+exports.RefKey = "GITHUB_REF";
+
+
+/***/ }),
+
 /***/ 696:
 /***/ (function(module) {
 
@@ -29387,15 +29826,13 @@ var __importStar = (this && this.__importStar) || function (mod) {
     result["default"] = mod;
     return result;
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
+const cache = __importStar(__webpack_require__(638));
 const core = __importStar(__webpack_require__(470));
-const restore_1 = __importDefault(__webpack_require__(206));
-const save_1 = __importDefault(__webpack_require__(781));
 const crypto = __importStar(__webpack_require__(417));
 const fs = __importStar(__webpack_require__(747));
+const constants_1 = __webpack_require__(694);
+const utils = __importStar(__webpack_require__(443));
 function checksumFile(hashName, path) {
     return new Promise((resolve, reject) => {
         const hash = crypto.createHash(hashName);
@@ -29439,28 +29876,79 @@ function buildCacheKeys() {
 }
 function restoreCache() {
     return __awaiter(this, void 0, void 0, function* () {
+        if (!utils.isValidEvent()) {
+            utils.logWarning(`Event Validation Error: The event type ${process.env[constants_1.Events.Key]} is not supported because it's not tied to a branch or tag ref.`);
+            return;
+        }
         const startedAt = Date.now();
         const keys = yield buildCacheKeys();
         const primaryKey = keys.pop();
         const restoreKeys = keys.reverse();
-        core.info(`Primary analysis cache key is '${primaryKey}', restore keys are '${restoreKeys.join(` | `)}'`);
-        process.env[`INPUT_RESTORE-KEYS`] = restoreKeys.join(`\n`);
-        process.env.INPUT_KEY = primaryKey;
-        process.env.INPUT_PATH = getCacheDirs().join(`\n`);
         // Tell golangci-lint to use our cache directory.
         process.env.GOLANGCI_LINT_CACHE = getLintCacheDir();
-        yield restore_1.default();
-        core.info(`Restored cache for golangci-lint from key '${primaryKey}' in ${Date.now() - startedAt}ms`);
+        if (!primaryKey) {
+            utils.logWarning(`Invalid primary key`);
+            return;
+        }
+        core.saveState(constants_1.State.CachePrimaryKey, primaryKey);
+        try {
+            const cacheKey = yield cache.restoreCache(getCacheDirs(), primaryKey, restoreKeys);
+            if (!cacheKey) {
+                core.info(`Cache not found for input keys: ${[primaryKey, ...restoreKeys].join(", ")}`);
+                return;
+            }
+            // Store the matched cache key
+            utils.setCacheState(cacheKey);
+            const isExactKeyMatch = utils.isExactKeyMatch(primaryKey, cacheKey);
+            utils.setCacheHitOutput(isExactKeyMatch);
+            core.info(`Cache restored from key: ${cacheKey}`);
+            core.info(`Restored cache for golangci-lint from key '${primaryKey}' in ${Date.now() - startedAt}ms`);
+        }
+        catch (error) {
+            if (error.name === cache.ValidationError.name) {
+                throw error;
+            }
+            else {
+                core.warning(error.message);
+            }
+        }
     });
 }
 exports.restoreCache = restoreCache;
 function saveCache() {
     return __awaiter(this, void 0, void 0, function* () {
+        // Validate inputs, this can cause task failure
+        if (!utils.isValidEvent()) {
+            utils.logWarning(`Event Validation Error: The event type ${process.env[constants_1.Events.Key]} is not supported because it's not tied to a branch or tag ref.`);
+            return;
+        }
         const startedAt = Date.now();
         const cacheDirs = getCacheDirs();
-        process.env.INPUT_PATH = cacheDirs.join(`\n`);
-        yield save_1.default();
-        core.info(`Saved cache for golangci-lint from paths '${cacheDirs.join(`, `)}' in ${Date.now() - startedAt}ms`);
+        const primaryKey = core.getState(constants_1.State.CachePrimaryKey);
+        if (!primaryKey) {
+            utils.logWarning(`Error retrieving key from state.`);
+            return;
+        }
+        const state = utils.getCacheState();
+        if (utils.isExactKeyMatch(primaryKey, state)) {
+            core.info(`Cache hit occurred on the primary key ${primaryKey}, not saving cache.`);
+            return;
+        }
+        try {
+            yield cache.saveCache(cacheDirs, primaryKey);
+            core.info(`Saved cache for golangci-lint from paths '${cacheDirs.join(`, `)}' in ${Date.now() - startedAt}ms`);
+        }
+        catch (error) {
+            if (error.name === cache.ValidationError.name) {
+                throw error;
+            }
+            else if (error.name === cache.ReserveCacheError.name) {
+                core.info(error.message);
+            }
+            else {
+                core.info(`[warning] ${error.message}`);
+            }
+        }
     });
 }
 exports.saveCache = saveCache;
@@ -30048,91 +30536,6 @@ const getPage = __webpack_require__(265)
 function getFirstPage (octokit, link, headers) {
   return getPage(octokit, link, 'first', headers)
 }
-
-
-/***/ }),
-
-/***/ 781:
-/***/ (function(__unusedmodule, exports, __webpack_require__) {
-
-"use strict";
-
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
-    result["default"] = mod;
-    return result;
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const core = __importStar(__webpack_require__(470));
-const path = __importStar(__webpack_require__(622));
-const cacheHttpClient = __importStar(__webpack_require__(342));
-const constants_1 = __webpack_require__(573);
-const tar_1 = __webpack_require__(570);
-const utils = __importStar(__webpack_require__(867));
-function run() {
-    return __awaiter(this, void 0, void 0, function* () {
-        try {
-            if (!utils.isValidEvent()) {
-                utils.logWarning(`Event Validation Error: The event type ${process.env[constants_1.Events.Key]} is not supported. Only ${utils
-                    .getSupportedEvents()
-                    .join(", ")} events are supported at this time.`);
-                return;
-            }
-            const state = utils.getCacheState();
-            // Inputs are re-evaluted before the post action, so we want the original key used for restore
-            const primaryKey = core.getState(constants_1.State.CacheKey);
-            if (!primaryKey) {
-                utils.logWarning(`Error retrieving key from state.`);
-                return;
-            }
-            if (utils.isExactKeyMatch(primaryKey, state)) {
-                core.info(`Cache hit occurred on the primary key ${primaryKey}, not saving cache.`);
-                return;
-            }
-            core.debug("Reserving Cache");
-            const cacheId = yield cacheHttpClient.reserveCache(primaryKey);
-            if (cacheId == -1) {
-                core.info(`Unable to reserve cache with key ${primaryKey}, another job may be creating this cache.`);
-                return;
-            }
-            core.debug(`Cache ID: ${cacheId}`);
-            const cachePaths = yield utils.resolvePaths(core
-                .getInput(constants_1.Inputs.Path, { required: true })
-                .split("\n")
-                .filter(x => x !== ""));
-            core.debug("Cache Paths:");
-            core.debug(`${JSON.stringify(cachePaths)}`);
-            const archiveFolder = yield utils.createTempDirectory();
-            const archivePath = path.join(archiveFolder, constants_1.CacheFilename);
-            core.debug(`Archive Path: ${archivePath}`);
-            yield tar_1.createTar(archiveFolder, cachePaths);
-            const fileSizeLimit = 5 * 1024 * 1024 * 1024; // 5GB per repo limit
-            const archiveFileSize = utils.getArchiveFileSize(archivePath);
-            core.debug(`File Size: ${archiveFileSize}`);
-            if (archiveFileSize > fileSizeLimit) {
-                utils.logWarning(`Cache size of ~${Math.round(archiveFileSize / (1024 * 1024))} MB (${archiveFileSize} B) is over the 5GB limit, not saving cache.`);
-                return;
-            }
-            core.debug(`Saving Cache (ID: ${cacheId})`);
-            yield cacheHttpClient.saveCache(cacheId, archivePath);
-        }
-        catch (error) {
-            utils.logWarning(error.message);
-        }
-    });
-}
-exports.default = run;
 
 
 /***/ }),
@@ -33152,159 +33555,6 @@ module.exports = function (str) {
 
 /***/ }),
 
-/***/ 867:
-/***/ (function(__unusedmodule, exports, __webpack_require__) {
-
-"use strict";
-
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
-var __asyncValues = (this && this.__asyncValues) || function (o) {
-    if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
-    var m = o[Symbol.asyncIterator], i;
-    return m ? m.call(o) : (o = typeof __values === "function" ? __values(o) : o[Symbol.iterator](), i = {}, verb("next"), verb("throw"), verb("return"), i[Symbol.asyncIterator] = function () { return this; }, i);
-    function verb(n) { i[n] = o[n] && function (v) { return new Promise(function (resolve, reject) { v = o[n](v), settle(resolve, reject, v.done, v.value); }); }; }
-    function settle(resolve, reject, d, v) { Promise.resolve(v).then(function(v) { resolve({ value: v, done: d }); }, reject); }
-};
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
-    result["default"] = mod;
-    return result;
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const core = __importStar(__webpack_require__(470));
-const glob = __importStar(__webpack_require__(281));
-const io = __importStar(__webpack_require__(1));
-const fs = __importStar(__webpack_require__(747));
-const path = __importStar(__webpack_require__(622));
-const util = __importStar(__webpack_require__(669));
-const uuidV4 = __importStar(__webpack_require__(826));
-const constants_1 = __webpack_require__(573);
-// From https://github.com/actions/toolkit/blob/master/packages/tool-cache/src/tool-cache.ts#L23
-function createTempDirectory() {
-    return __awaiter(this, void 0, void 0, function* () {
-        const IS_WINDOWS = process.platform === "win32";
-        let tempDirectory = process.env["RUNNER_TEMP"] || "";
-        if (!tempDirectory) {
-            let baseLocation;
-            if (IS_WINDOWS) {
-                // On Windows use the USERPROFILE env variable
-                baseLocation = process.env["USERPROFILE"] || "C:\\";
-            }
-            else {
-                if (process.platform === "darwin") {
-                    baseLocation = "/Users";
-                }
-                else {
-                    baseLocation = "/home";
-                }
-            }
-            tempDirectory = path.join(baseLocation, "actions", "temp");
-        }
-        const dest = path.join(tempDirectory, uuidV4.default());
-        yield io.mkdirP(dest);
-        return dest;
-    });
-}
-exports.createTempDirectory = createTempDirectory;
-function getArchiveFileSize(path) {
-    return fs.statSync(path).size;
-}
-exports.getArchiveFileSize = getArchiveFileSize;
-function isExactKeyMatch(key, cacheResult) {
-    return !!(cacheResult &&
-        cacheResult.cacheKey &&
-        cacheResult.cacheKey.localeCompare(key, undefined, {
-            sensitivity: "accent"
-        }) === 0);
-}
-exports.isExactKeyMatch = isExactKeyMatch;
-function setCacheState(state) {
-    core.saveState(constants_1.State.CacheResult, JSON.stringify(state));
-}
-exports.setCacheState = setCacheState;
-function setCacheHitOutput(isCacheHit) {
-    core.setOutput(constants_1.Outputs.CacheHit, isCacheHit.toString());
-}
-exports.setCacheHitOutput = setCacheHitOutput;
-function setOutputAndState(key, cacheResult) {
-    setCacheHitOutput(isExactKeyMatch(key, cacheResult));
-    // Store the cache result if it exists
-    cacheResult && setCacheState(cacheResult);
-}
-exports.setOutputAndState = setOutputAndState;
-function getCacheState() {
-    const stateData = core.getState(constants_1.State.CacheResult);
-    core.debug(`State: ${stateData}`);
-    if (stateData) {
-        return JSON.parse(stateData);
-    }
-    return undefined;
-}
-exports.getCacheState = getCacheState;
-function logWarning(message) {
-    const warningPrefix = "[warning]";
-    core.info(`${warningPrefix}${message}`);
-}
-exports.logWarning = logWarning;
-function resolvePaths(patterns) {
-    var e_1, _a;
-    var _b;
-    return __awaiter(this, void 0, void 0, function* () {
-        const paths = [];
-        const workspace = (_b = process.env["GITHUB_WORKSPACE"]) !== null && _b !== void 0 ? _b : process.cwd();
-        const globber = yield glob.create(patterns.join("\n"), {
-            implicitDescendants: false
-        });
-        try {
-            for (var _c = __asyncValues(globber.globGenerator()), _d; _d = yield _c.next(), !_d.done;) {
-                const file = _d.value;
-                const relativeFile = path.relative(workspace, file);
-                core.debug(`Matched: ${relativeFile}`);
-                // Paths are made relative so the tar entries are all relative to the root of the workspace.
-                paths.push(`${relativeFile}`);
-            }
-        }
-        catch (e_1_1) { e_1 = { error: e_1_1 }; }
-        finally {
-            try {
-                if (_d && !_d.done && (_a = _c.return)) yield _a.call(_c);
-            }
-            finally { if (e_1) throw e_1.error; }
-        }
-        return paths;
-    });
-}
-exports.resolvePaths = resolvePaths;
-function getSupportedEvents() {
-    return [constants_1.Events.Push, constants_1.Events.PullRequest];
-}
-exports.getSupportedEvents = getSupportedEvents;
-// Currently the cache token is only authorized for push and pull_request events
-// All other events will fail when reading and saving the cache
-// See GitHub Context https://help.github.com/actions/automating-your-workflow-with-github-actions/contexts-and-expression-syntax-for-github-actions#github-context
-function isValidEvent() {
-    const githubEvent = process.env[constants_1.Events.Key] || "";
-    return getSupportedEvents().includes(githubEvent);
-}
-exports.isValidEvent = isValidEvent;
-function unlinkFile(path) {
-    return util.promisify(fs.unlink)(path);
-}
-exports.unlinkFile = unlinkFile;
-
-
-/***/ }),
-
 /***/ 881:
 /***/ (function(module) {
 
@@ -34606,7 +34856,7 @@ exports.requestLog = requestLog;
 /***/ 919:
 /***/ (function(module) {
 
-module.exports = {"_args":[["@octokit/rest@16.43.1","/Users/denis-isaev/golangci-lint-action"]],"_from":"@octokit/rest@16.43.1","_id":"@octokit/rest@16.43.1","_inBundle":false,"_integrity":"sha512-gfFKwRT/wFxq5qlNjnW2dh+qh74XgTQ2B179UX5K1HYCluioWj8Ndbgqw2PVqa1NnVJkGHp2ovMpVn/DImlmkw==","_location":"/@actions/github/@octokit/rest","_phantomChildren":{},"_requested":{"type":"version","registry":true,"raw":"@octokit/rest@16.43.1","name":"@octokit/rest","escapedName":"@octokit%2frest","scope":"@octokit","rawSpec":"16.43.1","saveSpec":null,"fetchSpec":"16.43.1"},"_requiredBy":["/@actions/github"],"_resolved":"https://registry.npmjs.org/@octokit/rest/-/rest-16.43.1.tgz","_spec":"16.43.1","_where":"/Users/denis-isaev/golangci-lint-action","author":{"name":"Gregor Martynus","url":"https://github.com/gr2m"},"bugs":{"url":"https://github.com/octokit/rest.js/issues"},"bundlesize":[{"path":"./dist/octokit-rest.min.js.gz","maxSize":"33 kB"}],"contributors":[{"name":"Mike de Boer","email":"info@mikedeboer.nl"},{"name":"Fabian Jakobs","email":"fabian@c9.io"},{"name":"Joe Gallo","email":"joe@brassafrax.com"},{"name":"Gregor Martynus","url":"https://github.com/gr2m"}],"dependencies":{"@octokit/auth-token":"^2.4.0","@octokit/plugin-paginate-rest":"^1.1.1","@octokit/plugin-request-log":"^1.0.0","@octokit/plugin-rest-endpoint-methods":"2.4.0","@octokit/request":"^5.2.0","@octokit/request-error":"^1.0.2","atob-lite":"^2.0.0","before-after-hook":"^2.0.0","btoa-lite":"^1.0.0","deprecation":"^2.0.0","lodash.get":"^4.4.2","lodash.set":"^4.3.2","lodash.uniq":"^4.5.0","octokit-pagination-methods":"^1.1.0","once":"^1.4.0","universal-user-agent":"^4.0.0"},"description":"GitHub REST API client for Node.js","devDependencies":{"@gimenete/type-writer":"^0.1.3","@octokit/auth":"^1.1.1","@octokit/fixtures-server":"^5.0.6","@octokit/graphql":"^4.2.0","@types/node":"^13.1.0","bundlesize":"^0.18.0","chai":"^4.1.2","compression-webpack-plugin":"^3.1.0","cypress":"^3.0.0","glob":"^7.1.2","http-proxy-agent":"^4.0.0","lodash.camelcase":"^4.3.0","lodash.merge":"^4.6.1","lodash.upperfirst":"^4.3.1","lolex":"^5.1.2","mkdirp":"^1.0.0","mocha":"^7.0.1","mustache":"^4.0.0","nock":"^11.3.3","npm-run-all":"^4.1.2","nyc":"^15.0.0","prettier":"^1.14.2","proxy":"^1.0.0","semantic-release":"^17.0.0","sinon":"^8.0.0","sinon-chai":"^3.0.0","sort-keys":"^4.0.0","string-to-arraybuffer":"^1.0.0","string-to-jsdoc-comment":"^1.0.0","typescript":"^3.3.1","webpack":"^4.0.0","webpack-bundle-analyzer":"^3.0.0","webpack-cli":"^3.0.0"},"files":["index.js","index.d.ts","lib","plugins"],"homepage":"https://github.com/octokit/rest.js#readme","keywords":["octokit","github","rest","api-client"],"license":"MIT","name":"@octokit/rest","nyc":{"ignore":["test"]},"publishConfig":{"access":"public"},"release":{"publish":["@semantic-release/npm",{"path":"@semantic-release/github","assets":["dist/*","!dist/*.map.gz"]}]},"repository":{"type":"git","url":"git+https://github.com/octokit/rest.js.git"},"scripts":{"build":"npm-run-all build:*","build:browser":"npm-run-all build:browser:*","build:browser:development":"webpack --mode development --entry . --output-library=Octokit --output=./dist/octokit-rest.js --profile --json > dist/bundle-stats.json","build:browser:production":"webpack --mode production --entry . --plugin=compression-webpack-plugin --output-library=Octokit --output-path=./dist --output-filename=octokit-rest.min.js --devtool source-map","build:ts":"npm run -s update-endpoints:typescript","coverage":"nyc report --reporter=html && open coverage/index.html","generate-bundle-report":"webpack-bundle-analyzer dist/bundle-stats.json --mode=static --no-open --report dist/bundle-report.html","lint":"prettier --check '{lib,plugins,scripts,test}/**/*.{js,json,ts}' 'docs/*.{js,json}' 'docs/src/**/*' index.js README.md package.json","lint:fix":"prettier --write '{lib,plugins,scripts,test}/**/*.{js,json,ts}' 'docs/*.{js,json}' 'docs/src/**/*' index.js README.md package.json","postvalidate:ts":"tsc --noEmit --target es6 test/typescript-validate.ts","prebuild:browser":"mkdirp dist/","pretest":"npm run -s lint","prevalidate:ts":"npm run -s build:ts","start-fixtures-server":"octokit-fixtures-server","test":"nyc mocha test/mocha-node-setup.js \"test/*/**/*-test.js\"","test:browser":"cypress run --browser chrome","update-endpoints":"npm-run-all update-endpoints:*","update-endpoints:fetch-json":"node scripts/update-endpoints/fetch-json","update-endpoints:typescript":"node scripts/update-endpoints/typescript","validate:ts":"tsc --target es6 --noImplicitAny index.d.ts"},"types":"index.d.ts","version":"16.43.1"};
+module.exports = {"_args":[["@octokit/rest@16.43.1","/home/tammach/go/src/github.com/golangci/golangci-lint-action"]],"_from":"@octokit/rest@16.43.1","_id":"@octokit/rest@16.43.1","_inBundle":false,"_integrity":"sha512-gfFKwRT/wFxq5qlNjnW2dh+qh74XgTQ2B179UX5K1HYCluioWj8Ndbgqw2PVqa1NnVJkGHp2ovMpVn/DImlmkw==","_location":"/@actions/github/@octokit/rest","_phantomChildren":{},"_requested":{"type":"version","registry":true,"raw":"@octokit/rest@16.43.1","name":"@octokit/rest","escapedName":"@octokit%2frest","scope":"@octokit","rawSpec":"16.43.1","saveSpec":null,"fetchSpec":"16.43.1"},"_requiredBy":["/@actions/github"],"_resolved":"https://registry.npmjs.org/@octokit/rest/-/rest-16.43.1.tgz","_spec":"16.43.1","_where":"/home/tammach/go/src/github.com/golangci/golangci-lint-action","author":{"name":"Gregor Martynus","url":"https://github.com/gr2m"},"bugs":{"url":"https://github.com/octokit/rest.js/issues"},"bundlesize":[{"path":"./dist/octokit-rest.min.js.gz","maxSize":"33 kB"}],"contributors":[{"name":"Mike de Boer","email":"info@mikedeboer.nl"},{"name":"Fabian Jakobs","email":"fabian@c9.io"},{"name":"Joe Gallo","email":"joe@brassafrax.com"},{"name":"Gregor Martynus","url":"https://github.com/gr2m"}],"dependencies":{"@octokit/auth-token":"^2.4.0","@octokit/plugin-paginate-rest":"^1.1.1","@octokit/plugin-request-log":"^1.0.0","@octokit/plugin-rest-endpoint-methods":"2.4.0","@octokit/request":"^5.2.0","@octokit/request-error":"^1.0.2","atob-lite":"^2.0.0","before-after-hook":"^2.0.0","btoa-lite":"^1.0.0","deprecation":"^2.0.0","lodash.get":"^4.4.2","lodash.set":"^4.3.2","lodash.uniq":"^4.5.0","octokit-pagination-methods":"^1.1.0","once":"^1.4.0","universal-user-agent":"^4.0.0"},"description":"GitHub REST API client for Node.js","devDependencies":{"@gimenete/type-writer":"^0.1.3","@octokit/auth":"^1.1.1","@octokit/fixtures-server":"^5.0.6","@octokit/graphql":"^4.2.0","@types/node":"^13.1.0","bundlesize":"^0.18.0","chai":"^4.1.2","compression-webpack-plugin":"^3.1.0","cypress":"^3.0.0","glob":"^7.1.2","http-proxy-agent":"^4.0.0","lodash.camelcase":"^4.3.0","lodash.merge":"^4.6.1","lodash.upperfirst":"^4.3.1","lolex":"^5.1.2","mkdirp":"^1.0.0","mocha":"^7.0.1","mustache":"^4.0.0","nock":"^11.3.3","npm-run-all":"^4.1.2","nyc":"^15.0.0","prettier":"^1.14.2","proxy":"^1.0.0","semantic-release":"^17.0.0","sinon":"^8.0.0","sinon-chai":"^3.0.0","sort-keys":"^4.0.0","string-to-arraybuffer":"^1.0.0","string-to-jsdoc-comment":"^1.0.0","typescript":"^3.3.1","webpack":"^4.0.0","webpack-bundle-analyzer":"^3.0.0","webpack-cli":"^3.0.0"},"files":["index.js","index.d.ts","lib","plugins"],"homepage":"https://github.com/octokit/rest.js#readme","keywords":["octokit","github","rest","api-client"],"license":"MIT","name":"@octokit/rest","nyc":{"ignore":["test"]},"publishConfig":{"access":"public"},"release":{"publish":["@semantic-release/npm",{"path":"@semantic-release/github","assets":["dist/*","!dist/*.map.gz"]}]},"repository":{"type":"git","url":"git+https://github.com/octokit/rest.js.git"},"scripts":{"build":"npm-run-all build:*","build:browser":"npm-run-all build:browser:*","build:browser:development":"webpack --mode development --entry . --output-library=Octokit --output=./dist/octokit-rest.js --profile --json > dist/bundle-stats.json","build:browser:production":"webpack --mode production --entry . --plugin=compression-webpack-plugin --output-library=Octokit --output-path=./dist --output-filename=octokit-rest.min.js --devtool source-map","build:ts":"npm run -s update-endpoints:typescript","coverage":"nyc report --reporter=html && open coverage/index.html","generate-bundle-report":"webpack-bundle-analyzer dist/bundle-stats.json --mode=static --no-open --report dist/bundle-report.html","lint":"prettier --check '{lib,plugins,scripts,test}/**/*.{js,json,ts}' 'docs/*.{js,json}' 'docs/src/**/*' index.js README.md package.json","lint:fix":"prettier --write '{lib,plugins,scripts,test}/**/*.{js,json,ts}' 'docs/*.{js,json}' 'docs/src/**/*' index.js README.md package.json","postvalidate:ts":"tsc --noEmit --target es6 test/typescript-validate.ts","prebuild:browser":"mkdirp dist/","pretest":"npm run -s lint","prevalidate:ts":"npm run -s build:ts","start-fixtures-server":"octokit-fixtures-server","test":"nyc mocha test/mocha-node-setup.js \"test/*/**/*-test.js\"","test:browser":"cypress run --browser chrome","update-endpoints":"npm-run-all update-endpoints:*","update-endpoints:fetch-json":"node scripts/update-endpoints/fetch-json","update-endpoints:typescript":"node scripts/update-endpoints/typescript","validate:ts":"tsc --target es6 --noImplicitAny index.d.ts"},"types":"index.d.ts","version":"16.43.1"};
 
 /***/ }),
 
@@ -34861,6 +35111,48 @@ function hasNextPage (link) {
   return getPageLinks(link).next
 }
 
+
+/***/ }),
+
+/***/ 930:
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+var v1 = __webpack_require__(86);
+var v4 = __webpack_require__(826);
+
+var uuid = v4;
+uuid.v1 = v1;
+uuid.v4 = v4;
+
+module.exports = uuid;
+
+
+/***/ }),
+
+/***/ 931:
+/***/ (function(__unusedmodule, exports) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+var CacheFilename;
+(function (CacheFilename) {
+    CacheFilename["Gzip"] = "cache.tgz";
+    CacheFilename["Zstd"] = "cache.tzst";
+})(CacheFilename = exports.CacheFilename || (exports.CacheFilename = {}));
+var CompressionMethod;
+(function (CompressionMethod) {
+    CompressionMethod["Gzip"] = "gzip";
+    // Long range mode was added to zstd in v1.3.2.
+    // This enum is for earlier version of zstd that does not have --long support
+    CompressionMethod["ZstdWithoutLong"] = "zstd-without-long";
+    CompressionMethod["Zstd"] = "zstd";
+})(CompressionMethod = exports.CompressionMethod || (exports.CompressionMethod = {}));
+// Socket timeout in milliseconds during download.  If no traffic is received
+// over the socket during this period, the socket is destroyed and the download
+// is aborted.
+exports.SocketTimeout = 5000;
+//# sourceMappingURL=constants.js.map
 
 /***/ }),
 

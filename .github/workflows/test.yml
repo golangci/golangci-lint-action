@@ -8,19 +8,28 @@ on: # rebuild any PRs and main branch changes
 
 jobs:
   build: # make sure build/ci work properly
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-16.04, ubuntu-18.04, ubuntu-20.04]
     steps:
     - uses: actions/checkout@v2
     - run: |
         npm install
         npm run prepare-deps
         npm run all
+
   test: # make sure the action works on a clean machine without building
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-16.04, ubuntu-18.04, ubuntu-20.04]
     steps:
     - uses: actions/checkout@v2
+    - run: |
+        env
     - uses: ./
       with:
-        version: v1.26
+        version: v1.27
         args: --issues-exit-code=0 ./sample/...
         only-new-issues: true

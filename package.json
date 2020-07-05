@@ -32,7 +32,7 @@
     "@actions/cache": "^0.2.1",
     "@types/semver": "^7.1.0",
     "@types/tmp": "^0.2.0",
-    "setup-go": "git+https://github.com/actions/setup-go.git",
+    "setup-go": "git+https://github.com/actions/setup-go.git#v2.1.0",
     "tmp": "^0.2.1"
   },
   "devDependencies": {

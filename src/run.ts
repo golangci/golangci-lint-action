@@ -157,7 +157,9 @@ async function runLint(lintPath: string, patchPath: string): Promise<void> {
     if (!fs.existsSync(workingDirectory) || !fs.lstatSync(workingDirectory).isDirectory()) {
       throw new Error(`working-directory (${workingDirectory}) was not a path`)
     }
-
+    if (!userArgNames.has(`path-prefix`)) {
+      addedArgs.push(`--path-prefix=${workingDirectory}`)
+    }
     cmdArgs.cwd = path.resolve(workingDirectory)
   }
 

@@ -27,8 +27,8 @@ export const stringifyVersion = (v: Version): string => `v${v.major}.${v.minor}$
 
 const minVersion = {
   major: 1,
-  minor: 14,
-  patch: 0,
+  minor: 28,
+  patch: 3,
 }
 
 const isLessVersion = (a: Version, b: Version): boolean => {
@@ -36,15 +36,9 @@ const isLessVersion = (a: Version, b: Version): boolean => {
     return a.major < b.major
   }
 
-  if (a.minor != b.minor) {
-    return a.minor < b.minor
-  }
-
-  if (a.patch === null || b.patch === null) {
-    return true
-  }
-
-  return a.patch < b.patch
+  // Do not compare patch parts because if the min version has a non zero value
+  // then it returns false, since the patch version of requested is always zero
+  return a.minor < b.minor
 }
 
 const getRequestedLintVersion = (): Version => {

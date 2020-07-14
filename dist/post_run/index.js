@@ -19,7 +19,13 @@ module.exports =
 /******/ 		};
 /******/
 /******/ 		// Execute the module function
-/******/ 		modules[moduleId].call(module.exports, module, module.exports, __webpack_require__);
+/******/ 		var threw = true;
+/******/ 		try {
+/******/ 			modules[moduleId].call(module.exports, module, module.exports, __webpack_require__);
+/******/ 			threw = false;
+/******/ 		} finally {
+/******/ 			if(threw) delete installedModules[moduleId];
+/******/ 		}
 /******/
 /******/ 		// Flag the module as loaded
 /******/ 		module.l = true;
@@ -1078,9 +1084,9 @@ module.exports = require("tls");
 /***/ }),
 
 /***/ 18:
-/***/ (function() {
+/***/ (function(module) {
 
-eval("require")("encoding");
+module.exports = eval("require")("encoding");
 
 
 /***/ }),
@@ -1129,6 +1135,119 @@ module.exports.sync = spawnSync;
 module.exports._parse = parse;
 module.exports._enoent = enoent;
 
+
+/***/ }),
+
+/***/ 31:
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
+    result["default"] = mod;
+    return result;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const semver = __importStar(__webpack_require__(864));
+const core_1 = __webpack_require__(470);
+// needs to be require for core node modules to be mocked
+/* eslint @typescript-eslint/no-require-imports: 0 */
+const os = __webpack_require__(87);
+const cp = __webpack_require__(129);
+const fs = __webpack_require__(747);
+function _findMatch(versionSpec, stable, candidates, archFilter) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const platFilter = os.platform();
+        let result;
+        let match;
+        let file;
+        for (const candidate of candidates) {
+            const version = candidate.version;
+            core_1.debug(`check ${version} satisfies ${versionSpec}`);
+            if (semver.satisfies(version, versionSpec) &&
+                (!stable || candidate.stable === stable)) {
+                file = candidate.files.find(item => {
+                    core_1.debug(`${item.arch}===${archFilter} && ${item.platform}===${platFilter}`);
+                    let chk = item.arch === archFilter && item.platform === platFilter;
+                    if (chk && item.platform_version) {
+                        const osVersion = module.exports._getOsVersion();
+                        if (osVersion === item.platform_version) {
+                            chk = true;
+                        }
+                        else {
+                            chk = semver.satisfies(osVersion, item.platform_version);
+                        }
+                    }
+                    return chk;
+                });
+                if (file) {
+                    core_1.debug(`matched ${candidate.version}`);
+                    match = candidate;
+                    break;
+                }
+            }
+        }
+        if (match && file) {
+            // clone since we're mutating the file list to be only the file that matches
+            result = Object.assign({}, match);
+            result.files = [file];
+        }
+        return result;
+    });
+}
+exports._findMatch = _findMatch;
+function _getOsVersion() {
+    // TODO: add windows and other linux, arm variants
+    // right now filtering on version is only an ubuntu and macos scenario for tools we build for hosted (python)
+    const plat = os.platform();
+    let version = '';
+    if (plat === 'darwin') {
+        version = cp.execSync('sw_vers -productVersion').toString();
+    }
+    else if (plat === 'linux') {
+        // lsb_release process not in some containers, readfile
+        // Run cat /etc/lsb-release
+        // DISTRIB_ID=Ubuntu
+        // DISTRIB_RELEASE=18.04
+        // DISTRIB_CODENAME=bionic
+        // DISTRIB_DESCRIPTION="Ubuntu 18.04.4 LTS"
+        const lsbContents = module.exports._readLinuxVersionFile();
+        if (lsbContents) {
+            const lines = lsbContents.split('\n');
+            for (const line of lines) {
+                const parts = line.split('=');
+                if (parts.length === 2 && parts[0].trim() === 'DISTRIB_RELEASE') {
+                    version = parts[1].trim();
+                    break;
+                }
+            }
+        }
+    }
+    return version;
+}
+exports._getOsVersion = _getOsVersion;
+function _readLinuxVersionFile() {
+    const lsbFile = '/etc/lsb-release';
+    let contents = '';
+    if (fs.existsSync(lsbFile)) {
+        contents = fs.readFileSync(lsbFile).toString();
+    }
+    return contents;
+}
+exports._readLinuxVersionFile = _readLinuxVersionFile;
+//# sourceMappingURL=manifest.js.map
 
 /***/ }),
 
@@ -2821,6 +2940,25 @@ module.exports = windowsRelease;
 
 "use strict";
 
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -2830,14 +2968,8 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
-    result["default"] = mod;
-    return result;
-};
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.findLintVersion = exports.stringifyVersion = void 0;
 const core = __importStar(__webpack_require__(470));
 const httpm = __importStar(__webpack_require__(539));
 const versionRe = /^v(\d+)\.(\d+)(?:\.(\d+))?$/;
@@ -2916,8 +3048,7 @@ function findLintVersion() {
         if (versionConfig.Error) {
             throw new Error(`failed to use requested golangci-lint version '${exports.stringifyVersion(reqLintVersion)}': ${versionConfig.Error}`);
         }
-        core.info(`Requested golangci-lint '${exports.stringifyVersion(reqLintVersion)}', using '${versionConfig.TargetVersion}', calculation took ${Date.now() -
-            startedAt}ms`);
+        core.info(`Requested golangci-lint '${exports.stringifyVersion(reqLintVersion)}', using '${versionConfig.TargetVersion}', calculation took ${Date.now() - startedAt}ms`);
         return versionConfig;
     });
 }
@@ -5861,83 +5992,6 @@ function Octokit(plugins, options) {
 
 /***/ }),
 
-/***/ 138:
-/***/ (function(__unusedmodule, exports, __webpack_require__) {
-
-"use strict";
-
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
-    result["default"] = mod;
-    return result;
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const core = __importStar(__webpack_require__(470));
-/**
- * Internal class for retries
- */
-class RetryHelper {
-    constructor(maxAttempts, minSeconds, maxSeconds) {
-        if (maxAttempts < 1) {
-            throw new Error('max attempts should be greater than or equal to 1');
-        }
-        this.maxAttempts = maxAttempts;
-        this.minSeconds = Math.floor(minSeconds);
-        this.maxSeconds = Math.floor(maxSeconds);
-        if (this.minSeconds > this.maxSeconds) {
-            throw new Error('min seconds should be less than or equal to max seconds');
-        }
-    }
-    execute(action, isRetryable) {
-        return __awaiter(this, void 0, void 0, function* () {
-            let attempt = 1;
-            while (attempt < this.maxAttempts) {
-                // Try
-                try {
-                    return yield action();
-                }
-                catch (err) {
-                    if (isRetryable && !isRetryable(err)) {
-                        throw err;
-                    }
-                    core.info(err.message);
-                }
-                // Sleep
-                const seconds = this.getSleepAmount();
-                core.info(`Waiting ${seconds} seconds before trying again`);
-                yield this.sleep(seconds);
-                attempt++;
-            }
-            // Last attempt
-            return yield action();
-        });
-    }
-    getSleepAmount() {
-        return (Math.floor(Math.random() * (this.maxSeconds - this.minSeconds + 1)) +
-            this.minSeconds);
-    }
-    sleep(seconds) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return new Promise(resolve => setTimeout(resolve, seconds * 1000));
-        });
-    }
-}
-exports.RetryHelper = RetryHelper;
-//# sourceMappingURL=retry-helper.js.map
-
-/***/ }),
-
 /***/ 139:
 /***/ (function(module, __unusedexports, __webpack_require__) {
 
@@ -7174,6 +7228,25 @@ module.exports = opts => {
 
 "use strict";
 
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -7183,14 +7256,8 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
-    result["default"] = mod;
-    return result;
-};
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.postRun = exports.run = void 0;
 const core = __importStar(__webpack_require__(470));
 const github = __importStar(__webpack_require__(469));
 const child_process_1 = __webpack_require__(129);
@@ -7300,9 +7367,9 @@ function runLint(lintPath, patchPath) {
         const userArgNames = new Set();
         userArgs
             .split(/\s/)
-            .map(arg => arg.split(`=`)[0])
-            .filter(arg => arg.startsWith(`-`))
-            .forEach(arg => {
+            .map((arg) => arg.split(`=`)[0])
+            .filter((arg) => arg.startsWith(`-`))
+            .forEach((arg) => {
             userArgNames.add(arg.replace(`-`, ``));
         });
         if (userArgNames.has(`out-format`)) {
@@ -9055,581 +9122,6 @@ function octokitValidate(octokit) {
 
 /***/ }),
 
-/***/ 343:
-/***/ (function(__unusedmodule, exports, __webpack_require__) {
-
-"use strict";
-
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
-    result["default"] = mod;
-    return result;
-};
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const core = __importStar(__webpack_require__(470));
-const io = __importStar(__webpack_require__(1));
-const fs = __importStar(__webpack_require__(747));
-const mm = __importStar(__webpack_require__(911));
-const os = __importStar(__webpack_require__(87));
-const path = __importStar(__webpack_require__(622));
-const httpm = __importStar(__webpack_require__(539));
-const semver = __importStar(__webpack_require__(864));
-const stream = __importStar(__webpack_require__(413));
-const util = __importStar(__webpack_require__(669));
-const v4_1 = __importDefault(__webpack_require__(826));
-const exec_1 = __webpack_require__(986);
-const assert_1 = __webpack_require__(357);
-const retry_helper_1 = __webpack_require__(138);
-class HTTPError extends Error {
-    constructor(httpStatusCode) {
-        super(`Unexpected HTTP response: ${httpStatusCode}`);
-        this.httpStatusCode = httpStatusCode;
-        Object.setPrototypeOf(this, new.target.prototype);
-    }
-}
-exports.HTTPError = HTTPError;
-const IS_WINDOWS = process.platform === 'win32';
-const userAgent = 'actions/tool-cache';
-/**
- * Download a tool from an url and stream it into a file
- *
- * @param url       url of tool to download
- * @param dest      path to download tool
- * @param auth      authorization header
- * @returns         path to downloaded tool
- */
-function downloadTool(url, dest, auth) {
-    return __awaiter(this, void 0, void 0, function* () {
-        dest = dest || path.join(_getTempDirectory(), v4_1.default());
-        yield io.mkdirP(path.dirname(dest));
-        core.debug(`Downloading ${url}`);
-        core.debug(`Destination ${dest}`);
-        const maxAttempts = 3;
-        const minSeconds = _getGlobal('TEST_DOWNLOAD_TOOL_RETRY_MIN_SECONDS', 10);
-        const maxSeconds = _getGlobal('TEST_DOWNLOAD_TOOL_RETRY_MAX_SECONDS', 20);
-        const retryHelper = new retry_helper_1.RetryHelper(maxAttempts, minSeconds, maxSeconds);
-        return yield retryHelper.execute(() => __awaiter(this, void 0, void 0, function* () {
-            return yield downloadToolAttempt(url, dest || '', auth);
-        }), (err) => {
-            if (err instanceof HTTPError && err.httpStatusCode) {
-                // Don't retry anything less than 500, except 408 Request Timeout and 429 Too Many Requests
-                if (err.httpStatusCode < 500 &&
-                    err.httpStatusCode !== 408 &&
-                    err.httpStatusCode !== 429) {
-                    return false;
-                }
-            }
-            // Otherwise retry
-            return true;
-        });
-    });
-}
-exports.downloadTool = downloadTool;
-function downloadToolAttempt(url, dest, auth) {
-    return __awaiter(this, void 0, void 0, function* () {
-        if (fs.existsSync(dest)) {
-            throw new Error(`Destination file path ${dest} already exists`);
-        }
-        // Get the response headers
-        const http = new httpm.HttpClient(userAgent, [], {
-            allowRetries: false
-        });
-        let headers;
-        if (auth) {
-            core.debug('set auth');
-            headers = {
-                authorization: auth
-            };
-        }
-        const response = yield http.get(url, headers);
-        if (response.message.statusCode !== 200) {
-            const err = new HTTPError(response.message.statusCode);
-            core.debug(`Failed to download from "${url}". Code(${response.message.statusCode}) Message(${response.message.statusMessage})`);
-            throw err;
-        }
-        // Download the response body
-        const pipeline = util.promisify(stream.pipeline);
-        const responseMessageFactory = _getGlobal('TEST_DOWNLOAD_TOOL_RESPONSE_MESSAGE_FACTORY', () => response.message);
-        const readStream = responseMessageFactory();
-        let succeeded = false;
-        try {
-            yield pipeline(readStream, fs.createWriteStream(dest));
-            core.debug('download complete');
-            succeeded = true;
-            return dest;
-        }
-        finally {
-            // Error, delete dest before retry
-            if (!succeeded) {
-                core.debug('download failed');
-                try {
-                    yield io.rmRF(dest);
-                }
-                catch (err) {
-                    core.debug(`Failed to delete '${dest}'. ${err.message}`);
-                }
-            }
-        }
-    });
-}
-/**
- * Extract a .7z file
- *
- * @param file     path to the .7z file
- * @param dest     destination directory. Optional.
- * @param _7zPath  path to 7zr.exe. Optional, for long path support. Most .7z archives do not have this
- * problem. If your .7z archive contains very long paths, you can pass the path to 7zr.exe which will
- * gracefully handle long paths. By default 7zdec.exe is used because it is a very small program and is
- * bundled with the tool lib. However it does not support long paths. 7zr.exe is the reduced command line
- * interface, it is smaller than the full command line interface, and it does support long paths. At the
- * time of this writing, it is freely available from the LZMA SDK that is available on the 7zip website.
- * Be sure to check the current license agreement. If 7zr.exe is bundled with your action, then the path
- * to 7zr.exe can be pass to this function.
- * @returns        path to the destination directory
- */
-function extract7z(file, dest, _7zPath) {
-    return __awaiter(this, void 0, void 0, function* () {
-        assert_1.ok(IS_WINDOWS, 'extract7z() not supported on current OS');
-        assert_1.ok(file, 'parameter "file" is required');
-        dest = yield _createExtractFolder(dest);
-        const originalCwd = process.cwd();
-        process.chdir(dest);
-        if (_7zPath) {
-            try {
-                const logLevel = core.isDebug() ? '-bb1' : '-bb0';
-                const args = [
-                    'x',
-                    logLevel,
-                    '-bd',
-                    '-sccUTF-8',
-                    file
-                ];
-                const options = {
-                    silent: true
-                };
-                yield exec_1.exec(`"${_7zPath}"`, args, options);
-            }
-            finally {
-                process.chdir(originalCwd);
-            }
-        }
-        else {
-            const escapedScript = path
-                .join(__dirname, '..', 'scripts', 'Invoke-7zdec.ps1')
-                .replace(/'/g, "''")
-                .replace(/"|\n|\r/g, ''); // double-up single quotes, remove double quotes and newlines
-            const escapedFile = file.replace(/'/g, "''").replace(/"|\n|\r/g, '');
-            const escapedTarget = dest.replace(/'/g, "''").replace(/"|\n|\r/g, '');
-            const command = `& '${escapedScript}' -Source '${escapedFile}' -Target '${escapedTarget}'`;
-            const args = [
-                '-NoLogo',
-                '-Sta',
-                '-NoProfile',
-                '-NonInteractive',
-                '-ExecutionPolicy',
-                'Unrestricted',
-                '-Command',
-                command
-            ];
-            const options = {
-                silent: true
-            };
-            try {
-                const powershellPath = yield io.which('powershell', true);
-                yield exec_1.exec(`"${powershellPath}"`, args, options);
-            }
-            finally {
-                process.chdir(originalCwd);
-            }
-        }
-        return dest;
-    });
-}
-exports.extract7z = extract7z;
-/**
- * Extract a compressed tar archive
- *
- * @param file     path to the tar
- * @param dest     destination directory. Optional.
- * @param flags    flags for the tar command to use for extraction. Defaults to 'xz' (extracting gzipped tars). Optional.
- * @returns        path to the destination directory
- */
-function extractTar(file, dest, flags = 'xz') {
-    return __awaiter(this, void 0, void 0, function* () {
-        if (!file) {
-            throw new Error("parameter 'file' is required");
-        }
-        // Create dest
-        dest = yield _createExtractFolder(dest);
-        // Determine whether GNU tar
-        core.debug('Checking tar --version');
-        let versionOutput = '';
-        yield exec_1.exec('tar --version', [], {
-            ignoreReturnCode: true,
-            silent: true,
-            listeners: {
-                stdout: (data) => (versionOutput += data.toString()),
-                stderr: (data) => (versionOutput += data.toString())
-            }
-        });
-        core.debug(versionOutput.trim());
-        const isGnuTar = versionOutput.toUpperCase().includes('GNU TAR');
-        // Initialize args
-        let args;
-        if (flags instanceof Array) {
-            args = flags;
-        }
-        else {
-            args = [flags];
-        }
-        if (core.isDebug() && !flags.includes('v')) {
-            args.push('-v');
-        }
-        let destArg = dest;
-        let fileArg = file;
-        if (IS_WINDOWS && isGnuTar) {
-            args.push('--force-local');
-            destArg = dest.replace(/\\/g, '/');
-            // Technically only the dest needs to have `/` but for aesthetic consistency
-            // convert slashes in the file arg too.
-            fileArg = file.replace(/\\/g, '/');
-        }
-        if (isGnuTar) {
-            // Suppress warnings when using GNU tar to extract archives created by BSD tar
-            args.push('--warning=no-unknown-keyword');
-        }
-        args.push('-C', destArg, '-f', fileArg);
-        yield exec_1.exec(`tar`, args);
-        return dest;
-    });
-}
-exports.extractTar = extractTar;
-/**
- * Extract a zip
- *
- * @param file     path to the zip
- * @param dest     destination directory. Optional.
- * @returns        path to the destination directory
- */
-function extractZip(file, dest) {
-    return __awaiter(this, void 0, void 0, function* () {
-        if (!file) {
-            throw new Error("parameter 'file' is required");
-        }
-        dest = yield _createExtractFolder(dest);
-        if (IS_WINDOWS) {
-            yield extractZipWin(file, dest);
-        }
-        else {
-            yield extractZipNix(file, dest);
-        }
-        return dest;
-    });
-}
-exports.extractZip = extractZip;
-function extractZipWin(file, dest) {
-    return __awaiter(this, void 0, void 0, function* () {
-        // build the powershell command
-        const escapedFile = file.replace(/'/g, "''").replace(/"|\n|\r/g, ''); // double-up single quotes, remove double quotes and newlines
-        const escapedDest = dest.replace(/'/g, "''").replace(/"|\n|\r/g, '');
-        const command = `$ErrorActionPreference = 'Stop' ; try { Add-Type -AssemblyName System.IO.Compression.FileSystem } catch { } ; [System.IO.Compression.ZipFile]::ExtractToDirectory('${escapedFile}', '${escapedDest}')`;
-        // run powershell
-        const powershellPath = yield io.which('powershell', true);
-        const args = [
-            '-NoLogo',
-            '-Sta',
-            '-NoProfile',
-            '-NonInteractive',
-            '-ExecutionPolicy',
-            'Unrestricted',
-            '-Command',
-            command
-        ];
-        yield exec_1.exec(`"${powershellPath}"`, args);
-    });
-}
-function extractZipNix(file, dest) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const unzipPath = yield io.which('unzip', true);
-        const args = [file];
-        if (!core.isDebug()) {
-            args.unshift('-q');
-        }
-        yield exec_1.exec(`"${unzipPath}"`, args, { cwd: dest });
-    });
-}
-/**
- * Caches a directory and installs it into the tool cacheDir
- *
- * @param sourceDir    the directory to cache into tools
- * @param tool          tool name
- * @param version       version of the tool.  semver format
- * @param arch          architecture of the tool.  Optional.  Defaults to machine architecture
- */
-function cacheDir(sourceDir, tool, version, arch) {
-    return __awaiter(this, void 0, void 0, function* () {
-        version = semver.clean(version) || version;
-        arch = arch || os.arch();
-        core.debug(`Caching tool ${tool} ${version} ${arch}`);
-        core.debug(`source dir: ${sourceDir}`);
-        if (!fs.statSync(sourceDir).isDirectory()) {
-            throw new Error('sourceDir is not a directory');
-        }
-        // Create the tool dir
-        const destPath = yield _createToolPath(tool, version, arch);
-        // copy each child item. do not move. move can fail on Windows
-        // due to anti-virus software having an open handle on a file.
-        for (const itemName of fs.readdirSync(sourceDir)) {
-            const s = path.join(sourceDir, itemName);
-            yield io.cp(s, destPath, { recursive: true });
-        }
-        // write .complete
-        _completeToolPath(tool, version, arch);
-        return destPath;
-    });
-}
-exports.cacheDir = cacheDir;
-/**
- * Caches a downloaded file (GUID) and installs it
- * into the tool cache with a given targetName
- *
- * @param sourceFile    the file to cache into tools.  Typically a result of downloadTool which is a guid.
- * @param targetFile    the name of the file name in the tools directory
- * @param tool          tool name
- * @param version       version of the tool.  semver format
- * @param arch          architecture of the tool.  Optional.  Defaults to machine architecture
- */
-function cacheFile(sourceFile, targetFile, tool, version, arch) {
-    return __awaiter(this, void 0, void 0, function* () {
-        version = semver.clean(version) || version;
-        arch = arch || os.arch();
-        core.debug(`Caching tool ${tool} ${version} ${arch}`);
-        core.debug(`source file: ${sourceFile}`);
-        if (!fs.statSync(sourceFile).isFile()) {
-            throw new Error('sourceFile is not a file');
-        }
-        // create the tool dir
-        const destFolder = yield _createToolPath(tool, version, arch);
-        // copy instead of move. move can fail on Windows due to
-        // anti-virus software having an open handle on a file.
-        const destPath = path.join(destFolder, targetFile);
-        core.debug(`destination file ${destPath}`);
-        yield io.cp(sourceFile, destPath);
-        // write .complete
-        _completeToolPath(tool, version, arch);
-        return destFolder;
-    });
-}
-exports.cacheFile = cacheFile;
-/**
- * Finds the path to a tool version in the local installed tool cache
- *
- * @param toolName      name of the tool
- * @param versionSpec   version of the tool
- * @param arch          optional arch.  defaults to arch of computer
- */
-function find(toolName, versionSpec, arch) {
-    if (!toolName) {
-        throw new Error('toolName parameter is required');
-    }
-    if (!versionSpec) {
-        throw new Error('versionSpec parameter is required');
-    }
-    arch = arch || os.arch();
-    // attempt to resolve an explicit version
-    if (!_isExplicitVersion(versionSpec)) {
-        const localVersions = findAllVersions(toolName, arch);
-        const match = _evaluateVersions(localVersions, versionSpec);
-        versionSpec = match;
-    }
-    // check for the explicit version in the cache
-    let toolPath = '';
-    if (versionSpec) {
-        versionSpec = semver.clean(versionSpec) || '';
-        const cachePath = path.join(_getCacheDirectory(), toolName, versionSpec, arch);
-        core.debug(`checking cache: ${cachePath}`);
-        if (fs.existsSync(cachePath) && fs.existsSync(`${cachePath}.complete`)) {
-            core.debug(`Found tool in cache ${toolName} ${versionSpec} ${arch}`);
-            toolPath = cachePath;
-        }
-        else {
-            core.debug('not found');
-        }
-    }
-    return toolPath;
-}
-exports.find = find;
-/**
- * Finds the paths to all versions of a tool that are installed in the local tool cache
- *
- * @param toolName  name of the tool
- * @param arch      optional arch.  defaults to arch of computer
- */
-function findAllVersions(toolName, arch) {
-    const versions = [];
-    arch = arch || os.arch();
-    const toolPath = path.join(_getCacheDirectory(), toolName);
-    if (fs.existsSync(toolPath)) {
-        const children = fs.readdirSync(toolPath);
-        for (const child of children) {
-            if (_isExplicitVersion(child)) {
-                const fullPath = path.join(toolPath, child, arch || '');
-                if (fs.existsSync(fullPath) && fs.existsSync(`${fullPath}.complete`)) {
-                    versions.push(child);
-                }
-            }
-        }
-    }
-    return versions;
-}
-exports.findAllVersions = findAllVersions;
-function getManifestFromRepo(owner, repo, auth, branch = 'master') {
-    return __awaiter(this, void 0, void 0, function* () {
-        let releases = [];
-        const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}`;
-        const http = new httpm.HttpClient('tool-cache');
-        const headers = {};
-        if (auth) {
-            core.debug('set auth');
-            headers.authorization = auth;
-        }
-        const response = yield http.getJson(treeUrl, headers);
-        if (!response.result) {
-            return releases;
-        }
-        let manifestUrl = '';
-        for (const item of response.result.tree) {
-            if (item.path === 'versions-manifest.json') {
-                manifestUrl = item.url;
-                break;
-            }
-        }
-        headers['accept'] = 'application/vnd.github.VERSION.raw';
-        let versionsRaw = yield (yield http.get(manifestUrl, headers)).readBody();
-        if (versionsRaw) {
-            // shouldn't be needed but protects against invalid json saved with BOM
-            versionsRaw = versionsRaw.replace(/^\uFEFF/, '');
-            try {
-                releases = JSON.parse(versionsRaw);
-            }
-            catch (_a) {
-                core.debug('Invalid json');
-            }
-        }
-        return releases;
-    });
-}
-exports.getManifestFromRepo = getManifestFromRepo;
-function findFromManifest(versionSpec, stable, manifest, archFilter = os.arch()) {
-    return __awaiter(this, void 0, void 0, function* () {
-        // wrap the internal impl
-        const match = yield mm._findMatch(versionSpec, stable, manifest, archFilter);
-        return match;
-    });
-}
-exports.findFromManifest = findFromManifest;
-function _createExtractFolder(dest) {
-    return __awaiter(this, void 0, void 0, function* () {
-        if (!dest) {
-            // create a temp dir
-            dest = path.join(_getTempDirectory(), v4_1.default());
-        }
-        yield io.mkdirP(dest);
-        return dest;
-    });
-}
-function _createToolPath(tool, version, arch) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const folderPath = path.join(_getCacheDirectory(), tool, semver.clean(version) || version, arch || '');
-        core.debug(`destination ${folderPath}`);
-        const markerPath = `${folderPath}.complete`;
-        yield io.rmRF(folderPath);
-        yield io.rmRF(markerPath);
-        yield io.mkdirP(folderPath);
-        return folderPath;
-    });
-}
-function _completeToolPath(tool, version, arch) {
-    const folderPath = path.join(_getCacheDirectory(), tool, semver.clean(version) || version, arch || '');
-    const markerPath = `${folderPath}.complete`;
-    fs.writeFileSync(markerPath, '');
-    core.debug('finished caching tool');
-}
-function _isExplicitVersion(versionSpec) {
-    const c = semver.clean(versionSpec) || '';
-    core.debug(`isExplicit: ${c}`);
-    const valid = semver.valid(c) != null;
-    core.debug(`explicit? ${valid}`);
-    return valid;
-}
-function _evaluateVersions(versions, versionSpec) {
-    let version = '';
-    core.debug(`evaluating ${versions.length} versions`);
-    versions = versions.sort((a, b) => {
-        if (semver.gt(a, b)) {
-            return 1;
-        }
-        return -1;
-    });
-    for (let i = versions.length - 1; i >= 0; i--) {
-        const potential = versions[i];
-        const satisfied = semver.satisfies(potential, versionSpec);
-        if (satisfied) {
-            version = potential;
-            break;
-        }
-    }
-    if (version) {
-        core.debug(`matched: ${version}`);
-    }
-    else {
-        core.debug('match not found');
-    }
-    return version;
-}
-/**
- * Gets RUNNER_TOOL_CACHE
- */
-function _getCacheDirectory() {
-    const cacheDirectory = process.env['RUNNER_TOOL_CACHE'] || '';
-    assert_1.ok(cacheDirectory, 'Expected RUNNER_TOOL_CACHE to be defined');
-    return cacheDirectory;
-}
-/**
- * Gets RUNNER_TEMP
- */
-function _getTempDirectory() {
-    const tempDirectory = process.env['RUNNER_TEMP'] || '';
-    assert_1.ok(tempDirectory, 'Expected RUNNER_TEMP to be defined');
-    return tempDirectory;
-}
-/**
- * Gets a global variable
- */
-function _getGlobal(key, defaultValue) {
-    /* eslint-disable @typescript-eslint/no-explicit-any */
-    const value = global[key];
-    /* eslint-enable @typescript-eslint/no-explicit-any */
-    return value !== undefined ? value : defaultValue;
-}
-//# sourceMappingURL=tool-cache.js.map
-
-/***/ }),
-
 /***/ 357:
 /***/ (function(module) {
 
@@ -11343,14 +10835,27 @@ exports.createTar = createTar;
 
 "use strict";
 
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
 var __importStar = (this && this.__importStar) || function (mod) {
     if (mod && mod.__esModule) return mod;
     var result = {};
-    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
-    result["default"] = mod;
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
     return result;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.isValidEvent = exports.logWarning = exports.getCacheState = exports.setCacheState = exports.isExactKeyMatch = void 0;
 const core = __importStar(__webpack_require__(470));
 const constants_1 = __webpack_require__(694);
 function isExactKeyMatch(key, cacheKey) {
@@ -13768,6 +13273,25 @@ function factory(plugins) {
 
 "use strict";
 
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -13777,17 +13301,11 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
-    result["default"] = mod;
-    return result;
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.addBinToPath = exports.run = void 0;
 const core = __importStar(__webpack_require__(470));
 const io = __importStar(__webpack_require__(1));
 const installer = __importStar(__webpack_require__(634));
@@ -13966,6 +13484,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const core = __importStar(__webpack_require__(470));
 const io = __importStar(__webpack_require__(1));
 const fs = __importStar(__webpack_require__(747));
+const mm = __importStar(__webpack_require__(31));
 const os = __importStar(__webpack_require__(87));
 const path = __importStar(__webpack_require__(622));
 const httpm = __importStar(__webpack_require__(539));
@@ -13991,9 +13510,10 @@ const userAgent = 'actions/tool-cache';
  *
  * @param url       url of tool to download
  * @param dest      path to download tool
+ * @param auth      authorization header
  * @returns         path to downloaded tool
  */
-function downloadTool(url, dest) {
+function downloadTool(url, dest, auth) {
     return __awaiter(this, void 0, void 0, function* () {
         dest = dest || path.join(_getTempDirectory(), v4_1.default());
         yield io.mkdirP(path.dirname(dest));
@@ -14004,7 +13524,7 @@ function downloadTool(url, dest) {
         const maxSeconds = _getGlobal('TEST_DOWNLOAD_TOOL_RETRY_MAX_SECONDS', 20);
         const retryHelper = new retry_helper_1.RetryHelper(maxAttempts, minSeconds, maxSeconds);
         return yield retryHelper.execute(() => __awaiter(this, void 0, void 0, function* () {
-            return yield downloadToolAttempt(url, dest || '');
+            return yield downloadToolAttempt(url, dest || '', auth);
         }), (err) => {
             if (err instanceof HTTPError && err.httpStatusCode) {
                 // Don't retry anything less than 500, except 408 Request Timeout and 429 Too Many Requests
@@ -14020,7 +13540,7 @@ function downloadTool(url, dest) {
     });
 }
 exports.downloadTool = downloadTool;
-function downloadToolAttempt(url, dest) {
+function downloadToolAttempt(url, dest, auth) {
     return __awaiter(this, void 0, void 0, function* () {
         if (fs.existsSync(dest)) {
             throw new Error(`Destination file path ${dest} already exists`);
@@ -14029,7 +13549,14 @@ function downloadToolAttempt(url, dest) {
         const http = new httpm.HttpClient(userAgent, [], {
             allowRetries: false
         });
-        const response = yield http.get(url);
+        let headers;
+        if (auth) {
+            core.debug('set auth');
+            headers = {
+                authorization: auth
+            };
+        }
+        const response = yield http.get(url, headers);
         if (response.message.statusCode !== 200) {
             const err = new HTTPError(response.message.statusCode);
             core.debug(`Failed to download from "${url}". Code(${response.message.statusCode}) Message(${response.message.statusMessage})`);
@@ -14084,9 +13611,10 @@ function extract7z(file, dest, _7zPath) {
         process.chdir(dest);
         if (_7zPath) {
             try {
+                const logLevel = core.isDebug() ? '-bb1' : '-bb0';
                 const args = [
                     'x',
-                    '-bb1',
+                    logLevel,
                     '-bd',
                     '-sccUTF-8',
                     file
@@ -14162,7 +13690,16 @@ function extractTar(file, dest, flags = 'xz') {
         core.debug(versionOutput.trim());
         const isGnuTar = versionOutput.toUpperCase().includes('GNU TAR');
         // Initialize args
-        const args = [flags];
+        let args;
+        if (flags instanceof Array) {
+            args = flags;
+        }
+        else {
+            args = [flags];
+        }
+        if (core.isDebug() && !flags.includes('v')) {
+            args.push('-v');
+        }
         let destArg = dest;
         let fileArg = file;
         if (IS_WINDOWS && isGnuTar) {
@@ -14212,7 +13749,7 @@ function extractZipWin(file, dest) {
         const escapedDest = dest.replace(/'/g, "''").replace(/"|\n|\r/g, '');
         const command = `$ErrorActionPreference = 'Stop' ; try { Add-Type -AssemblyName System.IO.Compression.FileSystem } catch { } ; [System.IO.Compression.ZipFile]::ExtractToDirectory('${escapedFile}', '${escapedDest}')`;
         // run powershell
-        const powershellPath = yield io.which('powershell');
+        const powershellPath = yield io.which('powershell', true);
         const args = [
             '-NoLogo',
             '-Sta',
@@ -14228,8 +13765,12 @@ function extractZipWin(file, dest) {
 }
 function extractZipNix(file, dest) {
     return __awaiter(this, void 0, void 0, function* () {
-        const unzipPath = yield io.which('unzip');
-        yield exec_1.exec(`"${unzipPath}"`, [file], { cwd: dest });
+        const unzipPath = yield io.which('unzip', true);
+        const args = [file];
+        if (!core.isDebug()) {
+            args.unshift('-q');
+        }
+        yield exec_1.exec(`"${unzipPath}"`, args, { cwd: dest });
     });
 }
 /**
@@ -14357,6 +13898,51 @@ function findAllVersions(toolName, arch) {
     return versions;
 }
 exports.findAllVersions = findAllVersions;
+function getManifestFromRepo(owner, repo, auth, branch = 'master') {
+    return __awaiter(this, void 0, void 0, function* () {
+        let releases = [];
+        const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}`;
+        const http = new httpm.HttpClient('tool-cache');
+        const headers = {};
+        if (auth) {
+            core.debug('set auth');
+            headers.authorization = auth;
+        }
+        const response = yield http.getJson(treeUrl, headers);
+        if (!response.result) {
+            return releases;
+        }
+        let manifestUrl = '';
+        for (const item of response.result.tree) {
+            if (item.path === 'versions-manifest.json') {
+                manifestUrl = item.url;
+                break;
+            }
+        }
+        headers['accept'] = 'application/vnd.github.VERSION.raw';
+        let versionsRaw = yield (yield http.get(manifestUrl, headers)).readBody();
+        if (versionsRaw) {
+            // shouldn't be needed but protects against invalid json saved with BOM
+            versionsRaw = versionsRaw.replace(/^\uFEFF/, '');
+            try {
+                releases = JSON.parse(versionsRaw);
+            }
+            catch (_a) {
+                core.debug('Invalid json');
+            }
+        }
+        return releases;
+    });
+}
+exports.getManifestFromRepo = getManifestFromRepo;
+function findFromManifest(versionSpec, stable, manifest, archFilter = os.arch()) {
+    return __awaiter(this, void 0, void 0, function* () {
+        // wrap the internal impl
+        const match = yield mm._findMatch(versionSpec, stable, manifest, archFilter);
+        return match;
+    });
+}
+exports.findFromManifest = findFromManifest;
 function _createExtractFolder(dest) {
     return __awaiter(this, void 0, void 0, function* () {
         if (!dest) {
@@ -28659,6 +28245,25 @@ module.exports = require("net");
 
 "use strict";
 
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -28668,18 +28273,12 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
-    result["default"] = mod;
-    return result;
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const tc = __importStar(__webpack_require__(343));
+exports.makeSemver = exports.getVersionsDist = exports.findMatch = exports.getInfoFromManifest = exports.extractGoArchive = exports.getGo = void 0;
+const tc = __importStar(__webpack_require__(533));
 const core = __importStar(__webpack_require__(470));
 const path = __importStar(__webpack_require__(622));
 const semver = __importStar(__webpack_require__(864));
@@ -29291,6 +28890,7 @@ function childrenIgnored (self, path) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.getArch = exports.getPlatform = void 0;
 let os = __webpack_require__(87);
 function getPlatform() {
     // darwin and linux match already
@@ -29406,6 +29006,25 @@ if (process.platform === 'linux') {
 
 "use strict";
 
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -29415,17 +29034,11 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
-    result["default"] = mod;
-    return result;
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.installGo = exports.installLint = void 0;
 const core = __importStar(__webpack_require__(470));
 const tc = __importStar(__webpack_require__(533));
 const path_1 = __importDefault(__webpack_require__(622));
@@ -30424,6 +30037,7 @@ exports.Deprecation = Deprecation;
 "use strict";
 
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.RefKey = exports.Events = exports.State = exports.Inputs = void 0;
 var Inputs;
 (function (Inputs) {
     Inputs["Key"] = "key";
@@ -30530,6 +30144,25 @@ module.exports = (promise, onFinally) => {
 
 "use strict";
 
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -30539,14 +30172,8 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
-    result["default"] = mod;
-    return result;
-};
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.saveCache = exports.restoreCache = void 0;
 const cache = __importStar(__webpack_require__(638));
 const core = __importStar(__webpack_require__(470));
 const crypto = __importStar(__webpack_require__(417));
@@ -30557,8 +30184,8 @@ function checksumFile(hashName, path) {
     return new Promise((resolve, reject) => {
         const hash = crypto.createHash(hashName);
         const stream = fs.createReadStream(path);
-        stream.on("error", err => reject(err));
-        stream.on("data", chunk => hash.update(chunk));
+        stream.on("error", (err) => reject(err));
+        stream.on("data", (chunk) => hash.update(chunk));
         stream.on("end", () => resolve(hash.digest("hex")));
     });
 }
@@ -35541,119 +35168,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const run_1 = __webpack_require__(180);
 run_1.postRun();
 
-
-/***/ }),
-
-/***/ 911:
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
-    result["default"] = mod;
-    return result;
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const semver = __importStar(__webpack_require__(864));
-const core_1 = __webpack_require__(470);
-// needs to be require for core node modules to be mocked
-/* eslint @typescript-eslint/no-require-imports: 0 */
-const os = __webpack_require__(87);
-const cp = __webpack_require__(129);
-const fs = __webpack_require__(747);
-function _findMatch(versionSpec, stable, candidates, archFilter) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const platFilter = os.platform();
-        let result;
-        let match;
-        let file;
-        for (const candidate of candidates) {
-            const version = candidate.version;
-            core_1.debug(`check ${version} satisfies ${versionSpec}`);
-            if (semver.satisfies(version, versionSpec) &&
-                (!stable || candidate.stable === stable)) {
-                file = candidate.files.find(item => {
-                    core_1.debug(`${item.arch}===${archFilter} && ${item.platform}===${platFilter}`);
-                    let chk = item.arch === archFilter && item.platform === platFilter;
-                    if (chk && item.platform_version) {
-                        const osVersion = module.exports._getOsVersion();
-                        if (osVersion === item.platform_version) {
-                            chk = true;
-                        }
-                        else {
-                            chk = semver.satisfies(osVersion, item.platform_version);
-                        }
-                    }
-                    return chk;
-                });
-                if (file) {
-                    core_1.debug(`matched ${candidate.version}`);
-                    match = candidate;
-                    break;
-                }
-            }
-        }
-        if (match && file) {
-            // clone since we're mutating the file list to be only the file that matches
-            result = Object.assign({}, match);
-            result.files = [file];
-        }
-        return result;
-    });
-}
-exports._findMatch = _findMatch;
-function _getOsVersion() {
-    // TODO: add windows and other linux, arm variants
-    // right now filtering on version is only an ubuntu and macos scenario for tools we build for hosted (python)
-    const plat = os.platform();
-    let version = '';
-    if (plat === 'darwin') {
-        version = cp.execSync('sw_vers -productVersion').toString();
-    }
-    else if (plat === 'linux') {
-        // lsb_release process not in some containers, readfile
-        // Run cat /etc/lsb-release
-        // DISTRIB_ID=Ubuntu
-        // DISTRIB_RELEASE=18.04
-        // DISTRIB_CODENAME=bionic
-        // DISTRIB_DESCRIPTION="Ubuntu 18.04.4 LTS"
-        const lsbContents = module.exports._readLinuxVersionFile();
-        if (lsbContents) {
-            const lines = lsbContents.split('\n');
-            for (const line of lines) {
-                const parts = line.split('=');
-                if (parts.length === 2 && parts[0].trim() === 'DISTRIB_RELEASE') {
-                    version = parts[1].trim();
-                    break;
-                }
-            }
-        }
-    }
-    return version;
-}
-exports._getOsVersion = _getOsVersion;
-function _readLinuxVersionFile() {
-    const lsbFile = '/etc/lsb-release';
-    let contents = '';
-    if (fs.existsSync(lsbFile)) {
-        contents = fs.readFileSync(lsbFile).toString();
-    }
-    return contents;
-}
-exports._readLinuxVersionFile = _readLinuxVersionFile;
-//# sourceMappingURL=manifest.js.map
 
 /***/ }),
 

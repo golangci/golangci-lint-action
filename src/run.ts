@@ -125,9 +125,9 @@ async function runLint(lintPath: string, patchPath: string): Promise<void> {
   const userArgNames = new Set<string>()
   userArgs
     .split(/\s/)
-    .map(arg => arg.split(`=`)[0])
-    .filter(arg => arg.startsWith(`-`))
-    .forEach(arg => {
+    .map((arg) => arg.split(`=`)[0])
+    .filter((arg) => arg.startsWith(`-`))
+    .forEach((arg) => {
       userArgNames.add(arg.replace(`-`, ``))
     })
 

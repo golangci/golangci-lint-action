@@ -118,9 +118,8 @@ export async function findLintVersion(): Promise<VersionConfig> {
   }
 
   core.info(
-    `Requested golangci-lint '${stringifyVersion(reqLintVersion)}', using '${versionConfig.TargetVersion}', calculation took ${
-      Date.now() - startedAt
-    }ms`
+    `Requested golangci-lint '${stringifyVersion(reqLintVersion)}', using '${versionConfig.TargetVersion}', calculation took ${Date.now() -
+      startedAt}ms`
   )
   return versionConfig
 }

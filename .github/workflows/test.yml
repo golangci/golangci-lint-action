@@ -24,3 +24,22 @@ jobs:
           version: v1.29
           args: --issues-exit-code=0 ./sample/...
           only-new-issues: true
+  dist:
+    if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'dependencies')
+    needs: [build, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.ref }}
+      - run: |
+          npm install
+          npm run prepare-deps
+          npm run build
+      - run: |
+          git config --local user.name "golangci"
+          git config --local user.email "golangci@localhost"
+          git add --update
+          git commit --message="Update dist"
+          git push

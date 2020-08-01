@@ -28,7 +28,7 @@
     "@actions/cache": "^1.0.1",
     "@actions/core": "^1.2.0",
     "@actions/exec": "^1.0.1",
-    "@actions/github": "^2.2.0",
+    "@actions/github": "^4.0.0",
     "@actions/tool-cache": "^1.6.0",
     "@types/semver": "^7.3.1",
     "@types/tmp": "^0.2.0",

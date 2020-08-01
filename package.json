@@ -15,7 +15,7 @@
     "lint-fix": "eslint **/*.ts --cache --fix",
     "format": "prettier --write **/*.ts",
     "format-check": "prettier --check **/*.ts",
-    "all": "npm run build && npm run format-check && npm run lint",
+    "all": "npm run prepare-deps && npm run build && npm run format-check && npm run lint",
     "local": "npm run build && act -j test -b"
   },
   "repository": {
@@ -28,7 +28,7 @@
     "@actions/cache": "^1.0.1",
     "@actions/core": "^1.2.0",
     "@actions/exec": "^1.0.1",
-    "@actions/github": "^2.1.1",
+    "@actions/github": "^2.2.0",
     "@actions/tool-cache": "^1.6.0",
     "@types/semver": "^7.3.1",
     "@types/tmp": "^0.2.0",
@@ -36,7 +36,7 @@
     "tmp": "^0.2.1"
   },
   "devDependencies": {
-    "@types/node": "^14.0.26",
+    "@types/node": "^14.0.27",
     "@types/uuid": "^8.0.0",
     "@typescript-eslint/eslint-plugin": "^2.34.0",
     "@typescript-eslint/parser": "^2.34.0",

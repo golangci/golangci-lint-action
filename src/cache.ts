@@ -2,6 +2,7 @@ import * as cache from "@actions/cache"
 import * as core from "@actions/core"
 import * as crypto from "crypto"
 import * as fs from "fs"
+import path from "path"
 
 import { Events, State } from "./constants"
 import * as utils from "./utils/actionUtils"
@@ -18,11 +19,13 @@ function checksumFile(hashName: string, path: string): Promise<string> {
 
 const pathExists = async (path: string): Promise<boolean> => !!(await fs.promises.stat(path).catch(() => false))
 
-const getLintCacheDir = (): string => `${process.env.HOME}/.cache/golangci-lint`
+const getLintCacheDir = (): string => {
+  return path.resolve(`${process.env.HOME}/.cache/golangci-lint`)
+}
 
 const getCacheDirs = (): string[] => {
   // Not existing dirs are ok here: it works.
-  return [getLintCacheDir(), `${process.env.HOME}/.cache/go-build`, `${process.env.HOME}/go/pkg`]
+  return [getLintCacheDir(), path.resolve(`${process.env.HOME}/.cache/go-build`), path.resolve(`${process.env.HOME}/go/pkg`)]
 }
 
 const getIntervalKey = (invalidationIntervalDays: number): string => {

@@ -2019,6 +2019,9 @@ const core = __importStar(__webpack_require__(470));
 const httpm = __importStar(__webpack_require__(539));
 const versionRe = /^v(\d+)\.(\d+)(?:\.(\d+))?$/;
 const parseVersion = (s) => {
+    if (s == "latest" || s == "") {
+        return null;
+    }
     const match = s.match(versionRe);
     if (!match) {
         throw new Error(`invalid version string '${s}', expected format v1.2 or v1.2.3`);
@@ -2029,13 +2032,24 @@ const parseVersion = (s) => {
         patch: match[3] === undefined ? null : parseInt(match[3]),
     };
 };
-exports.stringifyVersion = (v) => `v${v.major}.${v.minor}${v.patch !== null ? `.${v.patch}` : ``}`;
+exports.stringifyVersion = (v) => {
+    if (v == null) {
+        return "latest";
+    }
+    return `v${v.major}.${v.minor}${v.patch !== null ? `.${v.patch}` : ``}`;
+};
 const minVersion = {
     major: 1,
     minor: 28,
     patch: 3,
 };
 const isLessVersion = (a, b) => {
+    if (a == null) {
+        return true;
+    }
+    if (b == null) {
+        return false;
+    }
     if (a.major != b.major) {
         return a.major < b.major;
     }
@@ -2044,8 +2058,11 @@ const isLessVersion = (a, b) => {
     return a.minor < b.minor;
 };
 const getRequestedLintVersion = () => {
-    const requestedLintVersion = core.getInput(`version`, { required: true });
+    const requestedLintVersion = core.getInput(`version`);
     const parsedRequestedLintVersion = parseVersion(requestedLintVersion);
+    if (parsedRequestedLintVersion == null) {
+        return null;
+    }
     if (parsedRequestedLintVersion.patch !== null) {
         throw new Error(`requested golangci-lint version '${requestedLintVersion}' was specified with the patch version, need specify only minor version`);
     }
@@ -2076,12 +2093,12 @@ function findLintVersion() {
     return __awaiter(this, void 0, void 0, function* () {
         core.info(`Finding needed golangci-lint version...`);
         const startedAt = Date.now();
-        const reqLintVersion = getRequestedLintVersion();
         const config = yield getConfig();
         if (!config.MinorVersionToConfig) {
             core.warning(JSON.stringify(config));
             throw new Error(`invalid config: no MinorVersionToConfig field`);
         }
+        const reqLintVersion = getRequestedLintVersion();
         const versionConfig = config.MinorVersionToConfig[exports.stringifyVersion(reqLintVersion)];
         if (!versionConfig) {
             throw new Error(`requested golangci-lint version '${exports.stringifyVersion(reqLintVersion)}' doesn't exist`);

@@ -82,6 +82,8 @@ We use JavaScript-based action. We don't use Docker-based action because:
 1. docker pulling is slow currently
 2. it's easier to use caching from [@actions/cache](https://github.com/actions/toolkit/tree/master/packages/cache)
 
+We support different platforms, such as `ubuntu`, `macos` and `windows` with `x32` and `x64` archs.
+
 Inside our action we perform 3 steps:
 
 1. Setup environment running in parallel:
@@ -95,7 +97,7 @@ Inside our action we perform 3 steps:
 ### Caching internals
 
 1. We save and restore the following directories: `~/.cache/golangci-lint`, `~/.cache/go-build`, `~/go/pkg`.
-2. The primary caching key looks like `golangci-lint.cache-{interval_number}-{go.mod_hash}`. Interval number ensures that we periodically invalidate
+2. The primary caching key looks like `golangci-lint.cache-{platform-arch}-{interval_number}-{go.mod_hash}`. Interval number ensures that we periodically invalidate
    our cache (every 7 days). `go.mod` hash ensures that we invalidate the cache early - as soon as dependencies have changed.
 3. We use [restore keys](https://help.github.com/en/actions/configuring-and-managing-workflows/caching-dependencies-to-speed-up-workflows#matching-a-cache-key): `golangci-lint.cache-{interval_number}-`, `golangci-lint.cache-`. GitHub matches keys by prefix if we have no exact match for the primary cache.
 

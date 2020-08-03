@@ -41417,18 +41417,51 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.installGo = exports.installLint = void 0;
 const core = __importStar(__webpack_require__(470));
 const tc = __importStar(__webpack_require__(533));
+const os_1 = __importDefault(__webpack_require__(87));
 const path_1 = __importDefault(__webpack_require__(622));
 const main_1 = __webpack_require__(514);
+const downloadURL = "https://github.com/golangci/golangci-lint/releases/download";
+const getAssetURL = (versionConfig) => {
+    let ext = "tar.gz";
+    let platform = os_1.default.platform().toString();
+    switch (platform) {
+        case "win32":
+            platform = "windows";
+            ext = "zip";
+            break;
+    }
+    let arch = os_1.default.arch();
+    switch (arch) {
+        case "x64":
+            arch = "amd64";
+            break;
+        case "x32":
+        case "ia32":
+            arch = "386";
+            break;
+    }
+    const noPrefix = versionConfig.TargetVersion.slice(1);
+    return `${downloadURL}/${versionConfig.TargetVersion}/golangci-lint-${noPrefix}-${platform}-${arch}.${ext}`;
+};
 // The installLint returns path to installed binary of golangci-lint.
 function installLint(versionConfig) {
     return __awaiter(this, void 0, void 0, function* () {
         core.info(`Installing golangci-lint ${versionConfig.TargetVersion}...`);
         const startedAt = Date.now();
-        core.info(`Downloading ${versionConfig.AssetURL} ...`);
-        const tarGzPath = yield tc.downloadTool(versionConfig.AssetURL);
-        const extractedDir = yield tc.extractTar(tarGzPath, process.env.HOME);
-        const urlParts = versionConfig.AssetURL.split(`/`);
-        const dirName = urlParts[urlParts.length - 1].replace(/\.tar\.gz$/, ``);
+        const assetURL = getAssetURL(versionConfig);
+        core.info(`Downloading ${assetURL} ...`);
+        const archivePath = yield tc.downloadTool(assetURL);
+        let extractedDir = "";
+        let repl = /\.tar\.gz$/;
+        if (assetURL.endsWith("zip")) {
+            extractedDir = yield tc.extractZip(archivePath, process.env.HOME);
+            repl = /\.zip$/;
+        }
+        else {
+            extractedDir = yield tc.extractTar(archivePath, process.env.HOME);
+        }
+        const urlParts = assetURL.split(`/`);
+        const dirName = urlParts[urlParts.length - 1].replace(repl, ``);
         const lintPath = path_1.default.join(extractedDir, dirName, `golangci-lint`);
         core.info(`Installed golangci-lint into ${lintPath} in ${Date.now() - startedAt}ms`);
         return lintPath;
@@ -42661,12 +42694,16 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.saveCache = exports.restoreCache = void 0;
 const cache = __importStar(__webpack_require__(638));
 const core = __importStar(__webpack_require__(470));
 const crypto = __importStar(__webpack_require__(417));
 const fs = __importStar(__webpack_require__(747));
+const path_1 = __importDefault(__webpack_require__(622));
 const constants_1 = __webpack_require__(694);
 const utils = __importStar(__webpack_require__(443));
 function checksumFile(hashName, path) {
@@ -42679,10 +42716,12 @@ function checksumFile(hashName, path) {
     });
 }
 const pathExists = (path) => __awaiter(void 0, void 0, void 0, function* () { return !!(yield fs.promises.stat(path).catch(() => false)); });
-const getLintCacheDir = () => `${process.env.HOME}/.cache/golangci-lint`;
+const getLintCacheDir = () => {
+    return path_1.default.resolve(`${process.env.HOME}/.cache/golangci-lint`);
+};
 const getCacheDirs = () => {
     // Not existing dirs are ok here: it works.
-    return [getLintCacheDir(), `${process.env.HOME}/.cache/go-build`, `${process.env.HOME}/go/pkg`];
+    return [getLintCacheDir(), path_1.default.resolve(`${process.env.HOME}/.cache/go-build`), path_1.default.resolve(`${process.env.HOME}/go/pkg`)];
 };
 const getIntervalKey = (invalidationIntervalDays) => {
     const now = new Date();

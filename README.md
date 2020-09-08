@@ -51,6 +51,50 @@ jobs:
 We recommend running this action in a job separate from other jobs (`go test`, etc)
 because different jobs [run in parallel](https://help.github.com/en/actions/getting-started-with-github-actions/core-concepts-for-github-actions#job).
 
+### Multiple OS Support
+
+If you need to run linters for specific operating systems, you will need to use `v2` of the action.  Here is a sample configuration file:
+
+```yaml
+name: golangci-lint
+on:
+  push:
+    tags:
+      - v*
+    branches:
+      - master
+  pull_request:
+jobs:
+  golangci:
+    strategy:
+      matrix:
+        go-version: [1.15.x]
+        os: [macos-latest, windows-latest]
+    name: lint
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v2
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v2
+        with:
+          # Required: the version of golangci-lint is required and must be specified without patch version: we always use the latest patch version.
+          version: v1.29
+          # Optional: working directory, useful for monorepos
+          # working-directory: somedir
+
+          # Optional: golangci-lint command line arguments.
+          # args: --issues-exit-code=0
+
+          # Optional: show only new issues if it's a pull request. The default value is `false`.
+          # only-new-issues: true
+```
+
+You will also likely need to add the following `.gitattributes` file to ensure that line endings for windows builds are properly formatted:
+
+```.gitattributes
+*.go text eol=lf 
+```
+
 ## Comments and Annotations
 
 Currently, GitHub parses the action's output and creates [annotations](https://github.community/t5/GitHub-Actions/What-are-annotations/td-p/30770).

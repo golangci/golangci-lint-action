@@ -26,7 +26,7 @@
   "license": "MIT",
   "dependencies": {
     "@actions/cache": "^1.0.2",
-    "@actions/core": "^1.2.5",
+    "@actions/core": "^1.2.6",
     "@actions/exec": "^1.0.1",
     "@actions/github": "^4.0.0",
     "@actions/tool-cache": "^1.6.0",

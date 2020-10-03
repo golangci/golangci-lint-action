@@ -29,3 +29,20 @@ jobs:
           version: latest
           args: --issues-exit-code=0 ./sample/...
           only-new-issues: true
+
+  # Test with full version vX.Y.Z
+  test-full-version:
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./
+        with:
+          version: v1.28.3
+          args: --issues-exit-code=0 ./sample/...
+          only-new-issues: true

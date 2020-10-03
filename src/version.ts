@@ -61,11 +61,6 @@ const getRequestedLintVersion = (): Version => {
   if (parsedRequestedLintVersion == null) {
     return null
   }
-  if (parsedRequestedLintVersion.patch !== null) {
-    throw new Error(
-      `requested golangci-lint version '${requestedLintVersion}' was specified with the patch version, need specify only minor version`
-    )
-  }
   if (isLessVersion(parsedRequestedLintVersion, minVersion)) {
     throw new Error(
       `requested golangci-lint version '${requestedLintVersion}' isn't supported: we support only ${stringifyVersion(
@@ -109,6 +104,17 @@ const getConfig = async (): Promise<Config> => {
 
 export async function findLintVersion(): Promise<VersionConfig> {
   core.info(`Finding needed golangci-lint version...`)
+  const reqLintVersion = getRequestedLintVersion()
+  // if the patched version is passed, just use it
+  if (reqLintVersion?.major !== null && reqLintVersion?.minor != null && reqLintVersion?.patch !== null) {
+    return new Promise((resolve) => {
+      const versionWithoutV = `${reqLintVersion.major}.${reqLintVersion.minor}.${reqLintVersion.patch}`
+      resolve({
+        TargetVersion: `v${versionWithoutV}`,
+        AssetURL: `https://github.com/golangci/golangci-lint/releases/download/v${versionWithoutV}/golangci-lint-${versionWithoutV}-linux-amd64.tar.gz`,
+      })
+    })
+  }
   const startedAt = Date.now()
 
   const config = await getConfig()
@@ -117,7 +123,6 @@ export async function findLintVersion(): Promise<VersionConfig> {
     throw new Error(`invalid config: no MinorVersionToConfig field`)
   }
 
-  const reqLintVersion = getRequestedLintVersion()
   const versionConfig = config.MinorVersionToConfig[stringifyVersion(reqLintVersion)]
   if (!versionConfig) {
     throw new Error(`requested golangci-lint version '${stringifyVersion(reqLintVersion)}' doesn't exist`)

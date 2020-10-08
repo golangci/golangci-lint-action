@@ -25,6 +25,7 @@ on:
       - v*
     branches:
       - master
+      - main
   pull_request:
 jobs:
   golangci:
@@ -63,6 +64,7 @@ on:
       - v*
     branches:
       - master
+      - main
   pull_request:
 jobs:
   golangci:

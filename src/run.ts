@@ -38,7 +38,6 @@ async function fetchPatch(): Promise<string> {
     core.warning(`No pull request in context`)
     return ``
   }
-
   const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }))
   let patch: string
   try {

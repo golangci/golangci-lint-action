@@ -16,7 +16,8 @@
     "format": "prettier --write **/*.ts",
     "format-check": "prettier --check **/*.ts",
     "all": "npm run prepare-deps && npm run build && npm run format-check && npm run lint",
-    "local": "npm run build && act -j test -b"
+    "local": "npm run build && act -j test -b",
+    "local-full-version": "npm run build && act -j test-full-version -b"
   },
   "repository": {
     "type": "git",

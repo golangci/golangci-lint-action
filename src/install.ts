@@ -56,6 +56,12 @@ export async function installLint(versionConfig: VersionConfig): Promise<string>
 }
 
 export async function installGo(): Promise<void> {
+  const skipGoInstallation = core.getInput(`skip-go-installation`, { required: true }).trim()
+  if (skipGoInstallation.toLowerCase() == "true") {
+    core.info(`Skipping the installation of Go`)
+    return
+  }
+
   const startedAt = Date.now()
   process.env[`INPUT_GO-VERSION`] = `1`
   await setupGo()

@@ -7179,6 +7179,7 @@ function run() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
             const { lintPath, patchPath } = yield core.group(`prepare environment`, prepareEnv);
+            core.addPath(path.dirname(lintPath));
             yield core.group(`run golangci-lint`, () => runLint(lintPath, patchPath));
         }
         catch (error) {
@@ -48601,6 +48602,11 @@ function installLint(versionConfig) {
 exports.installLint = installLint;
 function installGo() {
     return __awaiter(this, void 0, void 0, function* () {
+        const skipGoInstallation = core.getInput(`skip-go-installation`, { required: true }).trim();
+        if (skipGoInstallation.toLowerCase() == "true") {
+            core.info(`Skipping the installation of Go`);
+            return;
+        }
         const startedAt = Date.now();
         process.env[`INPUT_GO-VERSION`] = `1`;
         yield main_1.run();

@@ -1,4 +1,3 @@
----
 name: "Run golangci-lint"
 description: "Official golangci-lint action with line-attached annotations for found issues, caching and parallel execution."
 author: "golangci"
@@ -21,7 +20,10 @@ inputs:
     description: "if set to true and the action runs on a pull request - the action outputs only newly found issues"
     default: false
     required: true
-
+  skip-go-installation:
+    description: "if set to true then action uses pre-installed Go"
+    default: false
+    required: true
 runs:
   using: "node12"
   main: "dist/run/index.js"

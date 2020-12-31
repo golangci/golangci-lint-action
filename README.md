@@ -47,6 +47,9 @@ jobs:
 
           # Optional: show only new issues if it's a pull request. The default value is `false`.
           # only-new-issues: true
+
+          # Optional: if set to true then the action will use pre-installed Go
+          # skip-go-installation: true
 ```
 
 We recommend running this action in a job separate from other jobs (`go test`, etc)
@@ -94,7 +97,7 @@ jobs:
 You will also likely need to add the following `.gitattributes` file to ensure that line endings for windows builds are properly formatted:
 
 ```.gitattributes
-*.go text eol=lf 
+*.go text eol=lf
 ```
 
 ## Comments and Annotations

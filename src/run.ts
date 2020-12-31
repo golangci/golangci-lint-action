@@ -187,6 +187,7 @@ async function runLint(lintPath: string, patchPath: string): Promise<void> {
 export async function run(): Promise<void> {
   try {
     const { lintPath, patchPath } = await core.group(`prepare environment`, prepareEnv)
+    core.addPath(path.dirname(lintPath))
     await core.group(`run golangci-lint`, () => runLint(lintPath, patchPath))
   } catch (error) {
     core.error(`Failed to run: ${error}, ${error.stack}`)

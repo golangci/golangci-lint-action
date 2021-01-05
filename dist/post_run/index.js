@@ -43048,7 +43048,129 @@ module.exports = {"application/1d-interleaved-parityfec":{"source":"iana"},"appl
 
 /***/ }),
 /* 513 */,
-/* 514 */,
+/* 514 */
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.addBinToPath = exports.run = void 0;
+const core = __importStar(__webpack_require__(470));
+const io = __importStar(__webpack_require__(1));
+const installer = __importStar(__webpack_require__(634));
+const path_1 = __importDefault(__webpack_require__(622));
+const child_process_1 = __importDefault(__webpack_require__(129));
+const fs_1 = __importDefault(__webpack_require__(747));
+const url_1 = __webpack_require__(835);
+function run() {
+    return __awaiter(this, void 0, void 0, function* () {
+        try {
+            //
+            // versionSpec is optional.  If supplied, install / use from the tool cache
+            // If not supplied then problem matchers will still be setup.  Useful for self-hosted.
+            //
+            let versionSpec = core.getInput('go-version');
+            // stable will be true unless false is the exact input
+            // since getting unstable versions should be explicit
+            let stable = (core.getInput('stable') || 'true').toUpperCase() === 'TRUE';
+            core.info(`Setup go ${stable ? 'stable' : ''} version spec ${versionSpec}`);
+            if (versionSpec) {
+                let token = core.getInput('token');
+                let auth = !token || isGhes() ? undefined : `token ${token}`;
+                const installDir = yield installer.getGo(versionSpec, stable, auth);
+                core.exportVariable('GOROOT', installDir);
+                core.addPath(path_1.default.join(installDir, 'bin'));
+                core.info('Added go to the path');
+                let added = yield addBinToPath();
+                core.debug(`add bin ${added}`);
+                core.info(`Successfully setup go version ${versionSpec}`);
+            }
+            // add problem matchers
+            const matchersPath = path_1.default.join(__dirname, '..', 'matchers.json');
+            core.info(`##[add-matcher]${matchersPath}`);
+            // output the version actually being used
+            let goPath = yield io.which('go');
+            let goVersion = (child_process_1.default.execSync(`${goPath} version`) || '').toString();
+            core.info(goVersion);
+            core.startGroup('go env');
+            let goEnv = (child_process_1.default.execSync(`${goPath} env`) || '').toString();
+            core.info(goEnv);
+            core.endGroup();
+        }
+        catch (error) {
+            core.setFailed(error.message);
+        }
+    });
+}
+exports.run = run;
+function addBinToPath() {
+    return __awaiter(this, void 0, void 0, function* () {
+        let added = false;
+        let g = yield io.which('go');
+        core.debug(`which go :${g}:`);
+        if (!g) {
+            core.debug('go not in the path');
+            return added;
+        }
+        let buf = child_process_1.default.execSync('go env GOPATH');
+        if (buf) {
+            let gp = buf.toString().trim();
+            core.debug(`go env GOPATH :${gp}:`);
+            if (!fs_1.default.existsSync(gp)) {
+                // some of the hosted images have go install but not profile dir
+                core.debug(`creating ${gp}`);
+                io.mkdirP(gp);
+            }
+            let bp = path_1.default.join(gp, 'bin');
+            if (!fs_1.default.existsSync(bp)) {
+                core.debug(`creating ${bp}`);
+                io.mkdirP(bp);
+            }
+            core.addPath(bp);
+            added = true;
+        }
+        return added;
+    });
+}
+exports.addBinToPath = addBinToPath;
+function isGhes() {
+    const ghUrl = new url_1.URL(process.env['GITHUB_SERVER_URL'] || 'https://github.com');
+    return ghUrl.hostname.toUpperCase() !== 'GITHUB.COM';
+}
+
+
+/***/ }),
 /* 515 */
 /***/ (function(module) {
 
@@ -46267,7 +46389,249 @@ module.exports = require("net");
 /***/ }),
 /* 632 */,
 /* 633 */,
-/* 634 */,
+/* 634 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.makeSemver = exports.getVersionsDist = exports.findMatch = exports.getInfoFromManifest = exports.extractGoArchive = exports.getGo = void 0;
+const tc = __importStar(__webpack_require__(533));
+const core = __importStar(__webpack_require__(470));
+const path = __importStar(__webpack_require__(622));
+const semver = __importStar(__webpack_require__(864));
+const httpm = __importStar(__webpack_require__(539));
+const sys = __importStar(__webpack_require__(646));
+const os_1 = __importDefault(__webpack_require__(87));
+function getGo(versionSpec, stable, auth) {
+    return __awaiter(this, void 0, void 0, function* () {
+        let osPlat = os_1.default.platform();
+        let osArch = os_1.default.arch();
+        // check cache
+        let toolPath;
+        toolPath = tc.find('go', versionSpec);
+        // If not found in cache, download
+        if (toolPath) {
+            core.info(`Found in cache @ ${toolPath}`);
+            return toolPath;
+        }
+        core.info(`Attempting to download ${versionSpec}...`);
+        let downloadPath = '';
+        let info = null;
+        //
+        // Try download from internal distribution (popular versions only)
+        //
+        try {
+            info = yield getInfoFromManifest(versionSpec, stable, auth);
+            if (info) {
+                downloadPath = yield installGoVersion(info, auth);
+            }
+            else {
+                core.info('Not found in manifest.  Falling back to download directly from Go');
+            }
+        }
+        catch (err) {
+            if (err instanceof tc.HTTPError &&
+                (err.httpStatusCode === 403 || err.httpStatusCode === 429)) {
+                core.info(`Received HTTP status code ${err.httpStatusCode}.  This usually indicates the rate limit has been exceeded`);
+            }
+            else {
+                core.info(err.message);
+            }
+            core.debug(err.stack);
+            core.info('Falling back to download directly from Go');
+        }
+        //
+        // Download from storage.googleapis.com
+        //
+        if (!downloadPath) {
+            info = yield getInfoFromDist(versionSpec, stable);
+            if (!info) {
+                throw new Error(`Unable to find Go version '${versionSpec}' for platform ${osPlat} and architecture ${osArch}.`);
+            }
+            try {
+                core.info('Install from dist');
+                downloadPath = yield installGoVersion(info, undefined);
+            }
+            catch (err) {
+                throw new Error(`Failed to download version ${versionSpec}: ${err}`);
+            }
+        }
+        return downloadPath;
+    });
+}
+exports.getGo = getGo;
+function installGoVersion(info, auth) {
+    return __awaiter(this, void 0, void 0, function* () {
+        core.info(`Acquiring ${info.resolvedVersion} from ${info.downloadUrl}`);
+        const downloadPath = yield tc.downloadTool(info.downloadUrl, undefined, auth);
+        core.info('Extracting Go...');
+        let extPath = yield extractGoArchive(downloadPath);
+        core.info(`Successfully extracted go to ${extPath}`);
+        if (info.type === 'dist') {
+            extPath = path.join(extPath, 'go');
+        }
+        core.info('Adding to the cache ...');
+        const cachedDir = yield tc.cacheDir(extPath, 'go', makeSemver(info.resolvedVersion));
+        core.info(`Successfully cached go to ${cachedDir}`);
+        return cachedDir;
+    });
+}
+function extractGoArchive(archivePath) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const arch = os_1.default.arch();
+        let extPath;
+        if (arch === 'win32') {
+            extPath = yield tc.extractZip(archivePath);
+        }
+        else {
+            extPath = yield tc.extractTar(archivePath);
+        }
+        return extPath;
+    });
+}
+exports.extractGoArchive = extractGoArchive;
+function getInfoFromManifest(versionSpec, stable, auth) {
+    return __awaiter(this, void 0, void 0, function* () {
+        let info = null;
+        const releases = yield tc.getManifestFromRepo('actions', 'go-versions', auth, 'main');
+        core.info(`matching ${versionSpec}...`);
+        const rel = yield tc.findFromManifest(versionSpec, stable, releases);
+        if (rel && rel.files.length > 0) {
+            info = {};
+            info.type = 'manifest';
+            info.resolvedVersion = rel.version;
+            info.downloadUrl = rel.files[0].download_url;
+            info.fileName = rel.files[0].filename;
+        }
+        return info;
+    });
+}
+exports.getInfoFromManifest = getInfoFromManifest;
+function getInfoFromDist(versionSpec, stable) {
+    return __awaiter(this, void 0, void 0, function* () {
+        let version;
+        version = yield findMatch(versionSpec, stable);
+        if (!version) {
+            return null;
+        }
+        let downloadUrl = `https://storage.googleapis.com/golang/${version.files[0].filename}`;
+        return {
+            type: 'dist',
+            downloadUrl: downloadUrl,
+            resolvedVersion: version.version,
+            fileName: version.files[0].filename
+        };
+    });
+}
+function findMatch(versionSpec, stable) {
+    return __awaiter(this, void 0, void 0, function* () {
+        let archFilter = sys.getArch();
+        let platFilter = sys.getPlatform();
+        let result;
+        let match;
+        const dlUrl = 'https://golang.org/dl/?mode=json&include=all';
+        let candidates = yield module.exports.getVersionsDist(dlUrl);
+        if (!candidates) {
+            throw new Error(`golang download url did not return results`);
+        }
+        let goFile;
+        for (let i = 0; i < candidates.length; i++) {
+            let candidate = candidates[i];
+            let version = makeSemver(candidate.version);
+            // 1.13.0 is advertised as 1.13 preventing being able to match exactly 1.13.0
+            // since a semver of 1.13 would match latest 1.13
+            let parts = version.split('.');
+            if (parts.length == 2) {
+                version = version + '.0';
+            }
+            core.debug(`check ${version} satisfies ${versionSpec}`);
+            if (semver.satisfies(version, versionSpec) &&
+                (!stable || candidate.stable === stable)) {
+                goFile = candidate.files.find(file => {
+                    core.debug(`${file.arch}===${archFilter} && ${file.os}===${platFilter}`);
+                    return file.arch === archFilter && file.os === platFilter;
+                });
+                if (goFile) {
+                    core.debug(`matched ${candidate.version}`);
+                    match = candidate;
+                    break;
+                }
+            }
+        }
+        if (match && goFile) {
+            // clone since we're mutating the file list to be only the file that matches
+            result = Object.assign({}, match);
+            result.files = [goFile];
+        }
+        return result;
+    });
+}
+exports.findMatch = findMatch;
+function getVersionsDist(dlUrl) {
+    return __awaiter(this, void 0, void 0, function* () {
+        // this returns versions descending so latest is first
+        let http = new httpm.HttpClient('setup-go', [], {
+            allowRedirects: true,
+            maxRedirects: 3
+        });
+        return (yield http.getJson(dlUrl)).result;
+    });
+}
+exports.getVersionsDist = getVersionsDist;
+//
+// Convert the go version syntax into semver for semver matching
+// 1.13.1 => 1.13.1
+// 1.13 => 1.13.0
+// 1.10beta1 => 1.10.0-beta1, 1.10rc1 => 1.10.0-rc1
+// 1.8.5beta1 => 1.8.5-beta1, 1.8.5rc1 => 1.8.5-rc1
+function makeSemver(version) {
+    version = version.replace('go', '');
+    version = version.replace('beta', '-beta').replace('rc', '-rc');
+    let parts = version.split('-');
+    let verPart = parts[0];
+    let prereleasePart = parts.length > 1 ? `-${parts[1]}` : '';
+    let verParts = verPart.split('.');
+    if (verParts.length == 2) {
+        verPart += '.0';
+    }
+    return `${verPart}${prereleasePart}`;
+}
+exports.makeSemver = makeSemver;
+
+
+/***/ }),
 /* 635 */,
 /* 636 */,
 /* 637 */,
@@ -48085,7 +48449,48 @@ exports.saveCache = saveCache;
 
 
 /***/ }),
-/* 646 */,
+/* 646 */
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.getArch = exports.getPlatform = void 0;
+let os = __webpack_require__(87);
+function getPlatform() {
+    // darwin and linux match already
+    // freebsd not supported yet but future proofed.
+    // 'aix', 'darwin', 'freebsd', 'linux', 'openbsd', 'sunos', and 'win32'
+    let plat = os.platform();
+    // wants 'darwin', 'freebsd', 'linux', 'windows'
+    if (plat === 'win32') {
+        plat = 'windows';
+    }
+    return plat;
+}
+exports.getPlatform = getPlatform;
+function getArch() {
+    // 'arm', 'arm64', 'ia32', 'mips', 'mipsel', 'ppc', 'ppc64', 's390', 's390x', 'x32', and 'x64'.
+    let arch = os.arch();
+    // wants amd64, 386, arm64, armv61, ppc641e, s390x
+    // currently not supported by runner but future proofed mapping
+    switch (arch) {
+        case 'x64':
+            arch = 'amd64';
+            break;
+        // case 'ppc':
+        //   arch = 'ppc64';
+        //   break;
+        case 'x32':
+            arch = '386';
+            break;
+    }
+    return arch;
+}
+exports.getArch = getArch;
+
+
+/***/ }),
 /* 647 */,
 /* 648 */,
 /* 649 */,
@@ -48136,7 +48541,7 @@ const core = __importStar(__webpack_require__(470));
 const tc = __importStar(__webpack_require__(533));
 const os_1 = __importDefault(__webpack_require__(87));
 const path_1 = __importDefault(__webpack_require__(622));
-const main_1 = __webpack_require__(920);
+const main_1 = __webpack_require__(514);
 const downloadURL = "https://github.com/golangci/golangci-lint/releases/download";
 const getAssetURL = (versionConfig) => {
     let ext = "tar.gz";
@@ -57718,13 +58123,7 @@ __exportStar(__webpack_require__(764), exports);
 
 
 /***/ }),
-/* 920 */
-/***/ (function(module) {
-
-module.exports = eval("require")("setup-go/lib/main");
-
-
-/***/ }),
+/* 920 */,
 /* 921 */,
 /* 922 */,
 /* 923 */

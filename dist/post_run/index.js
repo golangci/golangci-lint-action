@@ -50003,7 +50003,7 @@ const getIntervalKey = (invalidationIntervalDays) => {
 function buildCacheKeys() {
     return __awaiter(this, void 0, void 0, function* () {
         const keys = [];
-        let userCacheKey = core.getInput(`cache-key`, { required: false }).trim();
+        const userCacheKey = core.getInput(`cache-key`, { required: false }).trim();
         if (userCacheKey) {
             keys.push(userCacheKey);
             return keys;

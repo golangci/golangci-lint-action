@@ -24,6 +24,10 @@ inputs:
     description: "if set to true then action uses pre-installed Go"
     default: false
     required: true
+  cache-key:
+    description: "key to use to store/retrieve cache"
+    default: ""
+    required: false
 runs:
   using: "node12"
   main: "dist/run/index.js"

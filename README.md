@@ -2,7 +2,7 @@
 
 [![Build Status](https://github.com/golangci/golangci-lint-action/workflows/build-and-test/badge.svg)](https://github.com/golangci/golangci-lint-action/actions)
 
-It's the official GitHub action for [golangci-lint](https://github.com/golangci/golangci-lint) from it's authors.
+It's the official GitHub action for [golangci-lint](https://github.com/golangci/golangci-lint) from its authors.
 The action runs [golangci-lint](https://github.com/golangci/golangci-lint) and reports issues from linters.
 
 ![GitHub Annotations](./static/annotations.png)

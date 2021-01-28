@@ -49992,7 +49992,22 @@ const getLintCacheDir = () => {
 };
 const getCacheDirs = () => {
     // Not existing dirs are ok here: it works.
-    return [getLintCacheDir(), path_1.default.resolve(`${process.env.HOME}/.cache/go-build`), path_1.default.resolve(`${process.env.HOME}/go/pkg`)];
+    const skipPkgCache = core.getInput(`skip-pkg-cache`, { required: true }).trim();
+    const skipBuildCache = core.getInput(`skip-build-cache`, { required: true }).trim();
+    const dirs = [getLintCacheDir()];
+    if (skipBuildCache.toLowerCase() == "true") {
+        core.info(`Omitting ~/.cache/go-build from cache directories`);
+    }
+    else {
+        dirs.push(path_1.default.resolve(`${process.env.HOME}/.cache/go-build`));
+    }
+    if (skipPkgCache.toLowerCase() == "true") {
+        core.info(`Omitting ~/go/pkg from cache directories`);
+    }
+    else {
+        dirs.push(path_1.default.resolve(`${process.env.HOME}/go/pkg`));
+    }
+    return dirs;
 };
 const getIntervalKey = (invalidationIntervalDays) => {
     const now = new Date();

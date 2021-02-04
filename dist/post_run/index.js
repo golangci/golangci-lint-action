@@ -48580,7 +48580,9 @@ function installLint(versionConfig) {
             repl = /\.zip$/;
         }
         else {
-            extractedDir = yield tc.extractTar(archivePath, process.env.HOME);
+            // We want to always overwrite files if the local cache already has them
+            let args = ['xz', '--overwrite'];
+            extractedDir = yield tc.extractTar(archivePath, process.env.HOME, args);
         }
         const urlParts = assetURL.split(`/`);
         const dirName = urlParts[urlParts.length - 1].replace(repl, ``);

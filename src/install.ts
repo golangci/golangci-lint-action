@@ -45,7 +45,9 @@ export async function installLint(versionConfig: VersionConfig): Promise<string>
     extractedDir = await tc.extractZip(archivePath, process.env.HOME)
     repl = /\.zip$/
   } else {
-    extractedDir = await tc.extractTar(archivePath, process.env.HOME)
+    // We want to always overwrite files if the local cache already has them
+    let args = ['xz', '--overwrite']
+    extractedDir = await tc.extractTar(archivePath, process.env.HOME, args)
   }
 
   const urlParts = assetURL.split(`/`)

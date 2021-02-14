@@ -48,8 +48,14 @@ jobs:
           # Optional: show only new issues if it's a pull request. The default value is `false`.
           # only-new-issues: true
 
-          # Optional: if set to true then the action will use pre-installed Go
+          # Optional: if set to true then the action will use pre-installed Go.
           # skip-go-installation: true
+
+          # Optional: if set to true then the action don't cache or restore ~/go/pkg.
+          # skip-pkg-cache: true
+
+          # Optional: if set to true then the action don't cache or restore ~/.cache/go-build.
+          # skip-build-cache: true
 ```
 
 We recommend running this action in a job separate from other jobs (`go test`, etc)

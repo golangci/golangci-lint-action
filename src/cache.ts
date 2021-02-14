@@ -25,7 +25,22 @@ const getLintCacheDir = (): string => {
 
 const getCacheDirs = (): string[] => {
   // Not existing dirs are ok here: it works.
-  return [getLintCacheDir(), path.resolve(`${process.env.HOME}/.cache/go-build`), path.resolve(`${process.env.HOME}/go/pkg`)]
+  const skipPkgCache = core.getInput(`skip-pkg-cache`, { required: true }).trim()
+  const skipBuildCache = core.getInput(`skip-build-cache`, { required: true }).trim()
+  const dirs = [getLintCacheDir()]
+
+  if (skipBuildCache.toLowerCase() == "true") {
+    core.info(`Omitting ~/.cache/go-build from cache directories`)
+  } else {
+    dirs.push(path.resolve(`${process.env.HOME}/.cache/go-build`))
+  }
+  if (skipPkgCache.toLowerCase() == "true") {
+    core.info(`Omitting ~/go/pkg from cache directories`)
+  } else {
+    dirs.push(path.resolve(`${process.env.HOME}/go/pkg`))
+  }
+
+  return dirs
 }
 
 const getIntervalKey = (invalidationIntervalDays: number): string => {

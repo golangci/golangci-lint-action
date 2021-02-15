@@ -26,7 +26,7 @@
   "author": "golangci",
   "license": "MIT",
   "dependencies": {
-    "@actions/cache": "^1.0.5",
+    "@actions/cache": "^1.0.6",
     "@actions/core": "^1.2.6",
     "@actions/exec": "^1.0.1",
     "@actions/github": "^4.0.0",
@@ -37,7 +37,7 @@
     "tmp": "^0.2.1"
   },
   "devDependencies": {
-    "@types/node": "^14.14.22",
+    "@types/node": "^14.14.25",
     "@types/uuid": "^8.3.0",
     "@typescript-eslint/eslint-plugin": "^2.34.0",
     "@typescript-eslint/parser": "^2.34.0",

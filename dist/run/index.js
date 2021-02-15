@@ -49248,7 +49248,7 @@ function installLint(versionConfig) {
         }
         else {
             // We want to always overwrite files if the local cache already has them
-            let args = ['xz', '--overwrite'];
+            const args = ["xz", "--overwrite"];
             extractedDir = yield tc.extractTar(archivePath, process.env.HOME, args);
         }
         const urlParts = assetURL.split(`/`);

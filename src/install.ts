@@ -46,7 +46,10 @@ export async function installLint(versionConfig: VersionConfig): Promise<string>
     repl = /\.zip$/
   } else {
     // We want to always overwrite files if the local cache already has them
-    const args = ["xz", "--overwrite"]
+    const args = ["xz"]
+    if (process.platform.toString() != "darwin") {
+      args.push("--overwrite")
+    }
     extractedDir = await tc.extractTar(archivePath, process.env.HOME, args)
   }
 

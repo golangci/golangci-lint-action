@@ -1034,372 +1034,7 @@ function wrappy (fn, cb) {
 
 /***/ }),
 /* 12 */,
-/* 13 */
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-const assert = __webpack_require__(357)
-const path = __webpack_require__(622)
-const fs = __webpack_require__(747)
-let glob = undefined
-try {
-  glob = __webpack_require__(402)
-} catch (_err) {
-  // treat glob as optional.
-}
-
-const defaultGlobOpts = {
-  nosort: true,
-  silent: true
-}
-
-// for EMFILE handling
-let timeout = 0
-
-const isWindows = (process.platform === "win32")
-
-const defaults = options => {
-  const methods = [
-    'unlink',
-    'chmod',
-    'stat',
-    'lstat',
-    'rmdir',
-    'readdir'
-  ]
-  methods.forEach(m => {
-    options[m] = options[m] || fs[m]
-    m = m + 'Sync'
-    options[m] = options[m] || fs[m]
-  })
-
-  options.maxBusyTries = options.maxBusyTries || 3
-  options.emfileWait = options.emfileWait || 1000
-  if (options.glob === false) {
-    options.disableGlob = true
-  }
-  if (options.disableGlob !== true && glob === undefined) {
-    throw Error('glob dependency not found, set `options.disableGlob = true` if intentional')
-  }
-  options.disableGlob = options.disableGlob || false
-  options.glob = options.glob || defaultGlobOpts
-}
-
-const rimraf = (p, options, cb) => {
-  if (typeof options === 'function') {
-    cb = options
-    options = {}
-  }
-
-  assert(p, 'rimraf: missing path')
-  assert.equal(typeof p, 'string', 'rimraf: path should be a string')
-  assert.equal(typeof cb, 'function', 'rimraf: callback function required')
-  assert(options, 'rimraf: invalid options argument provided')
-  assert.equal(typeof options, 'object', 'rimraf: options should be object')
-
-  defaults(options)
-
-  let busyTries = 0
-  let errState = null
-  let n = 0
-
-  const next = (er) => {
-    errState = errState || er
-    if (--n === 0)
-      cb(errState)
-  }
-
-  const afterGlob = (er, results) => {
-    if (er)
-      return cb(er)
-
-    n = results.length
-    if (n === 0)
-      return cb()
-
-    results.forEach(p => {
-      const CB = (er) => {
-        if (er) {
-          if ((er.code === "EBUSY" || er.code === "ENOTEMPTY" || er.code === "EPERM") &&
-              busyTries < options.maxBusyTries) {
-            busyTries ++
-            // try again, with the same exact callback as this one.
-            return setTimeout(() => rimraf_(p, options, CB), busyTries * 100)
-          }
-
-          // this one won't happen if graceful-fs is used.
-          if (er.code === "EMFILE" && timeout < options.emfileWait) {
-            return setTimeout(() => rimraf_(p, options, CB), timeout ++)
-          }
-
-          // already gone
-          if (er.code === "ENOENT") er = null
-        }
-
-        timeout = 0
-        next(er)
-      }
-      rimraf_(p, options, CB)
-    })
-  }
-
-  if (options.disableGlob || !glob.hasMagic(p))
-    return afterGlob(null, [p])
-
-  options.lstat(p, (er, stat) => {
-    if (!er)
-      return afterGlob(null, [p])
-
-    glob(p, options.glob, afterGlob)
-  })
-
-}
-
-// Two possible strategies.
-// 1. Assume it's a file.  unlink it, then do the dir stuff on EPERM or EISDIR
-// 2. Assume it's a directory.  readdir, then do the file stuff on ENOTDIR
-//
-// Both result in an extra syscall when you guess wrong.  However, there
-// are likely far more normal files in the world than directories.  This
-// is based on the assumption that a the average number of files per
-// directory is >= 1.
-//
-// If anyone ever complains about this, then I guess the strategy could
-// be made configurable somehow.  But until then, YAGNI.
-const rimraf_ = (p, options, cb) => {
-  assert(p)
-  assert(options)
-  assert(typeof cb === 'function')
-
-  // sunos lets the root user unlink directories, which is... weird.
-  // so we have to lstat here and make sure it's not a dir.
-  options.lstat(p, (er, st) => {
-    if (er && er.code === "ENOENT")
-      return cb(null)
-
-    // Windows can EPERM on stat.  Life is suffering.
-    if (er && er.code === "EPERM" && isWindows)
-      fixWinEPERM(p, options, er, cb)
-
-    if (st && st.isDirectory())
-      return rmdir(p, options, er, cb)
-
-    options.unlink(p, er => {
-      if (er) {
-        if (er.code === "ENOENT")
-          return cb(null)
-        if (er.code === "EPERM")
-          return (isWindows)
-            ? fixWinEPERM(p, options, er, cb)
-            : rmdir(p, options, er, cb)
-        if (er.code === "EISDIR")
-          return rmdir(p, options, er, cb)
-      }
-      return cb(er)
-    })
-  })
-}
-
-const fixWinEPERM = (p, options, er, cb) => {
-  assert(p)
-  assert(options)
-  assert(typeof cb === 'function')
-
-  options.chmod(p, 0o666, er2 => {
-    if (er2)
-      cb(er2.code === "ENOENT" ? null : er)
-    else
-      options.stat(p, (er3, stats) => {
-        if (er3)
-          cb(er3.code === "ENOENT" ? null : er)
-        else if (stats.isDirectory())
-          rmdir(p, options, er, cb)
-        else
-          options.unlink(p, cb)
-      })
-  })
-}
-
-const fixWinEPERMSync = (p, options, er) => {
-  assert(p)
-  assert(options)
-
-  try {
-    options.chmodSync(p, 0o666)
-  } catch (er2) {
-    if (er2.code === "ENOENT")
-      return
-    else
-      throw er
-  }
-
-  let stats
-  try {
-    stats = options.statSync(p)
-  } catch (er3) {
-    if (er3.code === "ENOENT")
-      return
-    else
-      throw er
-  }
-
-  if (stats.isDirectory())
-    rmdirSync(p, options, er)
-  else
-    options.unlinkSync(p)
-}
-
-const rmdir = (p, options, originalEr, cb) => {
-  assert(p)
-  assert(options)
-  assert(typeof cb === 'function')
-
-  // try to rmdir first, and only readdir on ENOTEMPTY or EEXIST (SunOS)
-  // if we guessed wrong, and it's not a directory, then
-  // raise the original error.
-  options.rmdir(p, er => {
-    if (er && (er.code === "ENOTEMPTY" || er.code === "EEXIST" || er.code === "EPERM"))
-      rmkids(p, options, cb)
-    else if (er && er.code === "ENOTDIR")
-      cb(originalEr)
-    else
-      cb(er)
-  })
-}
-
-const rmkids = (p, options, cb) => {
-  assert(p)
-  assert(options)
-  assert(typeof cb === 'function')
-
-  options.readdir(p, (er, files) => {
-    if (er)
-      return cb(er)
-    let n = files.length
-    if (n === 0)
-      return options.rmdir(p, cb)
-    let errState
-    files.forEach(f => {
-      rimraf(path.join(p, f), options, er => {
-        if (errState)
-          return
-        if (er)
-          return cb(errState = er)
-        if (--n === 0)
-          options.rmdir(p, cb)
-      })
-    })
-  })
-}
-
-// this looks simpler, and is strictly *faster*, but will
-// tie up the JavaScript thread and fail on excessively
-// deep directory trees.
-const rimrafSync = (p, options) => {
-  options = options || {}
-  defaults(options)
-
-  assert(p, 'rimraf: missing path')
-  assert.equal(typeof p, 'string', 'rimraf: path should be a string')
-  assert(options, 'rimraf: missing options')
-  assert.equal(typeof options, 'object', 'rimraf: options should be object')
-
-  let results
-
-  if (options.disableGlob || !glob.hasMagic(p)) {
-    results = [p]
-  } else {
-    try {
-      options.lstatSync(p)
-      results = [p]
-    } catch (er) {
-      results = glob.sync(p, options.glob)
-    }
-  }
-
-  if (!results.length)
-    return
-
-  for (let i = 0; i < results.length; i++) {
-    const p = results[i]
-
-    let st
-    try {
-      st = options.lstatSync(p)
-    } catch (er) {
-      if (er.code === "ENOENT")
-        return
-
-      // Windows can EPERM on stat.  Life is suffering.
-      if (er.code === "EPERM" && isWindows)
-        fixWinEPERMSync(p, options, er)
-    }
-
-    try {
-      // sunos lets the root user unlink directories, which is... weird.
-      if (st && st.isDirectory())
-        rmdirSync(p, options, null)
-      else
-        options.unlinkSync(p)
-    } catch (er) {
-      if (er.code === "ENOENT")
-        return
-      if (er.code === "EPERM")
-        return isWindows ? fixWinEPERMSync(p, options, er) : rmdirSync(p, options, er)
-      if (er.code !== "EISDIR")
-        throw er
-
-      rmdirSync(p, options, er)
-    }
-  }
-}
-
-const rmdirSync = (p, options, originalEr) => {
-  assert(p)
-  assert(options)
-
-  try {
-    options.rmdirSync(p)
-  } catch (er) {
-    if (er.code === "ENOENT")
-      return
-    if (er.code === "ENOTDIR")
-      throw originalEr
-    if (er.code === "ENOTEMPTY" || er.code === "EEXIST" || er.code === "EPERM")
-      rmkidsSync(p, options)
-  }
-}
-
-const rmkidsSync = (p, options) => {
-  assert(p)
-  assert(options)
-  options.readdirSync(p).forEach(f => rimrafSync(path.join(p, f), options))
-
-  // We only end up here once we got ENOTEMPTY at least once, and
-  // at this point, we are guaranteed to have removed all the kids.
-  // So, we know that it won't be ENOENT or ENOTDIR or anything else.
-  // try really hard to delete stuff on windows, because it has a
-  // PROFOUNDLY annoying habit of not closing handles promptly when
-  // files are deleted, resulting in spurious ENOTEMPTY errors.
-  const retries = isWindows ? 100 : 1
-  let i = 0
-  do {
-    let threw = true
-    try {
-      const ret = options.rmdirSync(p, options)
-      threw = false
-      return ret
-    } finally {
-      if (++i < retries && threw)
-        continue
-    }
-  } while (true)
-}
-
-module.exports = rimraf
-rimraf.sync = rimrafSync
-
-
-/***/ }),
+/* 13 */,
 /* 14 */,
 /* 15 */
 /***/ (function(__unusedmodule, exports, __webpack_require__) {
@@ -1483,7 +1118,9 @@ function resolvePaths(patterns) {
         try {
             for (var _c = __asyncValues(globber.globGenerator()), _d; _d = yield _c.next(), !_d.done;) {
                 const file = _d.value;
-                const relativeFile = path.relative(workspace, file);
+                const relativeFile = path
+                    .relative(workspace, file)
+                    .replace(new RegExp(`\\${path.sep}`, 'g'), '/');
                 core.debug(`Matched: ${relativeFile}`);
                 // Paths are made relative so the tar entries are all relative to the root of the workspace.
                 paths.push(`${relativeFile}`);
@@ -2617,12 +2254,13 @@ const parseVersion = (s) => {
         patch: match[3] === undefined ? null : parseInt(match[3]),
     };
 };
-exports.stringifyVersion = (v) => {
+const stringifyVersion = (v) => {
     if (v == null) {
         return "latest";
     }
     return `v${v.major}.${v.minor}${v.patch !== null ? `.${v.patch}` : ``}`;
 };
+exports.stringifyVersion = stringifyVersion;
 const minVersion = {
     major: 1,
     minor: 28,
@@ -2714,7 +2352,53 @@ exports.findLintVersion = findLintVersion;
 
 
 /***/ }),
-/* 53 */,
+/* 53 */
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+"use strict";
+
+/*
+ * Copyright The OpenTelemetry Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.NoopContextManager = void 0;
+var context_1 = __webpack_require__(560);
+var NoopContextManager = /** @class */ (function () {
+    function NoopContextManager() {
+    }
+    NoopContextManager.prototype.active = function () {
+        return context_1.Context.ROOT_CONTEXT;
+    };
+    NoopContextManager.prototype.with = function (context, fn) {
+        return fn();
+    };
+    NoopContextManager.prototype.bind = function (target, context) {
+        return target;
+    };
+    NoopContextManager.prototype.enable = function () {
+        return this;
+    };
+    NoopContextManager.prototype.disable = function () {
+        return this;
+    };
+    return NoopContextManager;
+}());
+exports.NoopContextManager = NoopContextManager;
+//# sourceMappingURL=NoopContextManager.js.map
+
+/***/ }),
 /* 54 */,
 /* 55 */,
 /* 56 */,
@@ -4114,8 +3798,10 @@ module.exports = bytesToUuid;
 
 Object.defineProperty(exports, '__esModule', { value: true });
 
-var tslib = __webpack_require__(422);
+var tslib = __webpack_require__(640);
 
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT license.
 var listenersMap = new WeakMap();
 var abortedMap = new WeakMap();
 /**
@@ -4126,19 +3812,15 @@ var abortedMap = new WeakMap();
  * cannot or will not ever be cancelled.
  *
  * @example
- * // Abort without timeout
+ * Abort without timeout
+ * ```ts
  * await doAsyncWork(AbortSignal.none);
- *
- * @export
- * @class AbortSignal
- * @implements {AbortSignalLike}
+ * ```
  */
 var AbortSignal = /** @class */ (function () {
     function AbortSignal() {
         /**
          * onabort event listener.
-         *
-         * @memberof AbortSignal
          */
         this.onabort = null;
         listenersMap.set(this, []);
@@ -4149,8 +3831,6 @@ var AbortSignal = /** @class */ (function () {
          * Status of whether aborted or not.
          *
          * @readonly
-         * @type {boolean}
-         * @memberof AbortSignal
          */
         get: function () {
             if (!abortedMap.has(this)) {
@@ -4158,7 +3838,7 @@ var AbortSignal = /** @class */ (function () {
             }
             return abortedMap.get(this);
         },
-        enumerable: true,
+        enumerable: false,
         configurable: true
     });
     Object.defineProperty(AbortSignal, "none", {
@@ -4166,22 +3846,18 @@ var AbortSignal = /** @class */ (function () {
          * Creates a new AbortSignal instance that will never be aborted.
          *
          * @readonly
-         * @static
-         * @type {AbortSignal}
-         * @memberof AbortSignal
          */
         get: function () {
             return new AbortSignal();
         },
-        enumerable: true,
+        enumerable: false,
         configurable: true
     });
     /**
      * Added new "abort" event listener, only support "abort" event.
      *
-     * @param {"abort"} _type Only support "abort" event
-     * @param {(this: AbortSignalLike, ev: any) => any} listener
-     * @memberof AbortSignal
+     * @param _type - Only support "abort" event
+     * @param listener - The listener to be added
      */
     AbortSignal.prototype.addEventListener = function (
     // tslint:disable-next-line:variable-name
@@ -4195,9 +3871,8 @@ var AbortSignal = /** @class */ (function () {
     /**
      * Remove "abort" event listener, only support "abort" event.
      *
-     * @param {"abort"} _type Only support "abort" event
-     * @param {(this: AbortSignalLike, ev: any) => any} listener
-     * @memberof AbortSignal
+     * @param _type - Only support "abort" event
+     * @param listener - The listener to be removed
      */
     AbortSignal.prototype.removeEventListener = function (
     // tslint:disable-next-line:variable-name
@@ -4226,9 +3901,9 @@ var AbortSignal = /** @class */ (function () {
  * - If there is a timeout, the timer will be cancelled.
  * - If aborted is true, nothing will happen.
  *
- * @returns
  * @internal
  */
+// eslint-disable-next-line @azure/azure-sdk/ts-use-interface-parameters
 function abortSignal(signal) {
     if (signal.aborted) {
         return;
@@ -4245,12 +3920,14 @@ function abortSignal(signal) {
     abortedMap.set(signal, true);
 }
 
+// Copyright (c) Microsoft Corporation.
 /**
  * This error is thrown when an asynchronous operation has been aborted.
  * Check for this error by testing the `name` that the name property of the
  * error matches `"AbortError"`.
  *
  * @example
+ * ```ts
  * const controller = new AbortController();
  * controller.abort();
  * try {
@@ -4260,6 +3937,7 @@ function abortSignal(signal) {
  *     // handle abort error here.
  *   }
  * }
+ * ```
  */
 var AbortError = /** @class */ (function (_super) {
     tslib.__extends(AbortError, _super);
@@ -4275,34 +3953,37 @@ var AbortError = /** @class */ (function (_super) {
  * that an asynchronous operation should be aborted.
  *
  * @example
- * // Abort an operation when another event fires
+ * Abort an operation when another event fires
+ * ```ts
  * const controller = new AbortController();
  * const signal = controller.signal;
  * doAsyncWork(signal);
  * button.addEventListener('click', () => controller.abort());
+ * ```
  *
  * @example
- * // Share aborter cross multiple operations in 30s
+ * Share aborter cross multiple operations in 30s
+ * ```ts
  * // Upload the same data to 2 different data centers at the same time,
  * // abort another when any of them is finished
  * const controller = AbortController.withTimeout(30 * 1000);
  * doAsyncWork(controller.signal).then(controller.abort);
  * doAsyncWork(controller.signal).then(controller.abort);
+ *```
  *
  * @example
- * // Cascaded aborting
+ * Cascaded aborting
+ * ```ts
  * // All operations can't take more than 30 seconds
  * const aborter = Aborter.timeout(30 * 1000);
  *
  * // Following 2 operations can't take more than 25 seconds
  * await doAsyncWork(aborter.withTimeout(25 * 1000));
  * await doAsyncWork(aborter.withTimeout(25 * 1000));
- *
- * @export
- * @class AbortController
- * @implements {AbortSignalLike}
+ * ```
  */
 var AbortController = /** @class */ (function () {
+    // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
     function AbortController(parentSignals) {
         var _this = this;
         this._signal = new AbortSignal();
@@ -4311,6 +3992,7 @@ var AbortController = /** @class */ (function () {
         }
         // coerce parentSignals into an array
         if (!Array.isArray(parentSignals)) {
+            // eslint-disable-next-line prefer-rest-params
             parentSignals = arguments;
         }
         for (var _i = 0, parentSignals_1 = parentSignals; _i < parentSignals_1.length; _i++) {
@@ -4334,30 +4016,23 @@ var AbortController = /** @class */ (function () {
          * when the abort method is called on this controller.
          *
          * @readonly
-         * @type {AbortSignal}
-         * @memberof AbortController
          */
         get: function () {
             return this._signal;
         },
-        enumerable: true,
+        enumerable: false,
         configurable: true
     });
     /**
      * Signal that any operations passed this controller's associated abort signal
      * to cancel any remaining work and throw an `AbortError`.
-     *
-     * @memberof AbortController
      */
     AbortController.prototype.abort = function () {
         abortSignal(this._signal);
     };
     /**
      * Creates a new AbortSignal instance that will abort after the provided ms.
-     *
-     * @static
-     * @params {number} ms Elapsed time in milliseconds to trigger an abort.
-     * @returns {AbortSignal}
+     * @param ms - Elapsed time in milliseconds to trigger an abort.
      */
     AbortController.timeout = function (ms) {
         var signal = new AbortSignal();
@@ -4556,9 +4231,12 @@ function uploadChunk(httpClient, resourceUrl, openStream, start, end) {
             'Content-Type': 'application/octet-stream',
             'Content-Range': getContentRange(start, end)
         };
-        yield requestUtils_1.retryHttpClientResponse(`uploadChunk (start: ${start}, end: ${end})`, () => __awaiter(this, void 0, void 0, function* () {
+        const uploadChunkResponse = yield requestUtils_1.retryHttpClientResponse(`uploadChunk (start: ${start}, end: ${end})`, () => __awaiter(this, void 0, void 0, function* () {
             return httpClient.sendStream('PATCH', resourceUrl, openStream(), additionalHeaders);
         }));
+        if (!requestUtils_1.isSuccessStatusCode(uploadChunkResponse.message.statusCode)) {
+            throw new Error(`Cache service responded with ${uploadChunkResponse.message.statusCode} during upload chunk.`);
+        }
     });
 }
 function uploadFile(httpClient, cacheId, archivePath, options) {
@@ -4615,6 +4293,7 @@ function saveCache(cacheId, archivePath, options) {
         // Commit Cache
         core.debug('Commiting cache');
         const cacheSize = utils.getArchiveFileSizeIsBytes(archivePath);
+        core.info(`Cache Size: ~${Math.round(cacheSize / (1024 * 1024))} MB (${cacheSize} B)`);
         const commitCacheResponse = yield commitCache(httpClient, cacheId, cacheSize);
         if (!requestUtils_1.isSuccessStatusCode(commitCacheResponse.statusCode)) {
             throw new Error(`Cache service responded with ${commitCacheResponse.statusCode} during commit cache.`);
@@ -5401,6 +5080,7 @@ var __values;
 var __read;
 var __spread;
 var __spreadArrays;
+var __spreadArray;
 var __await;
 var __asyncGenerator;
 var __asyncDelegator;
@@ -5440,6 +5120,8 @@ var __createBinding;
         function (d, b) { for (var p in b) if (Object.prototype.hasOwnProperty.call(b, p)) d[p] = b[p]; };
 
     __extends = function (d, b) {
+        if (typeof b !== "function" && b !== null)
+            throw new TypeError("Class extends value " + String(b) + " is not a constructor or null");
         extendStatics(d, b);
         function __() { this.constructor = d; }
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
@@ -5559,18 +5241,26 @@ var __createBinding;
         return ar;
     };
 
+    /** @deprecated */
     __spread = function () {
         for (var ar = [], i = 0; i < arguments.length; i++)
             ar = ar.concat(__read(arguments[i]));
         return ar;
     };
 
+    /** @deprecated */
     __spreadArrays = function () {
         for (var s = 0, i = 0, il = arguments.length; i < il; i++) s += arguments[i].length;
         for (var r = Array(s), k = 0, i = 0; i < il; i++)
             for (var a = arguments[i], j = 0, jl = a.length; j < jl; j++, k++)
                 r[k] = a[j];
         return r;
+    };
+
+    __spreadArray = function (to, from) {
+        for (var i = 0, il = from.length, j = to.length; i < il; i++, j++)
+            to[j] = from[i];
+        return to;
     };
 
     __await = function (v) {
@@ -5655,6 +5345,7 @@ var __createBinding;
     exporter("__read", __read);
     exporter("__spread", __spread);
     exporter("__spreadArrays", __spreadArrays);
+    exporter("__spreadArray", __spreadArray);
     exporter("__await", __await);
     exporter("__asyncGenerator", __asyncGenerator);
     exporter("__asyncDelegator", __asyncDelegator);
@@ -5750,7 +5441,7 @@ const os = __webpack_require__(87);
 const path = __webpack_require__(622);
 const crypto = __webpack_require__(417);
 const _c = { fs: fs.constants, os: os.constants };
-const rimraf = __webpack_require__(13);
+const rimraf = __webpack_require__(569);
 
 /*
  * The working inner variables.
@@ -7415,7 +7106,7 @@ var AzureKeyCredential = /** @class */ (function () {
      * Create an instance of an AzureKeyCredential for use
      * with a service client.
      *
-     * @param key the initial value of the key to use in authentication
+     * @param key - The initial value of the key to use in authentication
      */
     function AzureKeyCredential(key) {
         if (!key) {
@@ -7439,7 +7130,7 @@ var AzureKeyCredential = /** @class */ (function () {
      * Updates will take effect upon the next request after
      * updating the key value.
      *
-     * @param newKey the new key value to be used
+     * @param newKey - The new key value to be used
      */
     AzureKeyCredential.prototype.update = function (newKey) {
         this._key = newKey;
@@ -7452,7 +7143,7 @@ var AzureKeyCredential = /** @class */ (function () {
 /**
  * Tests an object to determine whether it implements TokenCredential.
  *
- * @param credential The assumed TokenCredential to be tested.
+ * @param credential - The assumed TokenCredential to be tested.
  */
 function isTokenCredential(credential) {
     // Check for an object with a 'getToken' function and possibly with
@@ -7460,9 +7151,10 @@ function isTokenCredential(credential) {
     // a ServiceClientCredentials implementor (like TokenClientCredentials
     // in ms-rest-nodeauth) doesn't get mistaken for a TokenCredential if
     // it doesn't actually implement TokenCredential also.
-    return (credential &&
-        typeof credential.getToken === "function" &&
-        (credential.signRequest === undefined || credential.getToken.length > 0));
+    var castCredential = credential;
+    return (castCredential &&
+        typeof castCredential.getToken === "function" &&
+        (castCredential.signRequest === undefined || castCredential.getToken.length > 0));
 }
 
 exports.AzureKeyCredential = AzureKeyCredential;
@@ -7472,43 +7164,7 @@ exports.isTokenCredential = isTokenCredential;
 
 /***/ }),
 /* 230 */,
-/* 231 */
-/***/ (function(__unusedmodule, exports, __webpack_require__) {
-
-"use strict";
-
-/*
- * Copyright The OpenTelemetry Authors
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __exportStar = (this && this.__exportStar) || function(m, exports) {
-    for (var p in m) if (p !== "default" && !exports.hasOwnProperty(p)) __createBinding(exports, m, p);
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-__exportStar(__webpack_require__(328), exports);
-__exportStar(__webpack_require__(715), exports);
-__exportStar(__webpack_require__(924), exports);
-//# sourceMappingURL=index.js.map
-
-/***/ }),
+/* 231 */,
 /* 232 */,
 /* 233 */,
 /* 234 */,
@@ -10075,12 +9731,19 @@ var __asyncGenerator = (this && this.__asyncGenerator) || function (thisArg, _ar
     function reject(value) { resume("throw", value); }
     function settle(f, v) { if (f(v), q.shift(), q.length) resume(q[0][0], q[0][1]); }
 };
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
+    result["default"] = mod;
+    return result;
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-const core = __webpack_require__(470);
-const fs = __webpack_require__(747);
-const globOptionsHelper = __webpack_require__(601);
-const path = __webpack_require__(622);
-const patternHelper = __webpack_require__(597);
+const core = __importStar(__webpack_require__(470));
+const fs = __importStar(__webpack_require__(747));
+const globOptionsHelper = __importStar(__webpack_require__(601));
+const path = __importStar(__webpack_require__(622));
+const patternHelper = __importStar(__webpack_require__(597));
 const internal_match_kind_1 = __webpack_require__(327);
 const internal_pattern_1 = __webpack_require__(923);
 const internal_search_state_1 = __webpack_require__(728);
@@ -10879,30 +10542,7 @@ var MatchKind;
 //# sourceMappingURL=internal-match-kind.js.map
 
 /***/ }),
-/* 328 */
-/***/ (function(__unusedmodule, exports) {
-
-"use strict";
-
-/*
- * Copyright The OpenTelemetry Authors
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-Object.defineProperty(exports, "__esModule", { value: true });
-//# sourceMappingURL=types.js.map
-
-/***/ }),
+/* 328 */,
 /* 329 */,
 /* 330 */,
 /* 331 */,
@@ -11570,6 +11210,13 @@ var StorageError = {
                 type: {
                     name: "String"
                 }
+            },
+            code: {
+                xmlName: "Code",
+                serializedName: "Code",
+                type: {
+                    name: "String"
+                }
             }
         }
     }
@@ -11929,6 +11576,13 @@ var BlobPropertiesInternal = {
                 serializedName: "RehydratePriority",
                 type: {
                     name: "String"
+                }
+            },
+            lastAccessedOn: {
+                xmlName: "LastAccessTime",
+                serializedName: "LastAccessTime",
+                type: {
+                    name: "DateTimeRfc1123"
                 }
             }
         }
@@ -12635,6 +12289,70 @@ var JsonTextConfiguration = {
         }
     }
 };
+var ArrowField = {
+    xmlName: "Field",
+    serializedName: "ArrowField",
+    type: {
+        name: "Composite",
+        className: "ArrowField",
+        modelProperties: {
+            type: {
+                xmlName: "Type",
+                required: true,
+                serializedName: "Type",
+                type: {
+                    name: "String"
+                }
+            },
+            name: {
+                xmlName: "Name",
+                serializedName: "Name",
+                type: {
+                    name: "String"
+                }
+            },
+            precision: {
+                xmlName: "Precision",
+                serializedName: "Precision",
+                type: {
+                    name: "Number"
+                }
+            },
+            scale: {
+                xmlName: "Scale",
+                serializedName: "Scale",
+                type: {
+                    name: "Number"
+                }
+            }
+        }
+    }
+};
+var ArrowConfiguration = {
+    serializedName: "ArrowConfiguration",
+    type: {
+        name: "Composite",
+        className: "ArrowConfiguration",
+        modelProperties: {
+            schema: {
+                xmlIsWrapped: true,
+                xmlName: "Schema",
+                xmlElementName: "Field",
+                required: true,
+                serializedName: "Schema",
+                type: {
+                    name: "Sequence",
+                    element: {
+                        type: {
+                            name: "Composite",
+                            className: "ArrowField"
+                        }
+                    }
+                }
+            }
+        }
+    }
+};
 var ListContainersSegmentResponse = {
     xmlName: "EnumerationResults",
     serializedName: "ListContainersSegmentResponse",
@@ -12773,12 +12491,12 @@ var FilterBlobItem = {
                     name: "String"
                 }
             },
-            tagValue: {
-                xmlName: "TagValue",
-                required: true,
-                serializedName: "TagValue",
+            tags: {
+                xmlName: "Tags",
+                serializedName: "Tags",
                 type: {
-                    name: "String"
+                    name: "Composite",
+                    className: "BlobTags"
                 }
             }
         }
@@ -13075,7 +12793,8 @@ var QueryFormat = {
                     name: "Enum",
                     allowedValues: [
                         "delimited",
-                        "json"
+                        "json",
+                        "arrow"
                     ]
                 }
             },
@@ -13093,6 +12812,14 @@ var QueryFormat = {
                 type: {
                     name: "Composite",
                     className: "JsonTextConfiguration"
+                }
+            },
+            arrowConfiguration: {
+                xmlName: "ArrowConfiguration",
+                serializedName: "ArrowConfiguration",
+                type: {
+                    name: "Composite",
+                    className: "ArrowConfiguration"
                 }
             }
         }
@@ -13544,6 +13271,12 @@ var ServiceGetAccountInfoHeaders = {
                         "FileStorage",
                         "BlockBlobStorage"
                     ]
+                }
+            },
+            isHierarchicalNamespaceEnabled: {
+                serializedName: "x-ms-is-hns-enabled",
+                type: {
+                    name: "Boolean"
                 }
             },
             errorCode: {
@@ -14747,6 +14480,12 @@ var BlobDownloadHeaders = {
                     name: "Boolean"
                 }
             },
+            lastAccessed: {
+                serializedName: "x-ms-last-access-time",
+                type: {
+                    name: "DateTimeRfc1123"
+                }
+            },
             contentCrc64: {
                 serializedName: "x-ms-content-crc64",
                 type: {
@@ -15074,6 +14813,12 @@ var BlobGetPropertiesHeaders = {
                 serializedName: "x-ms-rehydrate-priority",
                 type: {
                     name: "String"
+                }
+            },
+            lastAccessed: {
+                serializedName: "x-ms-last-access-time",
+                type: {
+                    name: "DateTimeRfc1123"
                 }
             },
             errorCode: {
@@ -15456,6 +15201,87 @@ var BlockBlobUploadHeaders = {
     type: {
         name: "Composite",
         className: "BlockBlobUploadHeaders",
+        modelProperties: {
+            etag: {
+                serializedName: "etag",
+                type: {
+                    name: "String"
+                }
+            },
+            lastModified: {
+                serializedName: "last-modified",
+                type: {
+                    name: "DateTimeRfc1123"
+                }
+            },
+            contentMD5: {
+                serializedName: "content-md5",
+                type: {
+                    name: "ByteArray"
+                }
+            },
+            clientRequestId: {
+                serializedName: "x-ms-client-request-id",
+                type: {
+                    name: "String"
+                }
+            },
+            requestId: {
+                serializedName: "x-ms-request-id",
+                type: {
+                    name: "String"
+                }
+            },
+            version: {
+                serializedName: "x-ms-version",
+                type: {
+                    name: "String"
+                }
+            },
+            versionId: {
+                serializedName: "x-ms-version-id",
+                type: {
+                    name: "String"
+                }
+            },
+            date: {
+                serializedName: "date",
+                type: {
+                    name: "DateTimeRfc1123"
+                }
+            },
+            isServerEncrypted: {
+                serializedName: "x-ms-request-server-encrypted",
+                type: {
+                    name: "Boolean"
+                }
+            },
+            encryptionKeySha256: {
+                serializedName: "x-ms-encryption-key-sha256",
+                type: {
+                    name: "String"
+                }
+            },
+            encryptionScope: {
+                serializedName: "x-ms-encryption-scope",
+                type: {
+                    name: "String"
+                }
+            },
+            errorCode: {
+                serializedName: "x-ms-error-code",
+                type: {
+                    name: "String"
+                }
+            }
+        }
+    }
+};
+var BlockBlobPutBlobFromUrlHeaders = {
+    serializedName: "blockblob-putblobfromurl-headers",
+    type: {
+        name: "Composite",
+        className: "BlockBlobPutBlobFromUrlHeaders",
         modelProperties: {
             etag: {
                 serializedName: "etag",
@@ -17793,6 +17619,8 @@ var Mappers = /*#__PURE__*/Object.freeze({
     __proto__: null,
     BlobServiceProperties: BlobServiceProperties,
     BlobServiceStatistics: BlobServiceStatistics,
+    BlobTag: BlobTag,
+    BlobTags: BlobTags,
     ContainerItem: ContainerItem,
     ContainerProperties: ContainerProperties,
     CorsRule: CorsRule,
@@ -18020,6 +17848,21 @@ var blobContentType = {
         serializedName: "x-ms-blob-content-type",
         type: {
             name: "String"
+        }
+    }
+};
+var blobDeleteType = {
+    parameterPath: [
+        "options",
+        "blobDeleteType"
+    ],
+    mapper: {
+        serializedName: "deletetype",
+        type: {
+            name: "Enum",
+            allowedValues: [
+                "Permanent"
+            ]
         }
     }
 };
@@ -18486,6 +18329,18 @@ var copySource = {
         serializedName: "x-ms-copy-source",
         type: {
             name: "String"
+        }
+    }
+};
+var copySourceBlobProperties = {
+    parameterPath: [
+        "options",
+        "copySourceBlobProperties"
+    ],
+    mapper: {
+        serializedName: "x-ms-copy-source-blob-properties",
+        type: {
+            name: "Boolean"
         }
     }
 };
@@ -19462,7 +19317,7 @@ var version = {
         required: true,
         isConstant: true,
         serializedName: "x-ms-version",
-        defaultValue: '2019-12-12',
+        defaultValue: '2020-04-08',
         type: {
             name: "String"
         }
@@ -20454,6 +20309,8 @@ var getAccountInfoOperationSpec$1 = {
 
 var Mappers$2 = /*#__PURE__*/Object.freeze({
     __proto__: null,
+    ArrowConfiguration: ArrowConfiguration,
+    ArrowField: ArrowField,
     BlobAbortCopyFromURLHeaders: BlobAbortCopyFromURLHeaders,
     BlobAcquireLeaseHeaders: BlobAcquireLeaseHeaders,
     BlobBreakLeaseHeaders: BlobBreakLeaseHeaders,
@@ -20741,7 +20598,8 @@ var deleteMethodOperationSpec$1 = {
     queryParameters: [
         snapshot,
         versionId,
-        timeoutInSeconds
+        timeoutInSeconds,
+        blobDeleteType
     ],
     headerParameters: [
         deleteSnapshots,
@@ -21457,7 +21315,8 @@ var getTagsOperationSpec = {
     headerParameters: [
         version,
         requestId,
-        ifTags
+        ifTags,
+        leaseId0
     ],
     responses: {
         200: {
@@ -21488,7 +21347,8 @@ var setTagsOperationSpec = {
         transactionalContentMD5,
         transactionalContentCrc64,
         requestId,
-        ifTags
+        ifTags,
+        leaseId0
     ],
     requestBody: {
         parameterPath: [
@@ -22241,6 +22101,7 @@ var Mappers$5 = /*#__PURE__*/Object.freeze({
     Block: Block,
     BlockBlobCommitBlockListHeaders: BlockBlobCommitBlockListHeaders,
     BlockBlobGetBlockListHeaders: BlockBlobGetBlockListHeaders,
+    BlockBlobPutBlobFromUrlHeaders: BlockBlobPutBlobFromUrlHeaders,
     BlockBlobStageBlockFromURLHeaders: BlockBlobStageBlockFromURLHeaders,
     BlockBlobStageBlockHeaders: BlockBlobStageBlockHeaders,
     BlockBlobUploadHeaders: BlockBlobUploadHeaders,
@@ -22273,6 +22134,13 @@ var BlockBlob = /** @class */ (function () {
             contentLength: contentLength,
             options: options
         }, uploadOperationSpec, callback);
+    };
+    BlockBlob.prototype.putBlobFromUrl = function (contentLength, copySource, options, callback) {
+        return this.client.sendOperationRequest({
+            contentLength: contentLength,
+            copySource: copySource,
+            options: options
+        }, putBlobFromUrlOperationSpec, callback);
     };
     BlockBlob.prototype.stageBlock = function (blockId, contentLength, body, options, callback) {
         return this.client.sendOperationRequest({
@@ -22359,6 +22227,61 @@ var uploadOperationSpec = {
         default: {
             bodyMapper: StorageError,
             headersMapper: BlockBlobUploadHeaders
+        }
+    },
+    isXML: true,
+    serializer: serializer$5
+};
+var putBlobFromUrlOperationSpec = {
+    httpMethod: "PUT",
+    path: "{containerName}/{blob}",
+    urlParameters: [
+        url
+    ],
+    queryParameters: [
+        timeoutInSeconds
+    ],
+    headerParameters: [
+        transactionalContentMD5,
+        contentLength,
+        metadata,
+        encryptionScope,
+        tier0,
+        version,
+        requestId,
+        sourceContentMD5,
+        blobTagsString,
+        copySource,
+        copySourceBlobProperties,
+        blobType2,
+        blobContentType,
+        blobContentEncoding,
+        blobContentLanguage,
+        blobContentMD5,
+        blobCacheControl,
+        blobContentDisposition,
+        leaseId0,
+        encryptionKey,
+        encryptionKeySha256,
+        encryptionAlgorithm,
+        ifModifiedSince,
+        ifUnmodifiedSince,
+        ifMatch,
+        ifNoneMatch,
+        ifTags,
+        sourceIfModifiedSince,
+        sourceIfUnmodifiedSince,
+        sourceIfMatch,
+        sourceIfNoneMatch,
+        sourceIfTags
+    ],
+    responses: {
+        201: {
+            headersMapper: BlockBlobPutBlobFromUrlHeaders
+        },
+        default: {
+            bodyMapper: StorageError,
+            headersMapper: BlockBlobPutBlobFromUrlHeaders
         }
     },
     isXML: true,
@@ -22543,8 +22466,8 @@ var logger = logger$1.createClientLogger("storage-blob");
 
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
-var SDK_VERSION = "12.2.1";
-var SERVICE_VERSION = "2019-12-12";
+var SDK_VERSION = "12.4.1";
+var SERVICE_VERSION = "2020-04-08";
 var BLOCK_BLOB_MAX_UPLOAD_BLOB_BYTES = 256 * 1024 * 1024; // 256MB
 var BLOCK_BLOB_MAX_STAGE_BLOCK_BYTES = 4000 * 1024 * 1024; // 4000MB
 var BLOCK_BLOB_MAX_BLOCKS = 50000;
@@ -22941,6 +22864,18 @@ function setURLParameter(url, name, value) {
     return urlParsed.toString();
 }
 /**
+ * Get URL parameter by name.
+ *
+ * @export
+ * @param {string} url
+ * @param {string} name
+ * @returns {(string | string[] | undefined)}
+ */
+function getURLParameter(url, name) {
+    var urlParsed = coreHttp.URLBuilder.parse(url);
+    return urlParsed.getQueryParameterValue(name);
+}
+/**
  * Set URL host.
  *
  * @export
@@ -23024,6 +22959,26 @@ function getURLQueries(url) {
         queries[key] = value;
     }
     return queries;
+}
+/**
+ * Append a string to URL query.
+ *
+ * @export
+ * @param {string} url Source URL string.
+ * @param {string} queryParts String to be appended to the URL query.
+ * @returns {string} An updated URL string.
+ */
+function appendToURLQuery(url, queryParts) {
+    var urlParsed = coreHttp.URLBuilder.parse(url);
+    var query = urlParsed.getQuery();
+    if (query) {
+        query += "&" + queryParts;
+    }
+    else {
+        query = queryParts;
+    }
+    urlParsed.setQuery(query);
+    return urlParsed.toString();
 }
 /**
  * Rounds a date off to seconds.
@@ -23251,7 +23206,7 @@ function toTags(tags) {
  * Convert BlobQueryTextConfiguration to QuerySerialization type.
  *
  * @export
- * @param {(BlobQueryJsonTextConfiguration | BlobQueryCsvTextConfiguration)} [textConfiguration]
+ * @param {(BlobQueryJsonTextConfiguration | BlobQueryCsvTextConfiguration | BlobQueryArrowConfiguration)} [textConfiguration]
  * @returns {(QuerySerialization | undefined)}
  */
 function toQuerySerialization(textConfiguration) {
@@ -23278,6 +23233,15 @@ function toQuerySerialization(textConfiguration) {
                     type: "json",
                     jsonTextConfiguration: {
                         recordSeparator: textConfiguration.recordSeparator
+                    }
+                }
+            };
+        case "arrow":
+            return {
+                format: {
+                    type: "arrow",
+                    arrowConfiguration: {
+                        schema: textConfiguration.schema
                     }
                 }
             };
@@ -23320,6 +23284,18 @@ function parseObjectReplicationRecord(objectReplicationRecord) {
         _loop_1(key);
     }
     return orProperties;
+}
+/**
+ * Attach a TokenCredential to an object.
+ *
+ * @export
+ * @param {T} thing
+ * @param {TokenCredential} credential
+ * @returns {T}
+ */
+function attachCredential(thing, credential) {
+    thing.credential = credential;
+    return thing;
 }
 
 // Copyright (c) Microsoft Corporation. All rights reserved.
@@ -23565,11 +23541,7 @@ var StorageRetryPolicy = /** @class */ (function (_super) {
                 var retriableError = retriableErrors_1[_i];
                 if (err.name.toUpperCase().includes(retriableError) ||
                     err.message.toUpperCase().includes(retriableError) ||
-                    (err.code &&
-                        err.code
-                            .toString()
-                            .toUpperCase()
-                            .includes(retriableError))) {
+                    (err.code && err.code.toString().toUpperCase() === retriableError)) {
                     logger.info("RetryPolicy: Network error " + retriableError + " found, will retry.");
                     return true;
                 }
@@ -23589,6 +23561,10 @@ var StorageRetryPolicy = /** @class */ (function (_super) {
                 logger.info("RetryPolicy: Will retry for status code " + statusCode + ".");
                 return true;
             }
+        }
+        if ((err === null || err === void 0 ? void 0 : err.code) === "PARSE_ERROR" && (err === null || err === void 0 ? void 0 : err.message.startsWith("Error \"Error: Unclosed root tag"))) {
+            logger.info("RetryPolicy: Incomplete XML response likely due to service timeout, will retry.");
+            return true;
         }
         return false;
     };
@@ -23849,9 +23825,7 @@ var TelemetryPolicyFactory = /** @class */ (function () {
         var userAgentInfo = [];
         {
             if (telemetry) {
-                // FIXME: replace() only replaces the first space. And we have no idea why we need to replace spaces in the first place.
-                // But fixing this would be a breaking change. Logged an issue here: https://github.com/Azure/azure-sdk-for-js/issues/10793
-                var telemetryString = (telemetry.userAgentPrefix || "").replace(" ", "");
+                var telemetryString = telemetry.userAgentPrefix || "";
                 if (telemetryString.length > 0 && userAgentInfo.indexOf(telemetryString) === -1) {
                     userAgentInfo.push(telemetryString);
                 }
@@ -23954,8 +23928,11 @@ function newPipeline(credential, pipelineOptions) {
         telemetryPolicy,
         coreHttp.generateClientRequestIdPolicy(),
         new StorageBrowserPolicyFactory(),
-        coreHttp.deserializationPolicy(),
         new StorageRetryPolicyFactory(pipelineOptions.retryOptions),
+        // Default deserializationPolicy is provided by protocol layer
+        // Use customized XML char key of "#" so we could deserialize metadata
+        // with "_" key
+        coreHttp.deserializationPolicy(undefined, { xmlCharKey: "#" }),
         coreHttp.logPolicy({
             logger: logger.info,
             allowedHeaderNames: StorageBlobLoggingAllowedHeaderNames,
@@ -23968,13 +23945,12 @@ function newPipeline(credential, pipelineOptions) {
         factories.push(coreHttp.disableResponseDecompressionPolicy());
     }
     factories.push(coreHttp.isTokenCredential(credential)
-        ? coreHttp.bearerTokenAuthenticationPolicy(credential, StorageOAuthScopes)
+        ? attachCredential(coreHttp.bearerTokenAuthenticationPolicy(credential, StorageOAuthScopes), credential)
         : credential);
     return new Pipeline(factories, pipelineOptions);
 }
 
 // Copyright (c) Microsoft Corporation. All rights reserved.
-var ABORT_ERROR = new abortController.AbortError("The operation was aborted.");
 /**
  * ONLY AVAILABLE IN NODE.JS RUNTIME.
  *
@@ -23998,36 +23974,9 @@ var RetriableReadableStream = /** @class */ (function (_super) {
      */
     function RetriableReadableStream(source, getter, offset, count, options) {
         if (options === void 0) { options = {}; }
-        var _this = _super.call(this) || this;
+        var _this = _super.call(this, { highWaterMark: options.highWaterMark }) || this;
         _this.retries = 0;
-        _this.abortHandler = function () {
-            _this.source.pause();
-            _this.emit("error", ABORT_ERROR);
-        };
-        _this.aborter = options.abortSignal || abortController.AbortSignal.none;
-        _this.getter = getter;
-        _this.source = source;
-        _this.start = offset;
-        _this.offset = offset;
-        _this.end = offset + count - 1;
-        _this.maxRetryRequests =
-            options.maxRetryRequests && options.maxRetryRequests >= 0 ? options.maxRetryRequests : 0;
-        _this.onProgress = options.onProgress;
-        _this.options = options;
-        _this.aborter.addEventListener("abort", _this.abortHandler);
-        _this.setSourceDataHandler();
-        _this.setSourceEndHandler();
-        _this.setSourceErrorHandler();
-        return _this;
-    }
-    RetriableReadableStream.prototype._read = function () {
-        if (!this.aborter.aborted) {
-            this.source.resume();
-        }
-    };
-    RetriableReadableStream.prototype.setSourceDataHandler = function () {
-        var _this = this;
-        this.source.on("data", function (data) {
+        _this.sourceDataHandler = function (data) {
             if (_this.options.doInjectErrorOnce) {
                 _this.options.doInjectErrorOnce = undefined;
                 _this.source.pause();
@@ -24045,18 +23994,19 @@ var RetriableReadableStream = /** @class */ (function (_super) {
             if (!_this.push(data)) {
                 _this.source.pause();
             }
-        });
-    };
-    RetriableReadableStream.prototype.setSourceEndHandler = function () {
-        var _this = this;
-        this.source.on("end", function () {
+        };
+        _this.sourceErrorOrEndHandler = function (err) {
+            if (err && err.name === "AbortError") {
+                _this.destroy(err);
+                return;
+            }
             // console.log(
-            //   `Source stream emits end, offset: ${
+            //   `Source stream emits end or error, offset: ${
             //     this.offset
             //   }, dest end : ${this.end}`
             // );
+            _this.removeSourceEventHandlers();
             if (_this.offset - 1 === _this.end) {
-                _this.aborter.removeEventListener("abort", _this.abortHandler);
                 _this.push(null);
             }
             else if (_this.offset <= _this.end) {
@@ -24068,31 +24018,53 @@ var RetriableReadableStream = /** @class */ (function (_super) {
                     _this.getter(_this.offset)
                         .then(function (newSource) {
                         _this.source = newSource;
-                        _this.setSourceDataHandler();
-                        _this.setSourceEndHandler();
-                        _this.setSourceErrorHandler();
+                        _this.setSourceEventHandlers();
                     })
                         .catch(function (error) {
-                        _this.emit("error", error);
+                        _this.destroy(error);
                     });
                 }
                 else {
-                    _this.emit("error", new Error(
+                    _this.destroy(new Error(
                     // tslint:disable-next-line:max-line-length
                     "Data corruption failure: received less data than required and reached maxRetires limitation. Received data offset: " + (_this
                         .offset - 1) + ", data needed offset: " + _this.end + ", retries: " + _this.retries + ", max retries: " + _this.maxRetryRequests));
                 }
             }
             else {
-                _this.emit("error", new Error("Data corruption failure: Received more data than original request, data needed offset is " + _this.end + ", received offset: " + (_this.offset - 1)));
+                _this.destroy(new Error("Data corruption failure: Received more data than original request, data needed offset is " + _this.end + ", received offset: " + (_this.offset - 1)));
             }
-        });
+        };
+        _this.getter = getter;
+        _this.source = source;
+        _this.start = offset;
+        _this.offset = offset;
+        _this.end = offset + count - 1;
+        _this.maxRetryRequests =
+            options.maxRetryRequests && options.maxRetryRequests >= 0 ? options.maxRetryRequests : 0;
+        _this.onProgress = options.onProgress;
+        _this.options = options;
+        _this.setSourceEventHandlers();
+        return _this;
+    }
+    RetriableReadableStream.prototype._read = function () {
+        this.source.resume();
     };
-    RetriableReadableStream.prototype.setSourceErrorHandler = function () {
-        var _this = this;
-        this.source.on("error", function (error) {
-            _this.emit("error", error);
-        });
+    RetriableReadableStream.prototype.setSourceEventHandlers = function () {
+        this.source.on("data", this.sourceDataHandler);
+        this.source.on("end", this.sourceErrorOrEndHandler);
+        this.source.on("error", this.sourceErrorOrEndHandler);
+    };
+    RetriableReadableStream.prototype.removeSourceEventHandlers = function () {
+        this.source.removeListener("data", this.sourceDataHandler);
+        this.source.removeListener("end", this.sourceErrorOrEndHandler);
+        this.source.removeListener("error", this.sourceErrorOrEndHandler);
+    };
+    RetriableReadableStream.prototype._destroy = function (error, callback) {
+        // remove listener from source and release source
+        this.removeSourceEventHandlers();
+        this.source.destroy();
+        callback(error === null ? undefined : error);
     };
     return RetriableReadableStream;
 }(stream.Readable));
@@ -24564,6 +24536,21 @@ var BlobDownloadResponse = /** @class */ (function () {
          */
         get: function () {
             return this.originalResponse.lastModified;
+        },
+        enumerable: false,
+        configurable: true
+    });
+    Object.defineProperty(BlobDownloadResponse.prototype, "lastAccessed", {
+        /**
+         * Returns the UTC date and time generated by the service that indicates the time at which the blob was
+         * last read or written to.
+         *
+         * @readonly
+         * @type {(Date | undefined)}
+         * @memberof BlobDownloadResponse
+         */
+        get: function () {
+            return this.originalResponse.lastAccessed;
         },
         enumerable: false,
         configurable: true
@@ -25536,7 +25523,7 @@ var AvroReadable = /** @class */ (function () {
 }());
 
 // Copyright (c) Microsoft Corporation.
-var ABORT_ERROR$1 = new abortController.AbortError("Reading from the avro stream was aborted.");
+var ABORT_ERROR = new abortController.AbortError("Reading from the avro stream was aborted.");
 var AvroReadableFromStream = /** @class */ (function (_super) {
     tslib.__extends(AvroReadableFromStream, _super);
     function AvroReadableFromStream(readable) {
@@ -25566,7 +25553,7 @@ var AvroReadableFromStream = /** @class */ (function (_super) {
             var _this = this;
             return tslib.__generator(this, function (_b) {
                 if ((_a = options.abortSignal) === null || _a === void 0 ? void 0 : _a.aborted) {
-                    throw ABORT_ERROR$1;
+                    throw ABORT_ERROR;
                 }
                 if (size < 0) {
                     throw new Error("size parameter should be positive: " + size);
@@ -25610,7 +25597,7 @@ var AvroReadableFromStream = /** @class */ (function (_super) {
                             };
                             var abortHandler = function () {
                                 cleanUp();
-                                reject(ABORT_ERROR$1);
+                                reject(ABORT_ERROR);
                             };
                             _this._readable.on("readable", readableCallback);
                             _this._readable.once("error", rejectCallback);
@@ -25648,6 +25635,7 @@ var BlobQuickQueryStream = /** @class */ (function (_super) {
     function BlobQuickQueryStream(source, options) {
         if (options === void 0) { options = {}; }
         var _this = _super.call(this) || this;
+        _this.avroPaused = true;
         _this.source = source;
         _this.onProgress = options.onProgress;
         _this.onError = options.onError;
@@ -25657,29 +25645,31 @@ var BlobQuickQueryStream = /** @class */ (function (_super) {
     }
     BlobQuickQueryStream.prototype._read = function () {
         var _this = this;
-        this.readInternal().catch(function (err) {
-            _this.emit("error", err);
-        });
+        if (this.avroPaused) {
+            this.readInternal().catch(function (err) {
+                _this.emit("error", err);
+            });
+        }
     };
     BlobQuickQueryStream.prototype.readInternal = function () {
-        var e_1, _a;
         return tslib.__awaiter(this, void 0, void 0, function () {
-            var _b, _c, obj, schema, exit, data, bytesScanned, totalBytes, fatal, name_1, description, position, e_1_1;
-            return tslib.__generator(this, function (_d) {
-                switch (_d.label) {
+            var avroNext, obj, schema, data, bytesScanned, totalBytes, fatal, name_1, description, position;
+            return tslib.__generator(this, function (_a) {
+                switch (_a.label) {
                     case 0:
-                        _d.trys.push([0, 5, 6, 11]);
-                        _b = tslib.__asyncValues(this.avroIter);
-                        _d.label = 1;
-                    case 1: return [4 /*yield*/, _b.next()];
+                        this.avroPaused = false;
+                        _a.label = 1;
+                    case 1: return [4 /*yield*/, this.avroIter.next()];
                     case 2:
-                        if (!(_c = _d.sent(), !_c.done)) return [3 /*break*/, 4];
-                        obj = _c.value;
+                        avroNext = _a.sent();
+                        if (avroNext.done) {
+                            return [3 /*break*/, 4];
+                        }
+                        obj = avroNext.value;
                         schema = obj.$schema;
                         if (typeof schema !== "string") {
                             throw Error("Missing schema in avro record.");
                         }
-                        exit = false;
                         switch (schema) {
                             case "com.microsoft.azure.storage.queryBlobContents.resultData":
                                 data = obj.data;
@@ -25687,7 +25677,7 @@ var BlobQuickQueryStream = /** @class */ (function (_super) {
                                     throw Error("Invalid data in avro result record.");
                                 }
                                 if (!this.push(Buffer.from(data))) {
-                                    exit = true;
+                                    this.avroPaused = true;
                                 }
                                 break;
                             case "com.microsoft.azure.storage.queryBlobContents.progress":
@@ -25738,29 +25728,11 @@ var BlobQuickQueryStream = /** @class */ (function (_super) {
                             default:
                                 throw Error("Unknown schema " + schema + " in avro progress record.");
                         }
-                        if (exit) {
-                            return [3 /*break*/, 4];
-                        }
-                        _d.label = 3;
-                    case 3: return [3 /*break*/, 1];
-                    case 4: return [3 /*break*/, 11];
-                    case 5:
-                        e_1_1 = _d.sent();
-                        e_1 = { error: e_1_1 };
-                        return [3 /*break*/, 11];
-                    case 6:
-                        _d.trys.push([6, , 9, 10]);
-                        if (!(_c && !_c.done && (_a = _b.return))) return [3 /*break*/, 8];
-                        return [4 /*yield*/, _a.call(_b)];
-                    case 7:
-                        _d.sent();
-                        _d.label = 8;
-                    case 8: return [3 /*break*/, 10];
-                    case 9:
-                        if (e_1) throw e_1.error;
-                        return [7 /*endfinally*/];
-                    case 10: return [7 /*endfinally*/];
-                    case 11: return [2 /*return*/];
+                        _a.label = 3;
+                    case 3:
+                        if (!avroNext.done && !this.avroPaused) return [3 /*break*/, 1];
+                        _a.label = 4;
+                    case 4: return [2 /*return*/];
                 }
             });
         });
@@ -26572,7 +26544,7 @@ var StorageSharedKeyCredential = /** @class */ (function (_super) {
  * regenerated.
  */
 var packageName = "azure-storage-blob";
-var packageVersion = "12.2.1";
+var packageVersion = "12.4.1";
 var StorageClientContext = /** @class */ (function (_super) {
     tslib.__extends(StorageClientContext, _super);
     /**
@@ -26594,7 +26566,7 @@ var StorageClientContext = /** @class */ (function (_super) {
             options.userAgent = packageName + "/" + packageVersion + " " + defaultUserAgent;
         }
         _this = _super.call(this, undefined, options) || this;
-        _this.version = "2019-12-12";
+        _this.version = '2020-04-08';
         _this.baseUri = "{url}";
         _this.requestContentType = "application/json; charset=utf-8";
         _this.url = url;
@@ -26707,7 +26679,7 @@ function rangeResponseFromModel(response) {
  * This is the poller returned by {@link BlobClient.beginCopyFromURL}.
  * This can not be instantiated directly outside of this package.
  *
- * @ignore
+ * @hidden
  */
 var BlobBeginCopyFromUrlPoller = /** @class */ (function (_super) {
     tslib.__extends(BlobBeginCopyFromUrlPoller, _super);
@@ -26737,7 +26709,7 @@ var BlobBeginCopyFromUrlPoller = /** @class */ (function (_super) {
  * Note: Intentionally using function expression over arrow function expression
  * so that the function can be invoked with a different context.
  * This affects what `this` refers to.
- * @ignore
+ * @hidden
  */
 var cancel = function cancel(options) {
     if (options === void 0) { options = {}; }
@@ -26772,7 +26744,7 @@ var cancel = function cancel(options) {
  * Note: Intentionally using function expression over arrow function expression
  * so that the function can be invoked with a different context.
  * This affects what `this` refers to.
- * @ignore
+ * @hidden
  */
 var update = function update(options) {
     if (options === void 0) { options = {}; }
@@ -26837,7 +26809,7 @@ var update = function update(options) {
  * Note: Intentionally using function expression over arrow function expression
  * so that the function can be invoked with a different context.
  * This affects what `this` refers to.
- * @ignore
+ * @hidden
  */
 var toString = function toString() {
     return JSON.stringify({ state: this.state }, function (key, value) {
@@ -26850,7 +26822,7 @@ var toString = function toString() {
 };
 /**
  * Creates a poll operation given the provided state.
- * @ignore
+ * @hidden
  */
 function makeBlobBeginCopyFromURLPollOperation(state) {
     return {
@@ -26910,9 +26882,13 @@ var StorageClient = /** @class */ (function () {
         for (var _i = 0, _a = this.pipeline.factories; _i < _a.length; _i++) {
             var factory = _a[_i];
             if ((coreHttp.isNode && factory instanceof StorageSharedKeyCredential) ||
-                factory instanceof AnonymousCredential ||
-                coreHttp.isTokenCredential(factory)) {
+                factory instanceof AnonymousCredential) {
                 this.credential = factory;
+            }
+            else if (coreHttp.isTokenCredential(factory.credential)) {
+                // Only works if the factory has been attached a "credential" property.
+                // We do that in newPipeline() when using TokenCredential.
+                this.credential = factory.credential;
             }
         }
         // Override protocol layer's default content-type
@@ -27762,6 +27738,1101 @@ function readStreamToLocalFile(rs, file) {
 var fsStat = util.promisify(fs.stat);
 var fsCreateReadStream = fs.createReadStream;
 
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
+/**
+ * ONLY AVAILABLE IN NODE.JS RUNTIME.
+ *
+ * This is a helper class to construct a string representing the permissions granted by a ServiceSAS to a blob. Setting
+ * a value to true means that any SAS which uses these permissions will grant permissions for that operation. Once all
+ * the values are set, this should be serialized with toString and set as the permissions field on a
+ * {@link BlobSASSignatureValues} object. It is possible to construct the permissions string without this class, but
+ * the order of the permissions is particular and this class guarantees correctness.
+ *
+ * @export
+ * @class BlobSASPermissions
+ */
+var BlobSASPermissions = /** @class */ (function () {
+    function BlobSASPermissions() {
+        /**
+         * Specifies Read access granted.
+         *
+         * @type {boolean}
+         * @memberof BlobSASPermissions
+         */
+        this.read = false;
+        /**
+         * Specifies Add access granted.
+         *
+         * @type {boolean}
+         * @memberof BlobSASPermissions
+         */
+        this.add = false;
+        /**
+         * Specifies Create access granted.
+         *
+         * @type {boolean}
+         * @memberof BlobSASPermissions
+         */
+        this.create = false;
+        /**
+         * Specifies Write access granted.
+         *
+         * @type {boolean}
+         * @memberof BlobSASPermissions
+         */
+        this.write = false;
+        /**
+         * Specifies Delete access granted.
+         *
+         * @type {boolean}
+         * @memberof BlobSASPermissions
+         */
+        this.delete = false;
+        /**
+         * Specifies Delete version access granted.
+         *
+         * @type {boolean}
+         * @memberof BlobSASPermissions
+         */
+        this.deleteVersion = false;
+        /**
+         * Specfies Tag access granted.
+         *
+         * @type {boolean}
+         * @memberof BlobSASPermissions
+         */
+        this.tag = false;
+        /**
+         * Specifies Move access granted.
+         *
+         * @type {boolean}
+         * @memberof BlobSASPermissions
+         */
+        this.move = false;
+        /**
+         * Specifies Execute access granted.
+         *
+         * @type {boolean}
+         * @memberof BlobSASPermissions
+         */
+        this.execute = false;
+    }
+    /**
+     * Creates a {@link BlobSASPermissions} from the specified permissions string. This method will throw an
+     * Error if it encounters a character that does not correspond to a valid permission.
+     *
+     * @static
+     * @param {string} permissions
+     * @returns {BlobSASPermissions}
+     * @memberof BlobSASPermissions
+     */
+    BlobSASPermissions.parse = function (permissions) {
+        var blobSASPermissions = new BlobSASPermissions();
+        for (var _i = 0, permissions_1 = permissions; _i < permissions_1.length; _i++) {
+            var char = permissions_1[_i];
+            switch (char) {
+                case "r":
+                    blobSASPermissions.read = true;
+                    break;
+                case "a":
+                    blobSASPermissions.add = true;
+                    break;
+                case "c":
+                    blobSASPermissions.create = true;
+                    break;
+                case "w":
+                    blobSASPermissions.write = true;
+                    break;
+                case "d":
+                    blobSASPermissions.delete = true;
+                    break;
+                case "x":
+                    blobSASPermissions.deleteVersion = true;
+                    break;
+                case "t":
+                    blobSASPermissions.tag = true;
+                    break;
+                case "m":
+                    blobSASPermissions.move = true;
+                    break;
+                case "e":
+                    blobSASPermissions.execute = true;
+                    break;
+                default:
+                    throw new RangeError("Invalid permission: " + char);
+            }
+        }
+        return blobSASPermissions;
+    };
+    /**
+     * Creates a {@link BlobSASPermissions} from a raw object which contains same keys as it
+     * and boolean values for them.
+     *
+     * @static
+     * @param {BlobSASPermissionsLike} permissionLike
+     * @returns {BlobSASPermissions}
+     * @memberof BlobSASPermissions
+     */
+    BlobSASPermissions.from = function (permissionLike) {
+        var blobSASPermissions = new BlobSASPermissions();
+        if (permissionLike.read) {
+            blobSASPermissions.read = true;
+        }
+        if (permissionLike.add) {
+            blobSASPermissions.add = true;
+        }
+        if (permissionLike.create) {
+            blobSASPermissions.create = true;
+        }
+        if (permissionLike.write) {
+            blobSASPermissions.write = true;
+        }
+        if (permissionLike.delete) {
+            blobSASPermissions.delete = true;
+        }
+        if (permissionLike.deleteVersion) {
+            blobSASPermissions.deleteVersion = true;
+        }
+        if (permissionLike.tag) {
+            blobSASPermissions.tag = true;
+        }
+        if (permissionLike.move) {
+            blobSASPermissions.move = true;
+        }
+        if (permissionLike.execute) {
+            blobSASPermissions.execute = true;
+        }
+        return blobSASPermissions;
+    };
+    /**
+     * Converts the given permissions to a string. Using this method will guarantee the permissions are in an
+     * order accepted by the service.
+     *
+     * @returns {string} A string which represents the BlobSASPermissions
+     * @memberof BlobSASPermissions
+     */
+    BlobSASPermissions.prototype.toString = function () {
+        var permissions = [];
+        if (this.read) {
+            permissions.push("r");
+        }
+        if (this.add) {
+            permissions.push("a");
+        }
+        if (this.create) {
+            permissions.push("c");
+        }
+        if (this.write) {
+            permissions.push("w");
+        }
+        if (this.delete) {
+            permissions.push("d");
+        }
+        if (this.deleteVersion) {
+            permissions.push("x");
+        }
+        if (this.tag) {
+            permissions.push("t");
+        }
+        if (this.move) {
+            permissions.push("m");
+        }
+        if (this.execute) {
+            permissions.push("e");
+        }
+        return permissions.join("");
+    };
+    return BlobSASPermissions;
+}());
+
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
+/**
+ * This is a helper class to construct a string representing the permissions granted by a ServiceSAS to a container.
+ * Setting a value to true means that any SAS which uses these permissions will grant permissions for that operation.
+ * Once all the values are set, this should be serialized with toString and set as the permissions field on a
+ * {@link BlobSASSignatureValues} object. It is possible to construct the permissions string without this class, but
+ * the order of the permissions is particular and this class guarantees correctness.
+ *
+ * @export
+ * @class ContainerSASPermissions
+ */
+var ContainerSASPermissions = /** @class */ (function () {
+    function ContainerSASPermissions() {
+        /**
+         * Specifies Read access granted.
+         *
+         * @type {boolean}
+         * @memberof ContainerSASPermissions
+         */
+        this.read = false;
+        /**
+         * Specifies Add access granted.
+         *
+         * @type {boolean}
+         * @memberof ContainerSASPermissions
+         */
+        this.add = false;
+        /**
+         * Specifies Create access granted.
+         *
+         * @type {boolean}
+         * @memberof ContainerSASPermissions
+         */
+        this.create = false;
+        /**
+         * Specifies Write access granted.
+         *
+         * @type {boolean}
+         * @memberof ContainerSASPermissions
+         */
+        this.write = false;
+        /**
+         * Specifies Delete access granted.
+         *
+         * @type {boolean}
+         * @memberof ContainerSASPermissions
+         */
+        this.delete = false;
+        /**
+         * Specifies Delete version access granted.
+         *
+         * @type {boolean}
+         * @memberof ContainerSASPermissions
+         */
+        this.deleteVersion = false;
+        /**
+         * Specifies List access granted.
+         *
+         * @type {boolean}
+         * @memberof ContainerSASPermissions
+         */
+        this.list = false;
+        /**
+         * Specfies Tag access granted.
+         *
+         * @type {boolean}
+         * @memberof ContainerSASPermissions
+         */
+        this.tag = false;
+        /**
+         * Specifies Move access granted.
+         *
+         * @type {boolean}
+         * @memberof ContainerSASPermissions
+         */
+        this.move = false;
+        /**
+         * Specifies Execute access granted.
+         *
+         * @type {boolean}
+         * @memberof ContainerSASPermissions
+         */
+        this.execute = false;
+    }
+    /**
+     * Creates an {@link ContainerSASPermissions} from the specified permissions string. This method will throw an
+     * Error if it encounters a character that does not correspond to a valid permission.
+     *
+     * @static
+     * @param {string} permissions
+     * @returns {ContainerSASPermissions}
+     * @memberof ContainerSASPermissions
+     */
+    ContainerSASPermissions.parse = function (permissions) {
+        var containerSASPermissions = new ContainerSASPermissions();
+        for (var _i = 0, permissions_1 = permissions; _i < permissions_1.length; _i++) {
+            var char = permissions_1[_i];
+            switch (char) {
+                case "r":
+                    containerSASPermissions.read = true;
+                    break;
+                case "a":
+                    containerSASPermissions.add = true;
+                    break;
+                case "c":
+                    containerSASPermissions.create = true;
+                    break;
+                case "w":
+                    containerSASPermissions.write = true;
+                    break;
+                case "d":
+                    containerSASPermissions.delete = true;
+                    break;
+                case "l":
+                    containerSASPermissions.list = true;
+                    break;
+                case "t":
+                    containerSASPermissions.tag = true;
+                    break;
+                case "x":
+                    containerSASPermissions.deleteVersion = true;
+                    break;
+                case "m":
+                    containerSASPermissions.move = true;
+                    break;
+                case "e":
+                    containerSASPermissions.execute = true;
+                    break;
+                default:
+                    throw new RangeError("Invalid permission " + char);
+            }
+        }
+        return containerSASPermissions;
+    };
+    /**
+     * Creates a {@link ContainerSASPermissions} from a raw object which contains same keys as it
+     * and boolean values for them.
+     *
+     * @static
+     * @param {ContainerSASPermissionsLike} permissionLike
+     * @returns {ContainerSASPermissions}
+     * @memberof ContainerSASPermissions
+     */
+    ContainerSASPermissions.from = function (permissionLike) {
+        var containerSASPermissions = new ContainerSASPermissions();
+        if (permissionLike.read) {
+            containerSASPermissions.read = true;
+        }
+        if (permissionLike.add) {
+            containerSASPermissions.add = true;
+        }
+        if (permissionLike.create) {
+            containerSASPermissions.create = true;
+        }
+        if (permissionLike.write) {
+            containerSASPermissions.write = true;
+        }
+        if (permissionLike.delete) {
+            containerSASPermissions.delete = true;
+        }
+        if (permissionLike.list) {
+            containerSASPermissions.list = true;
+        }
+        if (permissionLike.deleteVersion) {
+            containerSASPermissions.deleteVersion = true;
+        }
+        if (permissionLike.tag) {
+            containerSASPermissions.tag = true;
+        }
+        if (permissionLike.move) {
+            containerSASPermissions.move = true;
+        }
+        if (permissionLike.execute) {
+            containerSASPermissions.execute = true;
+        }
+        return containerSASPermissions;
+    };
+    /**
+     * Converts the given permissions to a string. Using this method will guarantee the permissions are in an
+     * order accepted by the service.
+     *
+     * The order of the characters should be as specified here to ensure correctness.
+     * @see https://docs.microsoft.com/en-us/rest/api/storageservices/constructing-a-service-sas
+     *
+     * @returns {string}
+     * @memberof ContainerSASPermissions
+     */
+    ContainerSASPermissions.prototype.toString = function () {
+        var permissions = [];
+        if (this.read) {
+            permissions.push("r");
+        }
+        if (this.add) {
+            permissions.push("a");
+        }
+        if (this.create) {
+            permissions.push("c");
+        }
+        if (this.write) {
+            permissions.push("w");
+        }
+        if (this.delete) {
+            permissions.push("d");
+        }
+        if (this.deleteVersion) {
+            permissions.push("x");
+        }
+        if (this.list) {
+            permissions.push("l");
+        }
+        if (this.tag) {
+            permissions.push("t");
+        }
+        if (this.move) {
+            permissions.push("m");
+        }
+        if (this.execute) {
+            permissions.push("e");
+        }
+        return permissions.join("");
+    };
+    return ContainerSASPermissions;
+}());
+
+/**
+ * ONLY AVAILABLE IN NODE.JS RUNTIME.
+ *
+ * UserDelegationKeyCredential is only used for generation of user delegation SAS.
+ * @see https://docs.microsoft.com/en-us/rest/api/storageservices/create-user-delegation-sas
+ *
+ * @export
+ * @class UserDelegationKeyCredential
+ */
+var UserDelegationKeyCredential = /** @class */ (function () {
+    /**
+     * Creates an instance of UserDelegationKeyCredential.
+     * @param {string} accountName
+     * @param {UserDelegationKey} userDelegationKey
+     * @memberof UserDelegationKeyCredential
+     */
+    function UserDelegationKeyCredential(accountName, userDelegationKey) {
+        this.accountName = accountName;
+        this.userDelegationKey = userDelegationKey;
+        this.key = Buffer.from(userDelegationKey.value, "base64");
+    }
+    /**
+     * Generates a hash signature for an HTTP request or for a SAS.
+     *
+     * @param {string} stringToSign
+     * @returns {string}
+     * @memberof UserDelegationKeyCredential
+     */
+    UserDelegationKeyCredential.prototype.computeHMACSHA256 = function (stringToSign) {
+        // console.log(`stringToSign: ${JSON.stringify(stringToSign)}`);
+        return crypto.createHmac("sha256", this.key)
+            .update(stringToSign, "utf8")
+            .digest("base64");
+    };
+    return UserDelegationKeyCredential;
+}());
+
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
+/**
+ * Generate SasIPRange format string. For example:
+ *
+ * "8.8.8.8" or "1.1.1.1-255.255.255.255"
+ *
+ * @export
+ * @param {SasIPRange} ipRange
+ * @returns {string}
+ */
+function ipRangeToString(ipRange) {
+    return ipRange.end ? ipRange.start + "-" + ipRange.end : ipRange.start;
+}
+
+// Copyright (c) Microsoft Corporation. All rights reserved.
+(function (SASProtocol) {
+    /**
+     * Protocol that allows HTTPS only
+     */
+    SASProtocol["Https"] = "https";
+    /**
+     * Protocol that allows both HTTPS and HTTP
+     */
+    SASProtocol["HttpsAndHttp"] = "https,http";
+})(exports.SASProtocol || (exports.SASProtocol = {}));
+/**
+ * Represents the components that make up an Azure Storage SAS' query parameters. This type is not constructed directly
+ * by the user; it is only generated by the {@link AccountSASSignatureValues} and {@link BlobSASSignatureValues}
+ * types. Once generated, it can be encoded into a {@code String} and appended to a URL directly (though caution should
+ * be taken here in case there are existing query parameters, which might affect the appropriate means of appending
+ * these query parameters).
+ *
+ * NOTE: Instances of this class are immutable.
+ *
+ * @export
+ * @class SASQueryParameters
+ */
+var SASQueryParameters = /** @class */ (function () {
+    function SASQueryParameters(version, signature, permissionsOrOptions, services, resourceTypes, protocol, startsOn, expiresOn, ipRange, identifier, resource, cacheControl, contentDisposition, contentEncoding, contentLanguage, contentType, userDelegationKey, preauthorizedAgentObjectId, correlationId) {
+        this.version = version;
+        this.signature = signature;
+        if (permissionsOrOptions !== undefined && typeof permissionsOrOptions !== "string") {
+            // SASQueryParametersOptions
+            this.permissions = permissionsOrOptions.permissions;
+            this.services = permissionsOrOptions.services;
+            this.resourceTypes = permissionsOrOptions.resourceTypes;
+            this.protocol = permissionsOrOptions.protocol;
+            this.startsOn = permissionsOrOptions.startsOn;
+            this.expiresOn = permissionsOrOptions.expiresOn;
+            this.ipRangeInner = permissionsOrOptions.ipRange;
+            this.identifier = permissionsOrOptions.identifier;
+            this.resource = permissionsOrOptions.resource;
+            this.cacheControl = permissionsOrOptions.cacheControl;
+            this.contentDisposition = permissionsOrOptions.contentDisposition;
+            this.contentEncoding = permissionsOrOptions.contentEncoding;
+            this.contentLanguage = permissionsOrOptions.contentLanguage;
+            this.contentType = permissionsOrOptions.contentType;
+            if (permissionsOrOptions.userDelegationKey) {
+                this.signedOid = permissionsOrOptions.userDelegationKey.signedObjectId;
+                this.signedTenantId = permissionsOrOptions.userDelegationKey.signedTenantId;
+                this.signedStartsOn = permissionsOrOptions.userDelegationKey.signedStartsOn;
+                this.signedExpiresOn = permissionsOrOptions.userDelegationKey.signedExpiresOn;
+                this.signedService = permissionsOrOptions.userDelegationKey.signedService;
+                this.signedVersion = permissionsOrOptions.userDelegationKey.signedVersion;
+                this.preauthorizedAgentObjectId = permissionsOrOptions.preauthorizedAgentObjectId;
+                this.correlationId = permissionsOrOptions.correlationId;
+            }
+        }
+        else {
+            this.services = services;
+            this.resourceTypes = resourceTypes;
+            this.expiresOn = expiresOn;
+            this.permissions = permissionsOrOptions;
+            this.protocol = protocol;
+            this.startsOn = startsOn;
+            this.ipRangeInner = ipRange;
+            this.identifier = identifier;
+            this.resource = resource;
+            this.cacheControl = cacheControl;
+            this.contentDisposition = contentDisposition;
+            this.contentEncoding = contentEncoding;
+            this.contentLanguage = contentLanguage;
+            this.contentType = contentType;
+            if (userDelegationKey) {
+                this.signedOid = userDelegationKey.signedObjectId;
+                this.signedTenantId = userDelegationKey.signedTenantId;
+                this.signedStartsOn = userDelegationKey.signedStartsOn;
+                this.signedExpiresOn = userDelegationKey.signedExpiresOn;
+                this.signedService = userDelegationKey.signedService;
+                this.signedVersion = userDelegationKey.signedVersion;
+                this.preauthorizedAgentObjectId = preauthorizedAgentObjectId;
+                this.correlationId = correlationId;
+            }
+        }
+    }
+    Object.defineProperty(SASQueryParameters.prototype, "ipRange", {
+        /**
+         * Optional. IP range allowed for this SAS.
+         *
+         * @readonly
+         * @type {(SasIPRange | undefined)}
+         * @memberof SASQueryParameters
+         */
+        get: function () {
+            if (this.ipRangeInner) {
+                return {
+                    end: this.ipRangeInner.end,
+                    start: this.ipRangeInner.start
+                };
+            }
+            return undefined;
+        },
+        enumerable: false,
+        configurable: true
+    });
+    /**
+     * Encodes all SAS query parameters into a string that can be appended to a URL.
+     *
+     * @returns {string}
+     * @memberof SASQueryParameters
+     */
+    SASQueryParameters.prototype.toString = function () {
+        var params = [
+            "sv",
+            "ss",
+            "srt",
+            "spr",
+            "st",
+            "se",
+            "sip",
+            "si",
+            "skoid",
+            "sktid",
+            "skt",
+            "ske",
+            "sks",
+            "skv",
+            "sr",
+            "sp",
+            "sig",
+            "rscc",
+            "rscd",
+            "rsce",
+            "rscl",
+            "rsct",
+            "saoid",
+            "scid"
+        ];
+        var queries = [];
+        for (var _i = 0, params_1 = params; _i < params_1.length; _i++) {
+            var param = params_1[_i];
+            switch (param) {
+                case "sv":
+                    this.tryAppendQueryParameter(queries, param, this.version);
+                    break;
+                case "ss":
+                    this.tryAppendQueryParameter(queries, param, this.services);
+                    break;
+                case "srt":
+                    this.tryAppendQueryParameter(queries, param, this.resourceTypes);
+                    break;
+                case "spr":
+                    this.tryAppendQueryParameter(queries, param, this.protocol);
+                    break;
+                case "st":
+                    this.tryAppendQueryParameter(queries, param, this.startsOn ? truncatedISO8061Date(this.startsOn, false) : undefined);
+                    break;
+                case "se":
+                    this.tryAppendQueryParameter(queries, param, this.expiresOn ? truncatedISO8061Date(this.expiresOn, false) : undefined);
+                    break;
+                case "sip":
+                    this.tryAppendQueryParameter(queries, param, this.ipRange ? ipRangeToString(this.ipRange) : undefined);
+                    break;
+                case "si":
+                    this.tryAppendQueryParameter(queries, param, this.identifier);
+                    break;
+                case "skoid": // Signed object ID
+                    this.tryAppendQueryParameter(queries, param, this.signedOid);
+                    break;
+                case "sktid": // Signed tenant ID
+                    this.tryAppendQueryParameter(queries, param, this.signedTenantId);
+                    break;
+                case "skt": // Signed key start time
+                    this.tryAppendQueryParameter(queries, param, this.signedStartsOn ? truncatedISO8061Date(this.signedStartsOn, false) : undefined);
+                    break;
+                case "ske": // Signed key expiry time
+                    this.tryAppendQueryParameter(queries, param, this.signedExpiresOn ? truncatedISO8061Date(this.signedExpiresOn, false) : undefined);
+                    break;
+                case "sks": // Signed key service
+                    this.tryAppendQueryParameter(queries, param, this.signedService);
+                    break;
+                case "skv": // Signed key version
+                    this.tryAppendQueryParameter(queries, param, this.signedVersion);
+                    break;
+                case "sr":
+                    this.tryAppendQueryParameter(queries, param, this.resource);
+                    break;
+                case "sp":
+                    this.tryAppendQueryParameter(queries, param, this.permissions);
+                    break;
+                case "sig":
+                    this.tryAppendQueryParameter(queries, param, this.signature);
+                    break;
+                case "rscc":
+                    this.tryAppendQueryParameter(queries, param, this.cacheControl);
+                    break;
+                case "rscd":
+                    this.tryAppendQueryParameter(queries, param, this.contentDisposition);
+                    break;
+                case "rsce":
+                    this.tryAppendQueryParameter(queries, param, this.contentEncoding);
+                    break;
+                case "rscl":
+                    this.tryAppendQueryParameter(queries, param, this.contentLanguage);
+                    break;
+                case "rsct":
+                    this.tryAppendQueryParameter(queries, param, this.contentType);
+                    break;
+                case "saoid":
+                    this.tryAppendQueryParameter(queries, param, this.preauthorizedAgentObjectId);
+                    break;
+                case "scid":
+                    this.tryAppendQueryParameter(queries, param, this.correlationId);
+                    break;
+            }
+        }
+        return queries.join("&");
+    };
+    /**
+     * A private helper method used to filter and append query key/value pairs into an array.
+     *
+     * @private
+     * @param {string[]} queries
+     * @param {string} key
+     * @param {string} [value]
+     * @returns {void}
+     * @memberof SASQueryParameters
+     */
+    SASQueryParameters.prototype.tryAppendQueryParameter = function (queries, key, value) {
+        if (!value) {
+            return;
+        }
+        key = encodeURIComponent(key);
+        value = encodeURIComponent(value);
+        if (key.length > 0 && value.length > 0) {
+            queries.push(key + "=" + value);
+        }
+    };
+    return SASQueryParameters;
+}());
+
+// Copyright (c) Microsoft Corporation. All rights reserved.
+function generateBlobSASQueryParameters(blobSASSignatureValues, sharedKeyCredentialOrUserDelegationKey, accountName) {
+    var version = blobSASSignatureValues.version ? blobSASSignatureValues.version : SERVICE_VERSION;
+    var sharedKeyCredential = sharedKeyCredentialOrUserDelegationKey instanceof StorageSharedKeyCredential
+        ? sharedKeyCredentialOrUserDelegationKey
+        : undefined;
+    var userDelegationKeyCredential;
+    if (sharedKeyCredential === undefined && accountName !== undefined) {
+        userDelegationKeyCredential = new UserDelegationKeyCredential(accountName, sharedKeyCredentialOrUserDelegationKey);
+    }
+    if (sharedKeyCredential === undefined && userDelegationKeyCredential === undefined) {
+        throw TypeError("Invalid sharedKeyCredential, userDelegationKey or accountName.");
+    }
+    // Version 2019-12-12 adds support for the blob tags permission.
+    // Version 2018-11-09 adds support for the signed resource and signed blob snapshot time fields.
+    // https://docs.microsoft.com/en-us/rest/api/storageservices/constructing-a-service-sas#constructing-the-signature-string
+    if (version >= "2018-11-09") {
+        if (sharedKeyCredential !== undefined) {
+            return generateBlobSASQueryParameters20181109(blobSASSignatureValues, sharedKeyCredential);
+        }
+        else {
+            // Version 2020-02-10 delegation SAS signature construction includes preauthorizedAgentObjectId, agentObjectId, correlationId.
+            if (version >= "2020-02-10") {
+                return generateBlobSASQueryParametersUDK20200210(blobSASSignatureValues, userDelegationKeyCredential);
+            }
+            else {
+                return generateBlobSASQueryParametersUDK20181109(blobSASSignatureValues, userDelegationKeyCredential);
+            }
+        }
+    }
+    if (version >= "2015-04-05") {
+        if (sharedKeyCredential !== undefined) {
+            return generateBlobSASQueryParameters20150405(blobSASSignatureValues, sharedKeyCredential);
+        }
+        else {
+            throw new RangeError("'version' must be >= '2018-11-09' when generating user delegation SAS using user delegation key.");
+        }
+    }
+    throw new RangeError("'version' must be >= '2015-04-05'.");
+}
+/**
+ * ONLY AVAILABLE IN NODE.JS RUNTIME.
+ * IMPLEMENTATION FOR API VERSION FROM 2015-04-05 AND BEFORE 2018-11-09.
+ *
+ * Creates an instance of SASQueryParameters.
+ *
+ * Only accepts required settings needed to create a SAS. For optional settings please
+ * set corresponding properties directly, such as permissions, startsOn and identifier.
+ *
+ * WARNING: When identifier is not provided, permissions and expiresOn are required.
+ * You MUST assign value to identifier or expiresOn & permissions manually if you initial with
+ * this constructor.
+ *
+ * @param {BlobSASSignatureValues} blobSASSignatureValues
+ * @param {StorageSharedKeyCredential} sharedKeyCredential
+ * @returns {SASQueryParameters}
+ */
+function generateBlobSASQueryParameters20150405(blobSASSignatureValues, sharedKeyCredential) {
+    blobSASSignatureValues = SASSignatureValuesSanityCheckAndAutofill(blobSASSignatureValues);
+    if (!blobSASSignatureValues.identifier &&
+        !(blobSASSignatureValues.permissions && blobSASSignatureValues.expiresOn)) {
+        throw new RangeError("Must provide 'permissions' and 'expiresOn' for Blob SAS generation when 'identifier' is not provided.");
+    }
+    var resource = "c";
+    if (blobSASSignatureValues.blobName) {
+        resource = "b";
+    }
+    // Calling parse and toString guarantees the proper ordering and throws on invalid characters.
+    var verifiedPermissions;
+    if (blobSASSignatureValues.permissions) {
+        if (blobSASSignatureValues.blobName) {
+            verifiedPermissions = BlobSASPermissions.parse(blobSASSignatureValues.permissions.toString()).toString();
+        }
+        else {
+            verifiedPermissions = ContainerSASPermissions.parse(blobSASSignatureValues.permissions.toString()).toString();
+        }
+    }
+    // Signature is generated on the un-url-encoded values.
+    var stringToSign = [
+        verifiedPermissions ? verifiedPermissions : "",
+        blobSASSignatureValues.startsOn
+            ? truncatedISO8061Date(blobSASSignatureValues.startsOn, false)
+            : "",
+        blobSASSignatureValues.expiresOn
+            ? truncatedISO8061Date(blobSASSignatureValues.expiresOn, false)
+            : "",
+        getCanonicalName(sharedKeyCredential.accountName, blobSASSignatureValues.containerName, blobSASSignatureValues.blobName),
+        blobSASSignatureValues.identifier,
+        blobSASSignatureValues.ipRange ? ipRangeToString(blobSASSignatureValues.ipRange) : "",
+        blobSASSignatureValues.protocol ? blobSASSignatureValues.protocol : "",
+        blobSASSignatureValues.version,
+        blobSASSignatureValues.cacheControl ? blobSASSignatureValues.cacheControl : "",
+        blobSASSignatureValues.contentDisposition ? blobSASSignatureValues.contentDisposition : "",
+        blobSASSignatureValues.contentEncoding ? blobSASSignatureValues.contentEncoding : "",
+        blobSASSignatureValues.contentLanguage ? blobSASSignatureValues.contentLanguage : "",
+        blobSASSignatureValues.contentType ? blobSASSignatureValues.contentType : ""
+    ].join("\n");
+    var signature = sharedKeyCredential.computeHMACSHA256(stringToSign);
+    return new SASQueryParameters(blobSASSignatureValues.version, signature, verifiedPermissions, undefined, undefined, blobSASSignatureValues.protocol, blobSASSignatureValues.startsOn, blobSASSignatureValues.expiresOn, blobSASSignatureValues.ipRange, blobSASSignatureValues.identifier, resource, blobSASSignatureValues.cacheControl, blobSASSignatureValues.contentDisposition, blobSASSignatureValues.contentEncoding, blobSASSignatureValues.contentLanguage, blobSASSignatureValues.contentType);
+}
+/**
+ * ONLY AVAILABLE IN NODE.JS RUNTIME.
+ * IMPLEMENTATION FOR API VERSION FROM 2018-11-09.
+ *
+ * Creates an instance of SASQueryParameters.
+ *
+ * Only accepts required settings needed to create a SAS. For optional settings please
+ * set corresponding properties directly, such as permissions, startsOn and identifier.
+ *
+ * WARNING: When identifier is not provided, permissions and expiresOn are required.
+ * You MUST assign value to identifier or expiresOn & permissions manually if you initial with
+ * this constructor.
+ *
+ * @param {BlobSASSignatureValues} blobSASSignatureValues
+ * @param {StorageSharedKeyCredential} sharedKeyCredential
+ * @returns {SASQueryParameters}
+ */
+function generateBlobSASQueryParameters20181109(blobSASSignatureValues, sharedKeyCredential) {
+    blobSASSignatureValues = SASSignatureValuesSanityCheckAndAutofill(blobSASSignatureValues);
+    if (!blobSASSignatureValues.identifier &&
+        !(blobSASSignatureValues.permissions && blobSASSignatureValues.expiresOn)) {
+        throw new RangeError("Must provide 'permissions' and 'expiresOn' for Blob SAS generation when 'identifier' is not provided.");
+    }
+    var resource = "c";
+    var timestamp = blobSASSignatureValues.snapshotTime;
+    if (blobSASSignatureValues.blobName) {
+        resource = "b";
+        if (blobSASSignatureValues.snapshotTime) {
+            resource = "bs";
+        }
+        else if (blobSASSignatureValues.versionId) {
+            resource = "bv";
+            timestamp = blobSASSignatureValues.versionId;
+        }
+    }
+    // Calling parse and toString guarantees the proper ordering and throws on invalid characters.
+    var verifiedPermissions;
+    if (blobSASSignatureValues.permissions) {
+        if (blobSASSignatureValues.blobName) {
+            verifiedPermissions = BlobSASPermissions.parse(blobSASSignatureValues.permissions.toString()).toString();
+        }
+        else {
+            verifiedPermissions = ContainerSASPermissions.parse(blobSASSignatureValues.permissions.toString()).toString();
+        }
+    }
+    // Signature is generated on the un-url-encoded values.
+    var stringToSign = [
+        verifiedPermissions ? verifiedPermissions : "",
+        blobSASSignatureValues.startsOn
+            ? truncatedISO8061Date(blobSASSignatureValues.startsOn, false)
+            : "",
+        blobSASSignatureValues.expiresOn
+            ? truncatedISO8061Date(blobSASSignatureValues.expiresOn, false)
+            : "",
+        getCanonicalName(sharedKeyCredential.accountName, blobSASSignatureValues.containerName, blobSASSignatureValues.blobName),
+        blobSASSignatureValues.identifier,
+        blobSASSignatureValues.ipRange ? ipRangeToString(blobSASSignatureValues.ipRange) : "",
+        blobSASSignatureValues.protocol ? blobSASSignatureValues.protocol : "",
+        blobSASSignatureValues.version,
+        resource,
+        timestamp,
+        blobSASSignatureValues.cacheControl ? blobSASSignatureValues.cacheControl : "",
+        blobSASSignatureValues.contentDisposition ? blobSASSignatureValues.contentDisposition : "",
+        blobSASSignatureValues.contentEncoding ? blobSASSignatureValues.contentEncoding : "",
+        blobSASSignatureValues.contentLanguage ? blobSASSignatureValues.contentLanguage : "",
+        blobSASSignatureValues.contentType ? blobSASSignatureValues.contentType : ""
+    ].join("\n");
+    var signature = sharedKeyCredential.computeHMACSHA256(stringToSign);
+    return new SASQueryParameters(blobSASSignatureValues.version, signature, verifiedPermissions, undefined, undefined, blobSASSignatureValues.protocol, blobSASSignatureValues.startsOn, blobSASSignatureValues.expiresOn, blobSASSignatureValues.ipRange, blobSASSignatureValues.identifier, resource, blobSASSignatureValues.cacheControl, blobSASSignatureValues.contentDisposition, blobSASSignatureValues.contentEncoding, blobSASSignatureValues.contentLanguage, blobSASSignatureValues.contentType);
+}
+/**
+ * ONLY AVAILABLE IN NODE.JS RUNTIME.
+ * IMPLEMENTATION FOR API VERSION FROM 2018-11-09.
+ *
+ * Creates an instance of SASQueryParameters.
+ *
+ * Only accepts required settings needed to create a SAS. For optional settings please
+ * set corresponding properties directly, such as permissions, startsOn.
+ *
+ * WARNING: identifier will be ignored, permissions and expiresOn are required.
+ *
+ * @param {BlobSASSignatureValues} blobSASSignatureValues
+ * @param {UserDelegationKeyCredential} userDelegationKeyCredential
+ * @returns {SASQueryParameters}
+ */
+function generateBlobSASQueryParametersUDK20181109(blobSASSignatureValues, userDelegationKeyCredential) {
+    blobSASSignatureValues = SASSignatureValuesSanityCheckAndAutofill(blobSASSignatureValues);
+    // Stored access policies are not supported for a user delegation SAS.
+    if (!blobSASSignatureValues.permissions || !blobSASSignatureValues.expiresOn) {
+        throw new RangeError("Must provide 'permissions' and 'expiresOn' for Blob SAS generation when generating user delegation SAS.");
+    }
+    var resource = "c";
+    var timestamp = blobSASSignatureValues.snapshotTime;
+    if (blobSASSignatureValues.blobName) {
+        resource = "b";
+        if (blobSASSignatureValues.snapshotTime) {
+            resource = "bs";
+        }
+        else if (blobSASSignatureValues.versionId) {
+            resource = "bv";
+            timestamp = blobSASSignatureValues.versionId;
+        }
+    }
+    // Calling parse and toString guarantees the proper ordering and throws on invalid characters.
+    var verifiedPermissions;
+    if (blobSASSignatureValues.permissions) {
+        if (blobSASSignatureValues.blobName) {
+            verifiedPermissions = BlobSASPermissions.parse(blobSASSignatureValues.permissions.toString()).toString();
+        }
+        else {
+            verifiedPermissions = ContainerSASPermissions.parse(blobSASSignatureValues.permissions.toString()).toString();
+        }
+    }
+    // Signature is generated on the un-url-encoded values.
+    var stringToSign = [
+        verifiedPermissions ? verifiedPermissions : "",
+        blobSASSignatureValues.startsOn
+            ? truncatedISO8061Date(blobSASSignatureValues.startsOn, false)
+            : "",
+        blobSASSignatureValues.expiresOn
+            ? truncatedISO8061Date(blobSASSignatureValues.expiresOn, false)
+            : "",
+        getCanonicalName(userDelegationKeyCredential.accountName, blobSASSignatureValues.containerName, blobSASSignatureValues.blobName),
+        userDelegationKeyCredential.userDelegationKey.signedObjectId,
+        userDelegationKeyCredential.userDelegationKey.signedTenantId,
+        userDelegationKeyCredential.userDelegationKey.signedStartsOn
+            ? truncatedISO8061Date(userDelegationKeyCredential.userDelegationKey.signedStartsOn, false)
+            : "",
+        userDelegationKeyCredential.userDelegationKey.signedExpiresOn
+            ? truncatedISO8061Date(userDelegationKeyCredential.userDelegationKey.signedExpiresOn, false)
+            : "",
+        userDelegationKeyCredential.userDelegationKey.signedService,
+        userDelegationKeyCredential.userDelegationKey.signedVersion,
+        blobSASSignatureValues.ipRange ? ipRangeToString(blobSASSignatureValues.ipRange) : "",
+        blobSASSignatureValues.protocol ? blobSASSignatureValues.protocol : "",
+        blobSASSignatureValues.version,
+        resource,
+        timestamp,
+        blobSASSignatureValues.cacheControl,
+        blobSASSignatureValues.contentDisposition,
+        blobSASSignatureValues.contentEncoding,
+        blobSASSignatureValues.contentLanguage,
+        blobSASSignatureValues.contentType
+    ].join("\n");
+    var signature = userDelegationKeyCredential.computeHMACSHA256(stringToSign);
+    return new SASQueryParameters(blobSASSignatureValues.version, signature, verifiedPermissions, undefined, undefined, blobSASSignatureValues.protocol, blobSASSignatureValues.startsOn, blobSASSignatureValues.expiresOn, blobSASSignatureValues.ipRange, blobSASSignatureValues.identifier, resource, blobSASSignatureValues.cacheControl, blobSASSignatureValues.contentDisposition, blobSASSignatureValues.contentEncoding, blobSASSignatureValues.contentLanguage, blobSASSignatureValues.contentType, userDelegationKeyCredential.userDelegationKey);
+}
+/**
+ * ONLY AVAILABLE IN NODE.JS RUNTIME.
+ * IMPLEMENTATION FOR API VERSION FROM 2020-02-10.
+ *
+ * Creates an instance of SASQueryParameters.
+ *
+ * Only accepts required settings needed to create a SAS. For optional settings please
+ * set corresponding properties directly, such as permissions, startsOn.
+ *
+ * WARNING: identifier will be ignored, permissions and expiresOn are required.
+ *
+ * @param {BlobSASSignatureValues} blobSASSignatureValues
+ * @param {UserDelegationKeyCredential} userDelegationKeyCredential
+ * @returns {SASQueryParameters}
+ */
+function generateBlobSASQueryParametersUDK20200210(blobSASSignatureValues, userDelegationKeyCredential) {
+    blobSASSignatureValues = SASSignatureValuesSanityCheckAndAutofill(blobSASSignatureValues);
+    // Stored access policies are not supported for a user delegation SAS.
+    if (!blobSASSignatureValues.permissions || !blobSASSignatureValues.expiresOn) {
+        throw new RangeError("Must provide 'permissions' and 'expiresOn' for Blob SAS generation when generating user delegation SAS.");
+    }
+    var resource = "c";
+    var timestamp = blobSASSignatureValues.snapshotTime;
+    if (blobSASSignatureValues.blobName) {
+        resource = "b";
+        if (blobSASSignatureValues.snapshotTime) {
+            resource = "bs";
+        }
+        else if (blobSASSignatureValues.versionId) {
+            resource = "bv";
+            timestamp = blobSASSignatureValues.versionId;
+        }
+    }
+    // Calling parse and toString guarantees the proper ordering and throws on invalid characters.
+    var verifiedPermissions;
+    if (blobSASSignatureValues.permissions) {
+        if (blobSASSignatureValues.blobName) {
+            verifiedPermissions = BlobSASPermissions.parse(blobSASSignatureValues.permissions.toString()).toString();
+        }
+        else {
+            verifiedPermissions = ContainerSASPermissions.parse(blobSASSignatureValues.permissions.toString()).toString();
+        }
+    }
+    // Signature is generated on the un-url-encoded values.
+    var stringToSign = [
+        verifiedPermissions ? verifiedPermissions : "",
+        blobSASSignatureValues.startsOn
+            ? truncatedISO8061Date(blobSASSignatureValues.startsOn, false)
+            : "",
+        blobSASSignatureValues.expiresOn
+            ? truncatedISO8061Date(blobSASSignatureValues.expiresOn, false)
+            : "",
+        getCanonicalName(userDelegationKeyCredential.accountName, blobSASSignatureValues.containerName, blobSASSignatureValues.blobName),
+        userDelegationKeyCredential.userDelegationKey.signedObjectId,
+        userDelegationKeyCredential.userDelegationKey.signedTenantId,
+        userDelegationKeyCredential.userDelegationKey.signedStartsOn
+            ? truncatedISO8061Date(userDelegationKeyCredential.userDelegationKey.signedStartsOn, false)
+            : "",
+        userDelegationKeyCredential.userDelegationKey.signedExpiresOn
+            ? truncatedISO8061Date(userDelegationKeyCredential.userDelegationKey.signedExpiresOn, false)
+            : "",
+        userDelegationKeyCredential.userDelegationKey.signedService,
+        userDelegationKeyCredential.userDelegationKey.signedVersion,
+        blobSASSignatureValues.preauthorizedAgentObjectId,
+        undefined,
+        blobSASSignatureValues.correlationId,
+        blobSASSignatureValues.ipRange ? ipRangeToString(blobSASSignatureValues.ipRange) : "",
+        blobSASSignatureValues.protocol ? blobSASSignatureValues.protocol : "",
+        blobSASSignatureValues.version,
+        resource,
+        timestamp,
+        blobSASSignatureValues.cacheControl,
+        blobSASSignatureValues.contentDisposition,
+        blobSASSignatureValues.contentEncoding,
+        blobSASSignatureValues.contentLanguage,
+        blobSASSignatureValues.contentType
+    ].join("\n");
+    var signature = userDelegationKeyCredential.computeHMACSHA256(stringToSign);
+    return new SASQueryParameters(blobSASSignatureValues.version, signature, verifiedPermissions, undefined, undefined, blobSASSignatureValues.protocol, blobSASSignatureValues.startsOn, blobSASSignatureValues.expiresOn, blobSASSignatureValues.ipRange, blobSASSignatureValues.identifier, resource, blobSASSignatureValues.cacheControl, blobSASSignatureValues.contentDisposition, blobSASSignatureValues.contentEncoding, blobSASSignatureValues.contentLanguage, blobSASSignatureValues.contentType, userDelegationKeyCredential.userDelegationKey, blobSASSignatureValues.preauthorizedAgentObjectId, blobSASSignatureValues.correlationId);
+}
+function getCanonicalName(accountName, containerName, blobName) {
+    // Container: "/blob/account/containerName"
+    // Blob:      "/blob/account/containerName/blobName"
+    var elements = ["/blob/" + accountName + "/" + containerName];
+    if (blobName) {
+        elements.push("/" + blobName);
+    }
+    return elements.join("");
+}
+function SASSignatureValuesSanityCheckAndAutofill(blobSASSignatureValues) {
+    var version = blobSASSignatureValues.version ? blobSASSignatureValues.version : SERVICE_VERSION;
+    if (blobSASSignatureValues.snapshotTime && version < "2018-11-09") {
+        throw RangeError("'version' must be >= '2018-11-09' when providing 'snapshotTime'.");
+    }
+    if (blobSASSignatureValues.blobName === undefined && blobSASSignatureValues.snapshotTime) {
+        throw RangeError("Must provide 'blobName' when providing 'snapshotTime'.");
+    }
+    if (blobSASSignatureValues.versionId && version < "2019-10-10") {
+        throw RangeError("'version' must be >= '2019-10-10' when providing 'versionId'.");
+    }
+    if (blobSASSignatureValues.blobName === undefined && blobSASSignatureValues.versionId) {
+        throw RangeError("Must provide 'blobName' when providing 'versionId'.");
+    }
+    if (blobSASSignatureValues.permissions &&
+        blobSASSignatureValues.permissions.deleteVersion &&
+        version < "2019-10-10") {
+        throw RangeError("'version' must be >= '2019-10-10' when providing 'x' permission.");
+    }
+    if (blobSASSignatureValues.permissions &&
+        blobSASSignatureValues.permissions.tag &&
+        version < "2019-12-12") {
+        throw RangeError("'version' must be >= '2019-12-12' when providing 't' permission.");
+    }
+    if (version < "2020-02-10" &&
+        blobSASSignatureValues.permissions &&
+        (blobSASSignatureValues.permissions.move || blobSASSignatureValues.permissions.execute)) {
+        throw RangeError("'version' must be >= '2020-02-10' when providing the 'm' or 'e' permission.");
+    }
+    if (version < "2020-02-10" &&
+        (blobSASSignatureValues.preauthorizedAgentObjectId || blobSASSignatureValues.correlationId)) {
+        throw RangeError("'version' must be >= '2020-02-10' when providing 'preauthorizedAgentObjectId' or 'correlationId'.");
+    }
+    blobSASSignatureValues.version = version;
+    return blobSASSignatureValues;
+}
+
 /**
  * A BlobClient represents a URL to an Azure Storage blob; the blob may be a block blob,
  * append blob, or page blob.
@@ -27830,6 +28901,8 @@ var BlobClient = /** @class */ (function (_super) {
         _this = _super.call(this, url, pipeline) || this;
         (_a = _this.getBlobAndContainerNamesFromUrl(), _this._name = _a.blobName, _this._containerName = _a.containerName);
         _this.blobContext = new Blob$1(_this.storageClientContext);
+        _this._snapshot = getURLParameter(_this.url, URLConstants.Parameters.SNAPSHOT);
+        _this._versionId = getURLParameter(_this.url, URLConstants.Parameters.VERSIONID);
         return _this;
     }
     Object.defineProperty(BlobClient.prototype, "name", {
@@ -28044,7 +29117,6 @@ var BlobClient = /** @class */ (function (_super) {
                                     }
                                 });
                             }); }, offset, res_1.contentLength, {
-                                abortSignal: options.abortSignal,
                                 maxRetryRequests: options.maxRetryRequests,
                                 onProgress: options.onProgress
                             })];
@@ -28437,6 +29509,7 @@ var BlobClient = /** @class */ (function (_super) {
                         _c.trys.push([1, 3, 4, 5]);
                         return [4 /*yield*/, this.blobContext.setTags({
                                 abortSignal: options.abortSignal,
+                                leaseAccessConditions: options.conditions,
                                 modifiedAccessConditions: tslib.__assign(tslib.__assign({}, options.conditions), { ifTags: (_a = options.conditions) === null || _a === void 0 ? void 0 : _a.tagConditions }),
                                 spanOptions: spanOptions,
                                 tags: toBlobTags(tags)
@@ -28478,6 +29551,7 @@ var BlobClient = /** @class */ (function (_super) {
                         _c.trys.push([1, 3, 4, 5]);
                         return [4 /*yield*/, this.blobContext.getTags({
                                 abortSignal: options.abortSignal,
+                                leaseAccessConditions: options.conditions,
                                 modifiedAccessConditions: tslib.__assign(tslib.__assign({}, options.conditions), { ifTags: (_a = options.conditions) === null || _a === void 0 ? void 0 : _a.tagConditions }),
                                 spanOptions: spanOptions
                             })];
@@ -29045,10 +30119,7 @@ var BlobClient = /** @class */ (function (_super) {
             // Azure Storage Server will replace "\" with "/" in the blob names
             //   doing the same in the SDK side so that the user doesn't have to replace "\" instances in the blobName
             blobName = blobName.replace(/\\/g, "/");
-            if (!blobName) {
-                throw new Error("Provided blobName is invalid.");
-            }
-            else if (!containerName) {
+            if (!containerName) {
                 throw new Error("Provided containerName is invalid.");
             }
             return { blobName: blobName, containerName: containerName };
@@ -29118,6 +30189,28 @@ var BlobClient = /** @class */ (function (_super) {
                     case 5: return [2 /*return*/];
                 }
             });
+        });
+    };
+    /**
+     * Only available for BlobClient constructed with a shared key credential.
+     *
+     * Generates a Blob Service Shared Access Signature (SAS) URI based on the client properties
+     * and parameters passed in. The SAS is signed by the shared key credential of the client.
+     *
+     * @see https://docs.microsoft.com/en-us/rest/api/storageservices/constructing-a-service-sas
+     *
+     * @param {BlobGenerateSasUrlOptions} options Optional parameters.
+     * @returns {Promise<string>} The SAS URI consisting of the URI to the resource represented by this client, followed by the generated SAS token.
+     * @memberof BlobClient
+     */
+    BlobClient.prototype.generateSasUrl = function (options) {
+        var _this = this;
+        return new Promise(function (resolve) {
+            if (!(_this.credential instanceof StorageSharedKeyCredential)) {
+                throw new RangeError("Can only generate the SAS when the client is initialized with a shared key credential");
+            }
+            var sas = generateBlobSASQueryParameters(tslib.__assign({ containerName: _this._containerName, blobName: _this._name, snapshotTime: _this._snapshot, versionId: _this._versionId }, options), _this.credential).toString();
+            resolve(appendToURLQuery(_this.url, sas));
         });
     };
     return BlobClient;
@@ -29719,6 +30812,63 @@ var BlockBlobClient = /** @class */ (function (_super) {
         });
     };
     /**
+     * Creates a new Block Blob where the contents of the blob are read from a given URL.
+     * This API is supported beginning with the 2020-04-08 version. Partial updates
+     * are not supported with Put Blob from URL; the content of an existing blob is overwritten with
+     * the content of the new blob.  To perform partial updates to a block blob’s contents using a
+     * source URL, use {@link stageBlockFromURL} and {@link commitBlockList}.
+     *
+     * @param {string} sourceURL Specifies the URL of the blob. The value
+     *                           may be a URL of up to 2 KB in length that specifies a blob.
+     *                           The value should be URL-encoded as it would appear
+     *                           in a request URI. The source blob must either be public
+     *                           or must be authenticated via a shared access signature.
+     *                           If the source blob is public, no authentication is required
+     *                           to perform the operation. Here are some examples of source object URLs:
+     *                           - https://myaccount.blob.core.windows.net/mycontainer/myblob
+     *                           - https://myaccount.blob.core.windows.net/mycontainer/myblob?snapshot=<DateTime>
+     * @param {BlockBlobSyncUploadFromURLOptions} [options={}] Optional parameters.
+     * @returns Promise<Models.BlockBlobPutBlobFromUrlResponse>
+     * @memberof BlockBlobClient
+     */
+    BlockBlobClient.prototype.syncUploadFromURL = function (sourceURL, options) {
+        var _a, _b, _c, _d, _e;
+        if (options === void 0) { options = {}; }
+        return tslib.__awaiter(this, void 0, void 0, function () {
+            var _f, span, spanOptions, e_25;
+            return tslib.__generator(this, function (_g) {
+                switch (_g.label) {
+                    case 0:
+                        options.conditions = options.conditions || {};
+                        _f = createSpan("BlockBlobClient-syncUploadFromURL", options.tracingOptions), span = _f.span, spanOptions = _f.spanOptions;
+                        _g.label = 1;
+                    case 1:
+                        _g.trys.push([1, 3, 4, 5]);
+                        ensureCpkIfSpecified(options.customerProvidedKey, this.isHttps);
+                        return [4 /*yield*/, this.blockBlobContext.putBlobFromUrl(0, sourceURL, tslib.__assign(tslib.__assign({}, options), { leaseAccessConditions: options.conditions, modifiedAccessConditions: tslib.__assign(tslib.__assign({}, options.conditions), { ifTags: options.conditions.tagConditions }), sourceModifiedAccessConditions: {
+                                    sourceIfMatch: (_a = options.sourceConditions) === null || _a === void 0 ? void 0 : _a.ifMatch,
+                                    sourceIfModifiedSince: (_b = options.sourceConditions) === null || _b === void 0 ? void 0 : _b.ifModifiedSince,
+                                    sourceIfNoneMatch: (_c = options.sourceConditions) === null || _c === void 0 ? void 0 : _c.ifNoneMatch,
+                                    sourceIfUnmodifiedSince: (_d = options.sourceConditions) === null || _d === void 0 ? void 0 : _d.ifUnmodifiedSince,
+                                    sourceIfTags: (_e = options.sourceConditions) === null || _e === void 0 ? void 0 : _e.tagConditions
+                                }, cpkInfo: options.customerProvidedKey, tier: toAccessTier(options.tier), blobTagsString: toBlobTagsString(options.tags), spanOptions: spanOptions }))];
+                    case 2: return [2 /*return*/, _g.sent()];
+                    case 3:
+                        e_25 = _g.sent();
+                        span.setStatus({
+                            code: api.CanonicalCode.UNKNOWN,
+                            message: e_25.message
+                        });
+                        throw e_25;
+                    case 4:
+                        span.end();
+                        return [7 /*endfinally*/];
+                    case 5: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
      * Uploads the specified block to the block blob's "staging area" to be later
      * committed by a call to commitBlockList.
      * @see https://docs.microsoft.com/rest/api/storageservices/put-block
@@ -29733,7 +30883,7 @@ var BlockBlobClient = /** @class */ (function (_super) {
     BlockBlobClient.prototype.stageBlock = function (blockId, body, contentLength, options) {
         if (options === void 0) { options = {}; }
         return tslib.__awaiter(this, void 0, void 0, function () {
-            var _a, span, spanOptions, e_25;
+            var _a, span, spanOptions, e_26;
             return tslib.__generator(this, function (_b) {
                 switch (_b.label) {
                     case 0:
@@ -29754,12 +30904,12 @@ var BlockBlobClient = /** @class */ (function (_super) {
                             })];
                     case 2: return [2 /*return*/, _b.sent()];
                     case 3:
-                        e_25 = _b.sent();
+                        e_26 = _b.sent();
                         span.setStatus({
                             code: api.CanonicalCode.UNKNOWN,
-                            message: e_25.message
+                            message: e_26.message
                         });
-                        throw e_25;
+                        throw e_26;
                     case 4:
                         span.end();
                         return [7 /*endfinally*/];
@@ -29794,7 +30944,7 @@ var BlockBlobClient = /** @class */ (function (_super) {
         if (offset === void 0) { offset = 0; }
         if (options === void 0) { options = {}; }
         return tslib.__awaiter(this, void 0, void 0, function () {
-            var _a, span, spanOptions, e_26;
+            var _a, span, spanOptions, e_27;
             return tslib.__generator(this, function (_b) {
                 switch (_b.label) {
                     case 0:
@@ -29815,12 +30965,12 @@ var BlockBlobClient = /** @class */ (function (_super) {
                             })];
                     case 2: return [2 /*return*/, _b.sent()];
                     case 3:
-                        e_26 = _b.sent();
+                        e_27 = _b.sent();
                         span.setStatus({
                             code: api.CanonicalCode.UNKNOWN,
-                            message: e_26.message
+                            message: e_27.message
                         });
-                        throw e_26;
+                        throw e_27;
                     case 4:
                         span.end();
                         return [7 /*endfinally*/];
@@ -29846,7 +30996,7 @@ var BlockBlobClient = /** @class */ (function (_super) {
         var _a;
         if (options === void 0) { options = {}; }
         return tslib.__awaiter(this, void 0, void 0, function () {
-            var _b, span, spanOptions, e_27;
+            var _b, span, spanOptions, e_28;
             return tslib.__generator(this, function (_c) {
                 switch (_c.label) {
                     case 0:
@@ -29870,12 +31020,12 @@ var BlockBlobClient = /** @class */ (function (_super) {
                             })];
                     case 2: return [2 /*return*/, _c.sent()];
                     case 3:
-                        e_27 = _c.sent();
+                        e_28 = _c.sent();
                         span.setStatus({
                             code: api.CanonicalCode.UNKNOWN,
-                            message: e_27.message
+                            message: e_28.message
                         });
-                        throw e_27;
+                        throw e_28;
                     case 4:
                         span.end();
                         return [7 /*endfinally*/];
@@ -29899,7 +31049,7 @@ var BlockBlobClient = /** @class */ (function (_super) {
         var _a;
         if (options === void 0) { options = {}; }
         return tslib.__awaiter(this, void 0, void 0, function () {
-            var _b, span, spanOptions, res, e_28;
+            var _b, span, spanOptions, res, e_29;
             return tslib.__generator(this, function (_c) {
                 switch (_c.label) {
                     case 0:
@@ -29923,54 +31073,7 @@ var BlockBlobClient = /** @class */ (function (_super) {
                         }
                         return [2 /*return*/, res];
                     case 3:
-                        e_28 = _c.sent();
-                        span.setStatus({
-                            code: api.CanonicalCode.UNKNOWN,
-                            message: e_28.message
-                        });
-                        throw e_28;
-                    case 4:
-                        span.end();
-                        return [7 /*endfinally*/];
-                    case 5: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    // High level functions
-    /**
-     * ONLY AVAILABLE IN BROWSERS.
-     *
-     * Uploads a browser Blob/File/ArrayBuffer/ArrayBufferView object to block blob.
-     *
-     * When buffer length <= 256MB, this method will use 1 upload call to finish the upload.
-     * Otherwise, this method will call {@link stageBlock} to upload blocks, and finally call
-     * {@link commitBlockList} to commit the block list.
-     *
-     * @export
-     * @param {Blob | ArrayBuffer | ArrayBufferView} browserData Blob, File, ArrayBuffer or ArrayBufferView
-     * @param {BlockBlobParallelUploadOptions} [options] Options to upload browser data.
-     * @returns {Promise<BlobUploadCommonResponse>} Response data for the Blob Upload operation.
-     * @memberof BlockBlobClient
-     */
-    BlockBlobClient.prototype.uploadBrowserData = function (browserData, options) {
-        if (options === void 0) { options = {}; }
-        return tslib.__awaiter(this, void 0, void 0, function () {
-            var _a, span, spanOptions, browserBlob_1, e_29;
-            return tslib.__generator(this, function (_b) {
-                switch (_b.label) {
-                    case 0:
-                        _a = createSpan("BlockBlobClient-uploadBrowserData", options.tracingOptions), span = _a.span, spanOptions = _a.spanOptions;
-                        _b.label = 1;
-                    case 1:
-                        _b.trys.push([1, 3, 4, 5]);
-                        browserBlob_1 = new Blob([browserData]);
-                        return [4 /*yield*/, this.uploadSeekableBlob(function (offset, size) {
-                                return browserBlob_1.slice(offset, offset + size);
-                            }, browserBlob_1.size, tslib.__assign(tslib.__assign({}, options), { tracingOptions: tslib.__assign(tslib.__assign({}, options.tracingOptions), { spanOptions: spanOptions }) }))];
-                    case 2: return [2 /*return*/, _b.sent()];
-                    case 3:
-                        e_29 = _b.sent();
+                        e_29 = _c.sent();
                         span.setStatus({
                             code: api.CanonicalCode.UNKNOWN,
                             message: e_29.message
@@ -29984,26 +31087,123 @@ var BlockBlobClient = /** @class */ (function (_super) {
             });
         });
     };
+    // High level functions
+    /**
+     * Uploads a Buffer(Node.js)/Blob(browsers)/ArrayBuffer/ArrayBufferView object to a BlockBlob.
+     *
+     * When data length is no more than the specifiled {@link BlockBlobParallelUploadOptions.maxSingleShotSize} (default is
+     * {@link BLOCK_BLOB_MAX_UPLOAD_BLOB_BYTES}), this method will use 1 {@link upload} call to finish the upload.
+     * Otherwise, this method will call {@link stageBlock} to upload blocks, and finally call {@link commitBlockList}
+     * to commit the block list.
+     *
+     * @export
+     * @param {Buffer | Blob | ArrayBuffer | ArrayBufferView} data Buffer(Node.js), Blob, ArrayBuffer or ArrayBufferView
+     * @param {BlockBlobParallelUploadOptions} [options]
+     * @returns {Promise<BlobUploadCommonResponse>}
+     * @memberof BlockBlobClient
+     */
+    BlockBlobClient.prototype.uploadData = function (data, options) {
+        if (options === void 0) { options = {}; }
+        return tslib.__awaiter(this, void 0, void 0, function () {
+            var _a, span, spanOptions, buffer_1, browserBlob_1;
+            return tslib.__generator(this, function (_b) {
+                _a = createSpan("BlockBlobClient-uploadData", options.tracingOptions), span = _a.span, spanOptions = _a.spanOptions;
+                try {
+                    if (true) {
+                        if (data instanceof Buffer) {
+                            buffer_1 = data;
+                        }
+                        else if (data instanceof ArrayBuffer) {
+                            buffer_1 = Buffer.from(data);
+                        }
+                        else {
+                            data = data;
+                            buffer_1 = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+                        }
+                        return [2 /*return*/, this.uploadSeekableInternal(function (offset, size) { return buffer_1.slice(offset, offset + size); }, buffer_1.byteLength, tslib.__assign(tslib.__assign({}, options), { tracingOptions: tslib.__assign(tslib.__assign({}, options.tracingOptions), { spanOptions: spanOptions }) }))];
+                    }
+                    else {}
+                }
+                catch (e) {
+                    span.setStatus({
+                        code: api.CanonicalCode.UNKNOWN,
+                        message: e.message
+                    });
+                    throw e;
+                }
+                finally {
+                    span.end();
+                }
+                return [2 /*return*/];
+            });
+        });
+    };
     /**
      * ONLY AVAILABLE IN BROWSERS.
      *
-     * Uploads a browser {@link Blob} object to block blob. Requires a blobFactory as the data source,
-     * which need to return a {@link Blob} object with the offset and size provided.
+     * Uploads a browser Blob/File/ArrayBuffer/ArrayBufferView object to block blob.
      *
      * When buffer length <= 256MB, this method will use 1 upload call to finish the upload.
-     * Otherwise, this method will call stageBlock to upload blocks, and finally call commitBlockList
+     * Otherwise, this method will call {@link stageBlock} to upload blocks, and finally call
+     * {@link commitBlockList} to commit the block list.
+     *
+     * @deprecated Use {@link uploadData} instead.
+     *
+     * @export
+     * @param {Blob | ArrayBuffer | ArrayBufferView} browserData Blob, File, ArrayBuffer or ArrayBufferView
+     * @param {BlockBlobParallelUploadOptions} [options] Options to upload browser data.
+     * @returns {Promise<BlobUploadCommonResponse>} Response data for the Blob Upload operation.
+     * @memberof BlockBlobClient
+     */
+    BlockBlobClient.prototype.uploadBrowserData = function (browserData, options) {
+        if (options === void 0) { options = {}; }
+        return tslib.__awaiter(this, void 0, void 0, function () {
+            var _a, span, spanOptions, browserBlob_2, e_30;
+            return tslib.__generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0:
+                        _a = createSpan("BlockBlobClient-uploadBrowserData", options.tracingOptions), span = _a.span, spanOptions = _a.spanOptions;
+                        _b.label = 1;
+                    case 1:
+                        _b.trys.push([1, 3, 4, 5]);
+                        browserBlob_2 = new Blob([browserData]);
+                        return [4 /*yield*/, this.uploadSeekableInternal(function (offset, size) { return browserBlob_2.slice(offset, offset + size); }, browserBlob_2.size, tslib.__assign(tslib.__assign({}, options), { tracingOptions: tslib.__assign(tslib.__assign({}, options.tracingOptions), { spanOptions: spanOptions }) }))];
+                    case 2: return [2 /*return*/, _b.sent()];
+                    case 3:
+                        e_30 = _b.sent();
+                        span.setStatus({
+                            code: api.CanonicalCode.UNKNOWN,
+                            message: e_30.message
+                        });
+                        throw e_30;
+                    case 4:
+                        span.end();
+                        return [7 /*endfinally*/];
+                    case 5: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     *
+     * Uploads data to block blob. Requires a bodyFactory as the data source,
+     * which need to return a {@link HttpRequestBody} object with the offset and size provided.
+     *
+     * When data length is no more than the specifiled {@link BlockBlobParallelUploadOptions.maxSingleShotSize} (default is
+     * {@link BLOCK_BLOB_MAX_UPLOAD_BLOB_BYTES}), this method will use 1 {@link upload} call to finish the upload.
+     * Otherwise, this method will call {@link stageBlock} to upload blocks, and finally call {@link commitBlockList}
      * to commit the block list.
      *
-     * @param {(offset: number, size: number) => Blob} blobFactory
+     * @param {(offset: number, size: number) => HttpRequestBody} bodyFactory
      * @param {number} size size of the data to upload.
      * @param {BlockBlobParallelUploadOptions} [options] Options to Upload to Block Blob operation.
      * @returns {Promise<BlobUploadCommonResponse>} Response data for the Blob Upload operation.
      * @memberof BlockBlobClient
      */
-    BlockBlobClient.prototype.uploadSeekableBlob = function (blobFactory, size, options) {
+    BlockBlobClient.prototype.uploadSeekableInternal = function (bodyFactory, size, options) {
         if (options === void 0) { options = {}; }
         return tslib.__awaiter(this, void 0, void 0, function () {
-            var _a, span, spanOptions, numBlocks_1, blockList_1, blockIDPrefix_1, transferProgress_2, batch, _loop_2, i, e_30;
+            var _a, span, spanOptions, numBlocks_1, blockList_1, blockIDPrefix_1, transferProgress_2, batch, _loop_2, i, e_31;
             var _this = this;
             return tslib.__generator(this, function (_b) {
                 switch (_b.label) {
@@ -30038,12 +31238,12 @@ var BlockBlobClient = /** @class */ (function (_super) {
                         if (!options.conditions) {
                             options.conditions = {};
                         }
-                        _a = createSpan("BlockBlobClient-UploadSeekableBlob", options.tracingOptions), span = _a.span, spanOptions = _a.spanOptions;
+                        _a = createSpan("BlockBlobClient-uploadSeekableInternal", options.tracingOptions), span = _a.span, spanOptions = _a.spanOptions;
                         _b.label = 1;
                     case 1:
                         _b.trys.push([1, 5, 6, 7]);
                         if (!(size <= options.maxSingleShotSize)) return [3 /*break*/, 3];
-                        return [4 /*yield*/, this.upload(blobFactory(0, size), size, tslib.__assign(tslib.__assign({}, options), { tracingOptions: tslib.__assign(tslib.__assign({}, options.tracingOptions), { spanOptions: spanOptions }) }))];
+                        return [4 /*yield*/, this.upload(bodyFactory(0, size), size, tslib.__assign(tslib.__assign({}, options), { tracingOptions: tslib.__assign(tslib.__assign({}, options.tracingOptions), { spanOptions: spanOptions }) }))];
                     case 2: return [2 /*return*/, _b.sent()];
                     case 3:
                         numBlocks_1 = Math.floor((size - 1) / options.blockSize) + 1;
@@ -30066,7 +31266,7 @@ var BlockBlobClient = /** @class */ (function (_super) {
                                             end = i === numBlocks_1 - 1 ? size : start + options.blockSize;
                                             contentLength = end - start;
                                             blockList_1.push(blockID);
-                                            return [4 /*yield*/, this.stageBlock(blockID, blobFactory(start, contentLength), contentLength, {
+                                            return [4 /*yield*/, this.stageBlock(blockID, bodyFactory(start, contentLength), contentLength, {
                                                     abortSignal: options.abortSignal,
                                                     conditions: options.conditions,
                                                     encryptionScope: options.encryptionScope,
@@ -30095,12 +31295,12 @@ var BlockBlobClient = /** @class */ (function (_super) {
                         _b.sent();
                         return [2 /*return*/, this.commitBlockList(blockList_1, tslib.__assign(tslib.__assign({}, options), { tracingOptions: tslib.__assign(tslib.__assign({}, options.tracingOptions), { spanOptions: spanOptions }) }))];
                     case 5:
-                        e_30 = _b.sent();
+                        e_31 = _b.sent();
                         span.setStatus({
                             code: api.CanonicalCode.UNKNOWN,
-                            message: e_30.message
+                            message: e_31.message
                         });
-                        throw e_30;
+                        throw e_31;
                     case 6:
                         span.end();
                         return [7 /*endfinally*/];
@@ -30126,7 +31326,7 @@ var BlockBlobClient = /** @class */ (function (_super) {
     BlockBlobClient.prototype.uploadFile = function (filePath, options) {
         if (options === void 0) { options = {}; }
         return tslib.__awaiter(this, void 0, void 0, function () {
-            var _a, span, spanOptions, size, e_31;
+            var _a, span, spanOptions, size, e_32;
             return tslib.__generator(this, function (_b) {
                 switch (_b.label) {
                     case 0:
@@ -30137,21 +31337,23 @@ var BlockBlobClient = /** @class */ (function (_super) {
                         return [4 /*yield*/, fsStat(filePath)];
                     case 2:
                         size = (_b.sent()).size;
-                        return [4 /*yield*/, this.uploadResetableStream(function (offset, count) {
-                                return fsCreateReadStream(filePath, {
-                                    autoClose: true,
-                                    end: count ? offset + count - 1 : Infinity,
-                                    start: offset
-                                });
+                        return [4 /*yield*/, this.uploadSeekableInternal(function (offset, count) {
+                                return function () {
+                                    return fsCreateReadStream(filePath, {
+                                        autoClose: true,
+                                        end: count ? offset + count - 1 : Infinity,
+                                        start: offset
+                                    });
+                                };
                             }, size, tslib.__assign(tslib.__assign({}, options), { tracingOptions: tslib.__assign(tslib.__assign({}, options.tracingOptions), { spanOptions: spanOptions }) }))];
                     case 3: return [2 /*return*/, _b.sent()];
                     case 4:
-                        e_31 = _b.sent();
+                        e_32 = _b.sent();
                         span.setStatus({
                             code: api.CanonicalCode.UNKNOWN,
-                            message: e_31.message
+                            message: e_32.message
                         });
-                        throw e_31;
+                        throw e_32;
                     case 5:
                         span.end();
                         return [7 /*endfinally*/];
@@ -30182,7 +31384,7 @@ var BlockBlobClient = /** @class */ (function (_super) {
         if (maxConcurrency === void 0) { maxConcurrency = 5; }
         if (options === void 0) { options = {}; }
         return tslib.__awaiter(this, void 0, void 0, function () {
-            var _a, span, spanOptions, blockNum_1, blockIDPrefix_2, transferProgress_3, blockList_2, scheduler, e_32;
+            var _a, span, spanOptions, blockNum_1, blockIDPrefix_2, transferProgress_3, blockList_2, scheduler, e_33;
             var _this = this;
             return tslib.__generator(this, function (_b) {
                 switch (_b.label) {
@@ -30236,142 +31438,16 @@ var BlockBlobClient = /** @class */ (function (_super) {
                         return [4 /*yield*/, this.commitBlockList(blockList_2, tslib.__assign(tslib.__assign({}, options), { tracingOptions: tslib.__assign(tslib.__assign({}, options.tracingOptions), { spanOptions: spanOptions }) }))];
                     case 3: return [2 /*return*/, _b.sent()];
                     case 4:
-                        e_32 = _b.sent();
-                        span.setStatus({
-                            code: api.CanonicalCode.UNKNOWN,
-                            message: e_32.message
-                        });
-                        throw e_32;
-                    case 5:
-                        span.end();
-                        return [7 /*endfinally*/];
-                    case 6: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    /**
-     * ONLY AVAILABLE IN NODE.JS RUNTIME.
-     *
-     * Accepts a Node.js Readable stream factory, and uploads in blocks to a block blob.
-     * The Readable stream factory must returns a Node.js Readable stream starting from the offset defined. The offset
-     * is the offset in the block blob to be uploaded.
-     *
-     * When buffer length <= 256MB, this method will use 1 upload call to finish the upload.
-     * Otherwise, this method will call {@link stageBlock} to upload blocks, and finally call {@link commitBlockList}
-     * to commit the block list.
-     *
-     * @export
-     * @param {(offset: number) => NodeJS.ReadableStream} streamFactory Returns a Node.js Readable stream starting
-     *                                                                  from the offset defined
-     * @param {number} size Size of the block blob
-     * @param {BlockBlobParallelUploadOptions} [options] Options to Upload to Block Blob operation.
-     * @returns {(Promise<BlobUploadCommonResponse>)}  Response data for the Blob Upload operation.
-     * @memberof BlockBlobClient
-     */
-    BlockBlobClient.prototype.uploadResetableStream = function (streamFactory, size, options) {
-        if (options === void 0) { options = {}; }
-        return tslib.__awaiter(this, void 0, void 0, function () {
-            var _a, span, spanOptions, numBlocks_2, blockList_3, blockIDPrefix_3, transferProgress_4, batch, _loop_3, i, e_33;
-            var _this = this;
-            return tslib.__generator(this, function (_b) {
-                switch (_b.label) {
-                    case 0:
-                        if (!options.blockSize) {
-                            options.blockSize = 0;
-                        }
-                        if (options.blockSize < 0 || options.blockSize > BLOCK_BLOB_MAX_STAGE_BLOCK_BYTES) {
-                            throw new RangeError("blockSize option must be >= 0 and <= " + BLOCK_BLOB_MAX_STAGE_BLOCK_BYTES);
-                        }
-                        if (options.maxSingleShotSize !== 0 && !options.maxSingleShotSize) {
-                            options.maxSingleShotSize = BLOCK_BLOB_MAX_UPLOAD_BLOB_BYTES;
-                        }
-                        if (options.maxSingleShotSize < 0 ||
-                            options.maxSingleShotSize > BLOCK_BLOB_MAX_UPLOAD_BLOB_BYTES) {
-                            throw new RangeError("maxSingleShotSize option must be >= 0 and <= " + BLOCK_BLOB_MAX_UPLOAD_BLOB_BYTES);
-                        }
-                        if (options.blockSize === 0) {
-                            if (size > BLOCK_BLOB_MAX_BLOCKS * BLOCK_BLOB_MAX_STAGE_BLOCK_BYTES) {
-                                throw new RangeError(size + " is too larger to upload to a block blob.");
-                            }
-                            if (size > options.maxSingleShotSize) {
-                                options.blockSize = Math.ceil(size / BLOCK_BLOB_MAX_BLOCKS);
-                                if (options.blockSize < DEFAULT_BLOB_DOWNLOAD_BLOCK_BYTES) {
-                                    options.blockSize = DEFAULT_BLOB_DOWNLOAD_BLOCK_BYTES;
-                                }
-                            }
-                        }
-                        if (!options.blobHTTPHeaders) {
-                            options.blobHTTPHeaders = {};
-                        }
-                        if (!options.conditions) {
-                            options.conditions = {};
-                        }
-                        _a = createSpan("BlockBlobClient-uploadResetableStream", options.tracingOptions), span = _a.span, spanOptions = _a.spanOptions;
-                        _b.label = 1;
-                    case 1:
-                        _b.trys.push([1, 6, 7, 8]);
-                        if (!(size <= options.maxSingleShotSize)) return [3 /*break*/, 3];
-                        return [4 /*yield*/, this.upload(function () { return streamFactory(0); }, size, tslib.__assign(tslib.__assign({}, options), { tracingOptions: tslib.__assign(tslib.__assign({}, options.tracingOptions), { spanOptions: spanOptions }) }))];
-                    case 2: return [2 /*return*/, _b.sent()];
-                    case 3:
-                        numBlocks_2 = Math.floor((size - 1) / options.blockSize) + 1;
-                        if (numBlocks_2 > BLOCK_BLOB_MAX_BLOCKS) {
-                            throw new RangeError("The buffer's size is too big or the BlockSize is too small;" +
-                                ("the number of blocks must be <= " + BLOCK_BLOB_MAX_BLOCKS));
-                        }
-                        blockList_3 = [];
-                        blockIDPrefix_3 = coreHttp.generateUuid();
-                        transferProgress_4 = 0;
-                        batch = new Batch(options.concurrency);
-                        _loop_3 = function (i) {
-                            batch.addOperation(function () { return tslib.__awaiter(_this, void 0, void 0, function () {
-                                var blockID, start, end, contentLength;
-                                return tslib.__generator(this, function (_a) {
-                                    switch (_a.label) {
-                                        case 0:
-                                            blockID = generateBlockID(blockIDPrefix_3, i);
-                                            start = options.blockSize * i;
-                                            end = i === numBlocks_2 - 1 ? size : start + options.blockSize;
-                                            contentLength = end - start;
-                                            blockList_3.push(blockID);
-                                            return [4 /*yield*/, this.stageBlock(blockID, function () { return streamFactory(start, contentLength); }, contentLength, {
-                                                    abortSignal: options.abortSignal,
-                                                    conditions: options.conditions,
-                                                    encryptionScope: options.encryptionScope,
-                                                    tracingOptions: tslib.__assign(tslib.__assign({}, options.tracingOptions), { spanOptions: spanOptions })
-                                                })];
-                                        case 1:
-                                            _a.sent();
-                                            // Update progress after block is successfully uploaded to server, in case of block trying
-                                            transferProgress_4 += contentLength;
-                                            if (options.onProgress) {
-                                                options.onProgress({ loadedBytes: transferProgress_4 });
-                                            }
-                                            return [2 /*return*/];
-                                    }
-                                });
-                            }); });
-                        };
-                        for (i = 0; i < numBlocks_2; i++) {
-                            _loop_3(i);
-                        }
-                        return [4 /*yield*/, batch.do()];
-                    case 4:
-                        _b.sent();
-                        return [4 /*yield*/, this.commitBlockList(blockList_3, tslib.__assign(tslib.__assign({}, options), { tracingOptions: tslib.__assign(tslib.__assign({}, options.tracingOptions), { spanOptions: spanOptions }) }))];
-                    case 5: return [2 /*return*/, _b.sent()];
-                    case 6:
                         e_33 = _b.sent();
                         span.setStatus({
                             code: api.CanonicalCode.UNKNOWN,
                             message: e_33.message
                         });
                         throw e_33;
-                    case 7:
+                    case 5:
                         span.end();
                         return [7 /*endfinally*/];
-                    case 8: return [2 /*return*/];
+                    case 6: return [2 /*return*/];
                 }
             });
         });
@@ -32520,7 +33596,7 @@ var ContainerClient = /** @class */ (function (_super) {
      *   }
      *   entity = await iter.next();
      * }
-     * ```js
+     * ```
      *
      * Example using `byPage()`:
      *
@@ -32565,8 +33641,7 @@ var ContainerClient = /** @class */ (function (_super) {
      * @param {ContainerListBlobsOptions} [options={}] Options to list blobs operation.
      * @returns {(PagedAsyncIterableIterator<
      *   { kind: "prefix" } & BlobPrefix | { kind: "blob" } & BlobItem,
-     *     ContainerListBlobHierarchySegmentResponse
-     *   >)}
+     *     ContainerListBlobHierarchySegmentResponse>)}
      * @memberof ContainerClient
      */
     ContainerClient.prototype.listBlobsByHierarchy = function (delimiter, options) {
@@ -32668,6 +33743,28 @@ var ContainerClient = /** @class */ (function (_super) {
             throw new Error("Unable to extract containerName with provided information.");
         }
     };
+    /**
+     * Only available for ContainerClient constructed with a shared key credential.
+     *
+     * Generates a Blob Container Service Shared Access Signature (SAS) URI based on the client properties
+     * and parameters passed in. The SAS is signed by the shared key credential of the client.
+     *
+     * @see https://docs.microsoft.com/en-us/rest/api/storageservices/constructing-a-service-sas
+     *
+     * @param {ContainerGenerateSasUrlOptions} options Optional parameters.
+     * @returns {Promise<string>} The SAS URI consisting of the URI to the resource represented by this client, followed by the generated SAS token.
+     * @memberof ContainerClient
+     */
+    ContainerClient.prototype.generateSasUrl = function (options) {
+        var _this = this;
+        return new Promise(function (resolve) {
+            if (!(_this.credential instanceof StorageSharedKeyCredential)) {
+                throw new RangeError("Can only generate the SAS when the client is initialized with a shared key credential");
+            }
+            var sas = generateBlobSASQueryParameters(tslib.__assign({ containerName: _this._containerName }, options), _this.credential).toString();
+            resolve(appendToURLQuery(_this.url, sas));
+        });
+    };
     return ContainerClient;
 }(StorageClient));
 
@@ -32747,8 +33844,7 @@ var BatchResponseParser = /** @class */ (function () {
                         // Parse sub subResponses.
                         for (index = 0; index < subResponseCount; index++) {
                             subResponse = subResponses[index];
-                            deserializedSubResponses[index] = {};
-                            deserializedSubResponse = deserializedSubResponses[index];
+                            deserializedSubResponse = {};
                             deserializedSubResponse.headers = new coreHttp.HttpHeaders();
                             responseLines = subResponse.split("" + HTTP_LINE_ENDING);
                             subRespHeaderStartFound = false;
@@ -32800,8 +33896,20 @@ var BatchResponseParser = /** @class */ (function () {
                                     deserializedSubResponse.bodyAsText += responseLine;
                                 }
                             } // Inner for end
-                            if (contentId != NOT_FOUND) {
+                            // The response will contain the Content-ID header for each corresponding subrequest response to use for tracking.
+                            // The Content-IDs are set to a valid index in the subrequests we sent. In the status code 202 path, we could expect it
+                            // to be 1-1 mapping from the [0, subRequests.size) to the Content-IDs returned. If not, we simply don't return that
+                            // unexpected subResponse in the parsed reponse and we can always look it up in the raw response for debugging purpose.
+                            if (contentId != NOT_FOUND &&
+                                Number.isInteger(contentId) &&
+                                contentId >= 0 &&
+                                contentId < this.subRequests.size &&
+                                deserializedSubResponses[contentId] === undefined) {
                                 deserializedSubResponse._request = this.subRequests.get(contentId);
+                                deserializedSubResponses[contentId] = deserializedSubResponse;
+                            }
+                            else {
+                                logger.error("subResponses[" + index + "] is dropped as the Content-ID is not found or invalid, Content-ID: " + contentId);
                             }
                             if (subRespFailed) {
                                 subResponsesFailedCount++;
@@ -33139,7 +34247,7 @@ var InnerBatchRequest = /** @class */ (function () {
         factories[1] = new BatchHeaderFilterPolicyFactory(); // Use batch header filter policy to exclude unnecessary headers
         if (!isAnonymousCreds) {
             factories[2] = coreHttp.isTokenCredential(credential)
-                ? coreHttp.bearerTokenAuthenticationPolicy(credential, StorageOAuthScopes)
+                ? attachCredential(coreHttp.bearerTokenAuthenticationPolicy(credential, StorageOAuthScopes), credential)
                 : credential;
         }
         factories[policyFactoryLength - 1] = new BatchRequestAssemblePolicyFactory(this); // Use batch assemble policy to assemble request and intercept request from going to wire
@@ -33432,911 +34540,6 @@ var BlobBatchClient = /** @class */ (function () {
     return BlobBatchClient;
 }());
 
-/**
- * A BlobServiceClient represents a Client to the Azure Storage Blob service allowing you
- * to manipulate blob containers.
- *
- * @export
- * @class BlobServiceClient
- */
-var BlobServiceClient = /** @class */ (function (_super) {
-    tslib.__extends(BlobServiceClient, _super);
-    function BlobServiceClient(url, credentialOrPipeline, options) {
-        var _this = this;
-        var pipeline;
-        if (credentialOrPipeline instanceof Pipeline) {
-            pipeline = credentialOrPipeline;
-        }
-        else if ((coreHttp.isNode && credentialOrPipeline instanceof StorageSharedKeyCredential) ||
-            credentialOrPipeline instanceof AnonymousCredential ||
-            coreHttp.isTokenCredential(credentialOrPipeline)) {
-            pipeline = newPipeline(credentialOrPipeline, options);
-        }
-        else {
-            // The second parameter is undefined. Use anonymous credential
-            pipeline = newPipeline(new AnonymousCredential(), options);
-        }
-        _this = _super.call(this, url, pipeline) || this;
-        _this.serviceContext = new Service(_this.storageClientContext);
-        return _this;
-    }
-    /**
-     *
-     * Creates an instance of BlobServiceClient from connection string.
-     *
-     * @param {string} connectionString Account connection string or a SAS connection string of an Azure storage account.
-     *                                  [ Note - Account connection string can only be used in NODE.JS runtime. ]
-     *                                  Account connection string example -
-     *                                  `DefaultEndpointsProtocol=https;AccountName=myaccount;AccountKey=accountKey;EndpointSuffix=core.windows.net`
-     *                                  SAS connection string example -
-     *                                  `BlobEndpoint=https://myaccount.blob.core.windows.net/;QueueEndpoint=https://myaccount.queue.core.windows.net/;FileEndpoint=https://myaccount.file.core.windows.net/;TableEndpoint=https://myaccount.table.core.windows.net/;SharedAccessSignature=sasString`
-     * @param {StoragePipelineOptions} [options] Optional. Options to configure the HTTP pipeline.
-     * @memberof BlobServiceClient
-     */
-    BlobServiceClient.fromConnectionString = function (connectionString, options) {
-        options = options || {};
-        var extractedCreds = extractConnectionStringParts(connectionString);
-        if (extractedCreds.kind === "AccountConnString") {
-            {
-                var sharedKeyCredential = new StorageSharedKeyCredential(extractedCreds.accountName, extractedCreds.accountKey);
-                options.proxyOptions = coreHttp.getDefaultProxySettings(extractedCreds.proxyUri);
-                var pipeline = newPipeline(sharedKeyCredential, options);
-                return new BlobServiceClient(extractedCreds.url, pipeline);
-            }
-        }
-        else if (extractedCreds.kind === "SASConnString") {
-            var pipeline = newPipeline(new AnonymousCredential(), options);
-            return new BlobServiceClient(extractedCreds.url + "?" + extractedCreds.accountSas, pipeline);
-        }
-        else {
-            throw new Error("Connection string must be either an Account connection string or a SAS connection string");
-        }
-    };
-    /**
-     * Creates a {@link ContainerClient} object
-     *
-     * @param {string} containerName A container name
-     * @returns {ContainerClient} A new ContainerClient object for the given container name.
-     * @memberof BlobServiceClient
-     *
-     * Example usage:
-     *
-     * ```js
-     * const containerClient = blobServiceClient.getContainerClient("<container name>");
-     * ```
-     */
-    BlobServiceClient.prototype.getContainerClient = function (containerName) {
-        return new ContainerClient(appendToURLPath(this.url, encodeURIComponent(containerName)), this.pipeline);
-    };
-    /**
-     * Create a Blob container.
-     *
-     * @param {string} containerName Name of the container to create.
-     * @param {ContainerCreateOptions} [options] Options to configure Container Create operation.
-     * @returns {Promise<{ containerClient: ContainerClient; containerCreateResponse: ContainerCreateResponse }>} Container creation response and the corresponding container client.
-     * @memberof BlobServiceClient
-     */
-    BlobServiceClient.prototype.createContainer = function (containerName, options) {
-        if (options === void 0) { options = {}; }
-        return tslib.__awaiter(this, void 0, void 0, function () {
-            var _a, span, spanOptions, containerClient, containerCreateResponse, e_1;
-            return tslib.__generator(this, function (_b) {
-                switch (_b.label) {
-                    case 0:
-                        _a = createSpan("BlobServiceClient-createContainer", options.tracingOptions), span = _a.span, spanOptions = _a.spanOptions;
-                        _b.label = 1;
-                    case 1:
-                        _b.trys.push([1, 3, 4, 5]);
-                        containerClient = this.getContainerClient(containerName);
-                        return [4 /*yield*/, containerClient.create(tslib.__assign(tslib.__assign({}, options), { tracingOptions: tslib.__assign(tslib.__assign({}, options.tracingOptions), { spanOptions: spanOptions }) }))];
-                    case 2:
-                        containerCreateResponse = _b.sent();
-                        return [2 /*return*/, {
-                                containerClient: containerClient,
-                                containerCreateResponse: containerCreateResponse
-                            }];
-                    case 3:
-                        e_1 = _b.sent();
-                        span.setStatus({
-                            code: api.CanonicalCode.UNKNOWN,
-                            message: e_1.message
-                        });
-                        throw e_1;
-                    case 4:
-                        span.end();
-                        return [7 /*endfinally*/];
-                    case 5: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    /**
-     * Deletes a Blob container.
-     *
-     * @param {string} containerName Name of the container to delete.
-     * @param {ContainerDeleteMethodOptions} [options] Options to configure Container Delete operation.
-     * @returns {Promise<ContainerDeleteResponse>} Container deletion response.
-     * @memberof BlobServiceClient
-     */
-    BlobServiceClient.prototype.deleteContainer = function (containerName, options) {
-        if (options === void 0) { options = {}; }
-        return tslib.__awaiter(this, void 0, void 0, function () {
-            var _a, span, spanOptions, containerClient, e_2;
-            return tslib.__generator(this, function (_b) {
-                switch (_b.label) {
-                    case 0:
-                        _a = createSpan("BlobServiceClient-deleteContainer", options.tracingOptions), span = _a.span, spanOptions = _a.spanOptions;
-                        _b.label = 1;
-                    case 1:
-                        _b.trys.push([1, 3, 4, 5]);
-                        containerClient = this.getContainerClient(containerName);
-                        return [4 /*yield*/, containerClient.delete(tslib.__assign(tslib.__assign({}, options), { tracingOptions: tslib.__assign(tslib.__assign({}, options.tracingOptions), { spanOptions: spanOptions }) }))];
-                    case 2: return [2 /*return*/, _b.sent()];
-                    case 3:
-                        e_2 = _b.sent();
-                        span.setStatus({
-                            code: api.CanonicalCode.UNKNOWN,
-                            message: e_2.message
-                        });
-                        throw e_2;
-                    case 4:
-                        span.end();
-                        return [7 /*endfinally*/];
-                    case 5: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    /**
-     * Gets the properties of a storage account’s Blob service, including properties
-     * for Storage Analytics and CORS (Cross-Origin Resource Sharing) rules.
-     * @see https://docs.microsoft.com/en-us/rest/api/storageservices/get-blob-service-properties
-     *
-     * @param {ServiceGetPropertiesOptions} [options] Options to the Service Get Properties operation.
-     * @returns {Promise<ServiceGetPropertiesResponse>} Response data for the Service Get Properties operation.
-     * @memberof BlobServiceClient
-     */
-    BlobServiceClient.prototype.getProperties = function (options) {
-        if (options === void 0) { options = {}; }
-        return tslib.__awaiter(this, void 0, void 0, function () {
-            var _a, span, spanOptions, e_3;
-            return tslib.__generator(this, function (_b) {
-                switch (_b.label) {
-                    case 0:
-                        _a = createSpan("BlobServiceClient-getProperties", options.tracingOptions), span = _a.span, spanOptions = _a.spanOptions;
-                        _b.label = 1;
-                    case 1:
-                        _b.trys.push([1, 3, 4, 5]);
-                        return [4 /*yield*/, this.serviceContext.getProperties({
-                                abortSignal: options.abortSignal,
-                                spanOptions: spanOptions
-                            })];
-                    case 2: return [2 /*return*/, _b.sent()];
-                    case 3:
-                        e_3 = _b.sent();
-                        span.setStatus({
-                            code: api.CanonicalCode.UNKNOWN,
-                            message: e_3.message
-                        });
-                        throw e_3;
-                    case 4:
-                        span.end();
-                        return [7 /*endfinally*/];
-                    case 5: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    /**
-     * Sets properties for a storage account’s Blob service endpoint, including properties
-     * for Storage Analytics, CORS (Cross-Origin Resource Sharing) rules and soft delete settings.
-     * @see https://docs.microsoft.com/en-us/rest/api/storageservices/set-blob-service-properties}
-     *
-     * @param {BlobServiceProperties} properties
-     * @param {ServiceSetPropertiesOptions} [options] Options to the Service Set Properties operation.
-     * @returns {Promise<ServiceSetPropertiesResponse>} Response data for the Service Set Properties operation.
-     * @memberof BlobServiceClient
-     */
-    BlobServiceClient.prototype.setProperties = function (properties, options) {
-        if (options === void 0) { options = {}; }
-        return tslib.__awaiter(this, void 0, void 0, function () {
-            var _a, span, spanOptions, e_4;
-            return tslib.__generator(this, function (_b) {
-                switch (_b.label) {
-                    case 0:
-                        _a = createSpan("BlobServiceClient-setProperties", options.tracingOptions), span = _a.span, spanOptions = _a.spanOptions;
-                        _b.label = 1;
-                    case 1:
-                        _b.trys.push([1, 3, 4, 5]);
-                        return [4 /*yield*/, this.serviceContext.setProperties(properties, {
-                                abortSignal: options.abortSignal,
-                                spanOptions: spanOptions
-                            })];
-                    case 2: return [2 /*return*/, _b.sent()];
-                    case 3:
-                        e_4 = _b.sent();
-                        span.setStatus({
-                            code: api.CanonicalCode.UNKNOWN,
-                            message: e_4.message
-                        });
-                        throw e_4;
-                    case 4:
-                        span.end();
-                        return [7 /*endfinally*/];
-                    case 5: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    /**
-     * Retrieves statistics related to replication for the Blob service. It is only
-     * available on the secondary location endpoint when read-access geo-redundant
-     * replication is enabled for the storage account.
-     * @see https://docs.microsoft.com/en-us/rest/api/storageservices/get-blob-service-stats}
-     *
-     * @param {ServiceGetStatisticsOptions} [options] Options to the Service Get Statistics operation.
-     * @returns {Promise<ServiceGetStatisticsResponse>} Response data for the Service Get Statistics operation.
-     * @memberof BlobServiceClient
-     */
-    BlobServiceClient.prototype.getStatistics = function (options) {
-        if (options === void 0) { options = {}; }
-        return tslib.__awaiter(this, void 0, void 0, function () {
-            var _a, span, spanOptions, e_5;
-            return tslib.__generator(this, function (_b) {
-                switch (_b.label) {
-                    case 0:
-                        _a = createSpan("BlobServiceClient-getStatistics", options.tracingOptions), span = _a.span, spanOptions = _a.spanOptions;
-                        _b.label = 1;
-                    case 1:
-                        _b.trys.push([1, 3, 4, 5]);
-                        return [4 /*yield*/, this.serviceContext.getStatistics({
-                                abortSignal: options.abortSignal,
-                                spanOptions: spanOptions
-                            })];
-                    case 2: return [2 /*return*/, _b.sent()];
-                    case 3:
-                        e_5 = _b.sent();
-                        span.setStatus({
-                            code: api.CanonicalCode.UNKNOWN,
-                            message: e_5.message
-                        });
-                        throw e_5;
-                    case 4:
-                        span.end();
-                        return [7 /*endfinally*/];
-                    case 5: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    /**
-     * The Get Account Information operation returns the sku name and account kind
-     * for the specified account.
-     * The Get Account Information operation is available on service versions beginning
-     * with version 2018-03-28.
-     * @see https://docs.microsoft.com/en-us/rest/api/storageservices/get-account-information
-     *
-     * @param {ServiceGetAccountInfoOptions} [options] Options to the Service Get Account Info operation.
-     * @returns {Promise<ServiceGetAccountInfoResponse>} Response data for the Service Get Account Info operation.
-     * @memberof BlobServiceClient
-     */
-    BlobServiceClient.prototype.getAccountInfo = function (options) {
-        if (options === void 0) { options = {}; }
-        return tslib.__awaiter(this, void 0, void 0, function () {
-            var _a, span, spanOptions, e_6;
-            return tslib.__generator(this, function (_b) {
-                switch (_b.label) {
-                    case 0:
-                        _a = createSpan("BlobServiceClient-getAccountInfo", options.tracingOptions), span = _a.span, spanOptions = _a.spanOptions;
-                        _b.label = 1;
-                    case 1:
-                        _b.trys.push([1, 3, 4, 5]);
-                        return [4 /*yield*/, this.serviceContext.getAccountInfo({
-                                abortSignal: options.abortSignal,
-                                spanOptions: spanOptions
-                            })];
-                    case 2: return [2 /*return*/, _b.sent()];
-                    case 3:
-                        e_6 = _b.sent();
-                        span.setStatus({
-                            code: api.CanonicalCode.UNKNOWN,
-                            message: e_6.message
-                        });
-                        throw e_6;
-                    case 4:
-                        span.end();
-                        return [7 /*endfinally*/];
-                    case 5: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    /**
-     * Returns a list of the containers under the specified account.
-     * @see https://docs.microsoft.com/en-us/rest/api/storageservices/list-containers2
-     *
-     * @param {string} [marker] A string value that identifies the portion of
-     *                        the list of containers to be returned with the next listing operation. The
-     *                        operation returns the NextMarker value within the response body if the
-     *                        listing operation did not return all containers remaining to be listed
-     *                        with the current page. The NextMarker value can be used as the value for
-     *                        the marker parameter in a subsequent call to request the next page of list
-     *                        items. The marker value is opaque to the client.
-     * @param {ServiceListContainersSegmentOptions} [options] Options to the Service List Container Segment operation.
-     * @returns {Promise<ServiceListContainersSegmentResponse>} Response data for the Service List Container Segment operation.
-     * @memberof BlobServiceClient
-     */
-    BlobServiceClient.prototype.listContainersSegment = function (marker, options) {
-        if (options === void 0) { options = {}; }
-        return tslib.__awaiter(this, void 0, void 0, function () {
-            var _a, span, spanOptions, e_7;
-            return tslib.__generator(this, function (_b) {
-                switch (_b.label) {
-                    case 0:
-                        _a = createSpan("BlobServiceClient-listContainersSegment", options.tracingOptions), span = _a.span, spanOptions = _a.spanOptions;
-                        _b.label = 1;
-                    case 1:
-                        _b.trys.push([1, 3, 4, 5]);
-                        return [4 /*yield*/, this.serviceContext.listContainersSegment(tslib.__assign(tslib.__assign({ abortSignal: options.abortSignal, marker: marker }, options), { include: typeof options.include === "string" ? [options.include] : options.include, spanOptions: spanOptions }))];
-                    case 2: return [2 /*return*/, _b.sent()];
-                    case 3:
-                        e_7 = _b.sent();
-                        span.setStatus({
-                            code: api.CanonicalCode.UNKNOWN,
-                            message: e_7.message
-                        });
-                        throw e_7;
-                    case 4:
-                        span.end();
-                        return [7 /*endfinally*/];
-                    case 5: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    /**
-     * The Filter Blobs operation enables callers to list blobs across all containers whose tags
-     * match a given search expression. Filter blobs searches across all containers within a
-     * storage account but can be scoped within the expression to a single container.
-     *
-     * @private
-     * @param {string} tagFilterSqlExpression The where parameter enables the caller to query blobs whose tags match a given expression.
-     *                                        The given expression must evaluate to true for a blob to be returned in the results.
-     *                                        The[OData - ABNF] filter syntax rule defines the formal grammar for the value of the where query parameter;
-     *                                        however, only a subset of the OData filter syntax is supported in the Blob service.
-     * @param {string} [marker] A string value that identifies the portion of
-     *                          the list of blobs to be returned with the next listing operation. The
-     *                          operation returns the NextMarker value within the response body if the
-     *                          listing operation did not return all blobs remaining to be listed
-     *                          with the current page. The NextMarker value can be used as the value for
-     *                          the marker parameter in a subsequent call to request the next page of list
-     *                          items. The marker value is opaque to the client.
-     * @param {ServiceFindBlobsByTagsSegmentOptions} [options={}] Options to find blobs by tags.
-     * @returns {Promise<ServiceFindBlobsByTagsSegmentResponse>}
-     * @memberof BlobServiceClient
-     */
-    BlobServiceClient.prototype.findBlobsByTagsSegment = function (tagFilterSqlExpression, marker, options) {
-        if (options === void 0) { options = {}; }
-        return tslib.__awaiter(this, void 0, void 0, function () {
-            var _a, span, spanOptions, e_8;
-            return tslib.__generator(this, function (_b) {
-                switch (_b.label) {
-                    case 0:
-                        _a = createSpan("BlobServiceClient-findBlobsByTagsSegment", options.tracingOptions), span = _a.span, spanOptions = _a.spanOptions;
-                        _b.label = 1;
-                    case 1:
-                        _b.trys.push([1, 3, 4, 5]);
-                        return [4 /*yield*/, this.serviceContext.filterBlobs({
-                                abortSignal: options.abortSignal,
-                                where: tagFilterSqlExpression,
-                                marker: marker,
-                                maxPageSize: options.maxPageSize,
-                                spanOptions: spanOptions
-                            })];
-                    case 2: return [2 /*return*/, _b.sent()];
-                    case 3:
-                        e_8 = _b.sent();
-                        span.setStatus({
-                            code: api.CanonicalCode.UNKNOWN,
-                            message: e_8.message
-                        });
-                        throw e_8;
-                    case 4:
-                        span.end();
-                        return [7 /*endfinally*/];
-                    case 5: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    /**
-     * Returns an AsyncIterableIterator for ServiceFindBlobsByTagsSegmentResponse.
-     *
-     * @private
-     * @param {string} tagFilterSqlExpression  The where parameter enables the caller to query blobs whose tags match a given expression.
-     *                                         The given expression must evaluate to true for a blob to be returned in the results.
-     *                                         The[OData - ABNF] filter syntax rule defines the formal grammar for the value of the where query parameter;
-     *                                         however, only a subset of the OData filter syntax is supported in the Blob service.
-     * @param {string} [marker] A string value that identifies the portion of
-     *                          the list of blobs to be returned with the next listing operation. The
-     *                          operation returns the NextMarker value within the response body if the
-     *                          listing operation did not return all blobs remaining to be listed
-     *                          with the current page. The NextMarker value can be used as the value for
-     *                          the marker parameter in a subsequent call to request the next page of list
-     *                          items. The marker value is opaque to the client.
-     * @param {ServiceFindBlobsByTagsSegmentOptions} [options={}] Options to find blobs by tags.
-     * @returns {AsyncIterableIterator<ServiceFindBlobsByTagsSegmentResponse>}
-     * @memberof BlobServiceClient
-     */
-    BlobServiceClient.prototype.findBlobsByTagsSegments = function (tagFilterSqlExpression, marker, options) {
-        if (options === void 0) { options = {}; }
-        return tslib.__asyncGenerator(this, arguments, function findBlobsByTagsSegments_1() {
-            var response;
-            return tslib.__generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        if (!(!!marker || marker === undefined)) return [3 /*break*/, 6];
-                        _a.label = 1;
-                    case 1: return [4 /*yield*/, tslib.__await(this.findBlobsByTagsSegment(tagFilterSqlExpression, marker, options))];
-                    case 2:
-                        response = _a.sent();
-                        response.blobs = response.blobs || [];
-                        marker = response.continuationToken;
-                        return [4 /*yield*/, tslib.__await(response)];
-                    case 3: return [4 /*yield*/, _a.sent()];
-                    case 4:
-                        _a.sent();
-                        _a.label = 5;
-                    case 5:
-                        if (marker) return [3 /*break*/, 1];
-                        _a.label = 6;
-                    case 6: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    /**
-     * Returns an AsyncIterableIterator for blobs.
-     *
-     * @private
-     * @param {string} tagFilterSqlExpression  The where parameter enables the caller to query blobs whose tags match a given expression.
-     *                                         The given expression must evaluate to true for a blob to be returned in the results.
-     *                                         The[OData - ABNF] filter syntax rule defines the formal grammar for the value of the where query parameter;
-     *                                         however, only a subset of the OData filter syntax is supported in the Blob service.
-     * @param {ServiceFindBlobsByTagsSegmentOptions} [options={}] Options to findBlobsByTagsItems.
-     * @returns {AsyncIterableIterator<FilterBlobItem>}
-     * @memberof BlobServiceClient
-     */
-    BlobServiceClient.prototype.findBlobsByTagsItems = function (tagFilterSqlExpression, options) {
-        if (options === void 0) { options = {}; }
-        return tslib.__asyncGenerator(this, arguments, function findBlobsByTagsItems_1() {
-            var marker, _a, _b, segment, e_9_1;
-            var e_9, _c;
-            return tslib.__generator(this, function (_d) {
-                switch (_d.label) {
-                    case 0:
-                        _d.trys.push([0, 7, 8, 13]);
-                        _a = tslib.__asyncValues(this.findBlobsByTagsSegments(tagFilterSqlExpression, marker, options));
-                        _d.label = 1;
-                    case 1: return [4 /*yield*/, tslib.__await(_a.next())];
-                    case 2:
-                        if (!(_b = _d.sent(), !_b.done)) return [3 /*break*/, 6];
-                        segment = _b.value;
-                        return [5 /*yield**/, tslib.__values(tslib.__asyncDelegator(tslib.__asyncValues(segment.blobs)))];
-                    case 3: return [4 /*yield*/, tslib.__await.apply(void 0, [_d.sent()])];
-                    case 4:
-                        _d.sent();
-                        _d.label = 5;
-                    case 5: return [3 /*break*/, 1];
-                    case 6: return [3 /*break*/, 13];
-                    case 7:
-                        e_9_1 = _d.sent();
-                        e_9 = { error: e_9_1 };
-                        return [3 /*break*/, 13];
-                    case 8:
-                        _d.trys.push([8, , 11, 12]);
-                        if (!(_b && !_b.done && (_c = _a.return))) return [3 /*break*/, 10];
-                        return [4 /*yield*/, tslib.__await(_c.call(_a))];
-                    case 9:
-                        _d.sent();
-                        _d.label = 10;
-                    case 10: return [3 /*break*/, 12];
-                    case 11:
-                        if (e_9) throw e_9.error;
-                        return [7 /*endfinally*/];
-                    case 12: return [7 /*endfinally*/];
-                    case 13: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    /**
-     * Returns an async iterable iterator to find all blobs with specified tag
-     * under the specified account.
-     *
-     * .byPage() returns an async iterable iterator to list the blobs in pages.
-     *
-     * @see https://docs.microsoft.com/en-us/rest/api/storageservices/get-blob-service-properties
-     *
-     * Example using `for await` syntax:
-     *
-     * ```js
-     * let i = 1;
-     * for await (const blob of blobServiceClient.findBlobsByTags("tagkey='tagvalue'")) {
-     *   console.log(`Blob ${i++}: ${container.name}`);
-     * }
-     * ```
-     *
-     * Example using `iter.next()`:
-     *
-     * ```js
-     * let i = 1;
-     * const iter = blobServiceClient.findBlobsByTags("tagkey='tagvalue'");
-     * let blobItem = await iter.next();
-     * while (!blobItem.done) {
-     *   console.log(`Blob ${i++}: ${blobItem.value.name}`);
-     *   blobItem = await iter.next();
-     * }
-     * ```
-     *
-     * Example using `byPage()`:
-     *
-     * ```js
-     * // passing optional maxPageSize in the page settings
-     * let i = 1;
-     * for await (const response of blobServiceClient.findBlobsByTags("tagkey='tagvalue'").byPage({ maxPageSize: 20 })) {
-     *   if (response.blobs) {
-     *     for (const blob of response.blobs) {
-     *       console.log(`Blob ${i++}: ${blob.name}`);
-     *     }
-     *   }
-     * }
-     * ```
-     *
-     * Example using paging with a marker:
-     *
-     * ```js
-     * let i = 1;
-     * let iterator = blobServiceClient.findBlobsByTags("tagkey='tagvalue'").byPage({ maxPageSize: 2 });
-     * let response = (await iterator.next()).value;
-     *
-     * // Prints 2 blob names
-     * if (response.blobs) {
-     *   for (const blob of response.blobs) {
-     *     console.log(`Blob ${i++}: ${blob.name}`);
-     *   }
-     * }
-     *
-     * // Gets next marker
-     * let marker = response.continuationToken;
-     * // Passing next marker as continuationToken
-     * iterator = blobServiceClient
-     *   .findBlobsByTags("tagkey='tagvalue'")
-     *   .byPage({ continuationToken: marker, maxPageSize: 10 });
-     * response = (await iterator.next()).value;
-     *
-     * // Prints blob names
-     * if (response.blobs) {
-     *   for (const blob of response.blobs) {
-     *      console.log(`Blob ${i++}: ${blob.name}`);
-     *   }
-     * }
-     * ```
-     *
-     * @param {string} tagFilterSqlExpression  The where parameter enables the caller to query blobs whose tags match a given expression.
-     *                                         The given expression must evaluate to true for a blob to be returned in the results.
-     *                                         The[OData - ABNF] filter syntax rule defines the formal grammar for the value of the where query parameter;
-     *                                         however, only a subset of the OData filter syntax is supported in the Blob service.
-     * @param {ServiceFindBlobByTagsOptions} [options={}] Options to find blobs by tags.
-     * @returns {PagedAsyncIterableIterator<FilterBlobItem, ServiceFindBlobsByTagsSegmentResponse>}
-     * @memberof BlobServiceClient
-     */
-    BlobServiceClient.prototype.findBlobsByTags = function (tagFilterSqlExpression, options) {
-        var _a;
-        var _this = this;
-        if (options === void 0) { options = {}; }
-        // AsyncIterableIterator to iterate over blobs
-        var listSegmentOptions = tslib.__assign({}, options);
-        var iter = this.findBlobsByTagsItems(tagFilterSqlExpression, listSegmentOptions);
-        return _a = {
-                /**
-                 * @member {Promise} [next] The next method, part of the iteration protocol
-                 */
-                next: function () {
-                    return iter.next();
-                }
-            },
-            /**
-             * @member {Symbol} [asyncIterator] The connection to the async iterator, part of the iteration protocol
-             */
-            _a[Symbol.asyncIterator] = function () {
-                return this;
-            },
-            /**
-             * @member {Function} [byPage] Return an AsyncIterableIterator that works a page at a time
-             */
-            _a.byPage = function (settings) {
-                if (settings === void 0) { settings = {}; }
-                return _this.findBlobsByTagsSegments(tagFilterSqlExpression, settings.continuationToken, tslib.__assign({ maxPageSize: settings.maxPageSize }, listSegmentOptions));
-            },
-            _a;
-    };
-    /**
-     * Returns an AsyncIterableIterator for ServiceListContainersSegmentResponses
-     *
-     * @private
-     * @param {string} [marker] A string value that identifies the portion of
-     *                        the list of containers to be returned with the next listing operation. The
-     *                        operation returns the NextMarker value within the response body if the
-     *                        listing operation did not return all containers remaining to be listed
-     *                        with the current page. The NextMarker value can be used as the value for
-     *                        the marker parameter in a subsequent call to request the next page of list
-     *                        items. The marker value is opaque to the client.
-     * @param {ServiceListContainersSegmentOptions} [options] Options to list containers operation.
-     * @returns {AsyncIterableIterator<ServiceListContainersSegmentResponse>}
-     * @memberof BlobServiceClient
-     */
-    BlobServiceClient.prototype.listSegments = function (marker, options) {
-        if (options === void 0) { options = {}; }
-        return tslib.__asyncGenerator(this, arguments, function listSegments_1() {
-            var listContainersSegmentResponse;
-            return tslib.__generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        if (!(!!marker || marker === undefined)) return [3 /*break*/, 7];
-                        _a.label = 1;
-                    case 1: return [4 /*yield*/, tslib.__await(this.listContainersSegment(marker, options))];
-                    case 2:
-                        listContainersSegmentResponse = _a.sent();
-                        listContainersSegmentResponse.containerItems =
-                            listContainersSegmentResponse.containerItems || [];
-                        marker = listContainersSegmentResponse.continuationToken;
-                        return [4 /*yield*/, tslib.__await(listContainersSegmentResponse)];
-                    case 3: return [4 /*yield*/, tslib.__await.apply(void 0, [_a.sent()])];
-                    case 4: return [4 /*yield*/, _a.sent()];
-                    case 5:
-                        _a.sent();
-                        _a.label = 6;
-                    case 6:
-                        if (marker) return [3 /*break*/, 1];
-                        _a.label = 7;
-                    case 7: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    /**
-     * Returns an AsyncIterableIterator for Container Items
-     *
-     * @private
-     * @param {ServiceListContainersSegmentOptions} [options] Options to list containers operation.
-     * @returns {AsyncIterableIterator<ContainerItem>}
-     * @memberof BlobServiceClient
-     */
-    BlobServiceClient.prototype.listItems = function (options) {
-        if (options === void 0) { options = {}; }
-        return tslib.__asyncGenerator(this, arguments, function listItems_1() {
-            var marker, _a, _b, segment, e_10_1;
-            var e_10, _c;
-            return tslib.__generator(this, function (_d) {
-                switch (_d.label) {
-                    case 0:
-                        _d.trys.push([0, 7, 8, 13]);
-                        _a = tslib.__asyncValues(this.listSegments(marker, options));
-                        _d.label = 1;
-                    case 1: return [4 /*yield*/, tslib.__await(_a.next())];
-                    case 2:
-                        if (!(_b = _d.sent(), !_b.done)) return [3 /*break*/, 6];
-                        segment = _b.value;
-                        return [5 /*yield**/, tslib.__values(tslib.__asyncDelegator(tslib.__asyncValues(segment.containerItems)))];
-                    case 3: return [4 /*yield*/, tslib.__await.apply(void 0, [_d.sent()])];
-                    case 4:
-                        _d.sent();
-                        _d.label = 5;
-                    case 5: return [3 /*break*/, 1];
-                    case 6: return [3 /*break*/, 13];
-                    case 7:
-                        e_10_1 = _d.sent();
-                        e_10 = { error: e_10_1 };
-                        return [3 /*break*/, 13];
-                    case 8:
-                        _d.trys.push([8, , 11, 12]);
-                        if (!(_b && !_b.done && (_c = _a.return))) return [3 /*break*/, 10];
-                        return [4 /*yield*/, tslib.__await(_c.call(_a))];
-                    case 9:
-                        _d.sent();
-                        _d.label = 10;
-                    case 10: return [3 /*break*/, 12];
-                    case 11:
-                        if (e_10) throw e_10.error;
-                        return [7 /*endfinally*/];
-                    case 12: return [7 /*endfinally*/];
-                    case 13: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    /**
-     * Returns an async iterable iterator to list all the containers
-     * under the specified account.
-     *
-     * .byPage() returns an async iterable iterator to list the containers in pages.
-     *
-     * Example using `for await` syntax:
-     *
-     * ```js
-     * let i = 1;
-     * for await (const container of blobServiceClient.listContainers()) {
-     *   console.log(`Container ${i++}: ${container.name}`);
-     * }
-     * ```
-     *
-     * Example using `iter.next()`:
-     *
-     * ```js
-     * let i = 1;
-     * const iter = blobServiceClient.listContainers();
-     * let containerItem = await iter.next();
-     * while (!containerItem.done) {
-     *   console.log(`Container ${i++}: ${containerItem.value.name}`);
-     *   containerItem = await iter.next();
-     * }
-     * ```
-     *
-     * Example using `byPage()`:
-     *
-     * ```js
-     * // passing optional maxPageSize in the page settings
-     * let i = 1;
-     * for await (const response of blobServiceClient.listContainers().byPage({ maxPageSize: 20 })) {
-     *   if (response.containerItems) {
-     *     for (const container of response.containerItems) {
-     *       console.log(`Container ${i++}: ${container.name}`);
-     *     }
-     *   }
-     * }
-     * ```
-     *
-     * Example using paging with a marker:
-     *
-     * ```js
-     * let i = 1;
-     * let iterator = blobServiceClient.listContainers().byPage({ maxPageSize: 2 });
-     * let response = (await iterator.next()).value;
-     *
-     * // Prints 2 container names
-     * if (response.containerItems) {
-     *   for (const container of response.containerItems) {
-     *     console.log(`Container ${i++}: ${container.name}`);
-     *   }
-     * }
-     *
-     * // Gets next marker
-     * let marker = response.continuationToken;
-     * // Passing next marker as continuationToken
-     * iterator = blobServiceClient
-     *   .listContainers()
-     *   .byPage({ continuationToken: marker, maxPageSize: 10 });
-     * response = (await iterator.next()).value;
-     *
-     * // Prints 10 container names
-     * if (response.containerItems) {
-     *   for (const container of response.containerItems) {
-     *      console.log(`Container ${i++}: ${container.name}`);
-     *   }
-     * }
-     * ```
-     *
-     * @param {ServiceListContainersOptions} [options={}] Options to list containers.
-     * @returns {PagedAsyncIterableIterator<ContainerItem, ServiceListContainersSegmentResponse>} An asyncIterableIterator that supports paging.
-     * @memberof BlobServiceClient
-     */
-    BlobServiceClient.prototype.listContainers = function (options) {
-        var _a;
-        var _this = this;
-        if (options === void 0) { options = {}; }
-        if (options.prefix === "") {
-            options.prefix = undefined;
-        }
-        // AsyncIterableIterator to iterate over containers
-        var listSegmentOptions = tslib.__assign(tslib.__assign({}, options), (options.includeMetadata ? { include: "metadata" } : {}));
-        var iter = this.listItems(listSegmentOptions);
-        return _a = {
-                /**
-                 * @member {Promise} [next] The next method, part of the iteration protocol
-                 */
-                next: function () {
-                    return iter.next();
-                }
-            },
-            /**
-             * @member {Symbol} [asyncIterator] The connection to the async iterator, part of the iteration protocol
-             */
-            _a[Symbol.asyncIterator] = function () {
-                return this;
-            },
-            /**
-             * @member {Function} [byPage] Return an AsyncIterableIterator that works a page at a time
-             */
-            _a.byPage = function (settings) {
-                if (settings === void 0) { settings = {}; }
-                return _this.listSegments(settings.continuationToken, tslib.__assign({ maxPageSize: settings.maxPageSize }, listSegmentOptions));
-            },
-            _a;
-    };
-    /**
-     * ONLY AVAILABLE WHEN USING BEARER TOKEN AUTHENTICATION (TokenCredential).
-     *
-     * Retrieves a user delegation key for the Blob service. This is only a valid operation when using
-     * bearer token authentication.
-     *
-     * @see https://docs.microsoft.com/en-us/rest/api/storageservices/get-user-delegation-key
-     *
-     * @param {Date} startsOn      The start time for the user delegation SAS. Must be within 7 days of the current time
-     * @param {Date} expiresOn     The end time for the user delegation SAS. Must be within 7 days of the current time
-     * @returns {Promise<ServiceGetUserDelegationKeyResponse>}
-     * @memberof BlobServiceClient
-     */
-    BlobServiceClient.prototype.getUserDelegationKey = function (startsOn, expiresOn, options) {
-        if (options === void 0) { options = {}; }
-        return tslib.__awaiter(this, void 0, void 0, function () {
-            var _a, span, spanOptions, response, userDelegationKey, res, e_11;
-            return tslib.__generator(this, function (_b) {
-                switch (_b.label) {
-                    case 0:
-                        _a = createSpan("BlobServiceClient-getUserDelegationKey", options.tracingOptions), span = _a.span, spanOptions = _a.spanOptions;
-                        _b.label = 1;
-                    case 1:
-                        _b.trys.push([1, 3, 4, 5]);
-                        return [4 /*yield*/, this.serviceContext.getUserDelegationKey({
-                                startsOn: truncatedISO8061Date(startsOn, false),
-                                expiresOn: truncatedISO8061Date(expiresOn, false)
-                            }, {
-                                abortSignal: options.abortSignal,
-                                spanOptions: spanOptions
-                            })];
-                    case 2:
-                        response = _b.sent();
-                        userDelegationKey = {
-                            signedObjectId: response.signedObjectId,
-                            signedTenantId: response.signedTenantId,
-                            signedStartsOn: new Date(response.signedStartsOn),
-                            signedExpiresOn: new Date(response.signedExpiresOn),
-                            signedService: response.signedService,
-                            signedVersion: response.signedVersion,
-                            value: response.value
-                        };
-                        res = tslib.__assign({ _response: response._response, requestId: response.requestId, clientRequestId: response.clientRequestId, version: response.version, date: response.date, errorCode: response.errorCode }, userDelegationKey);
-                        return [2 /*return*/, res];
-                    case 3:
-                        e_11 = _b.sent();
-                        span.setStatus({
-                            code: api.CanonicalCode.UNKNOWN,
-                            message: e_11.message
-                        });
-                        throw e_11;
-                    case 4:
-                        span.end();
-                        return [7 /*endfinally*/];
-                    case 5: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    /**
-     * Creates a BlobBatchClient object to conduct batch operations.
-     *
-     * @see https://docs.microsoft.com/en-us/rest/api/storageservices/blob-batch
-     *
-     * @returns {BlobBatchClient} A new BlobBatchClient object for this service.
-     * @memberof BlobServiceClient
-     */
-    BlobServiceClient.prototype.getBlobBatchClient = function () {
-        return new BlobBatchClient(this.url, this.pipeline);
-    };
-    return BlobServiceClient;
-}(StorageClient));
-
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 /**
@@ -34480,6 +34683,52 @@ var AccountSASPermissions = /** @class */ (function () {
                 default:
                     throw new RangeError("Invalid permission character: " + c);
             }
+        }
+        return accountSASPermissions;
+    };
+    /**
+     * Creates a {@link AccountSASPermissions} from a raw object which contains same keys as it
+     * and boolean values for them.
+     *
+     * @static
+     * @param {AccountSASPermissionsLike} permissionLike
+     * @returns {AccountSASPermissions}
+     * @memberof AccountSASPermissions
+     */
+    AccountSASPermissions.from = function (permissionLike) {
+        var accountSASPermissions = new AccountSASPermissions();
+        if (permissionLike.read) {
+            accountSASPermissions.read = true;
+        }
+        if (permissionLike.write) {
+            accountSASPermissions.write = true;
+        }
+        if (permissionLike.delete) {
+            accountSASPermissions.delete = true;
+        }
+        if (permissionLike.deleteVersion) {
+            accountSASPermissions.deleteVersion = true;
+        }
+        if (permissionLike.filter) {
+            accountSASPermissions.filter = true;
+        }
+        if (permissionLike.tag) {
+            accountSASPermissions.tag = true;
+        }
+        if (permissionLike.list) {
+            accountSASPermissions.list = true;
+        }
+        if (permissionLike.add) {
+            accountSASPermissions.add = true;
+        }
+        if (permissionLike.create) {
+            accountSASPermissions.create = true;
+        }
+        if (permissionLike.update) {
+            accountSASPermissions.update = true;
+        }
+        if (permissionLike.process) {
+            accountSASPermissions.process = true;
         }
         return accountSASPermissions;
     };
@@ -34732,241 +34981,6 @@ var AccountSASServices = /** @class */ (function () {
 }());
 
 // Copyright (c) Microsoft Corporation. All rights reserved.
-// Licensed under the MIT License.
-/**
- * Generate SasIPRange format string. For example:
- *
- * "8.8.8.8" or "1.1.1.1-255.255.255.255"
- *
- * @export
- * @param {SasIPRange} ipRange
- * @returns {string}
- */
-function ipRangeToString(ipRange) {
-    return ipRange.end ? ipRange.start + "-" + ipRange.end : ipRange.start;
-}
-
-// Copyright (c) Microsoft Corporation. All rights reserved.
-(function (SASProtocol) {
-    /**
-     * Protocol that allows HTTPS only
-     */
-    SASProtocol["Https"] = "https";
-    /**
-     * Protocol that allows both HTTPS and HTTP
-     */
-    SASProtocol["HttpsAndHttp"] = "https,http";
-})(exports.SASProtocol || (exports.SASProtocol = {}));
-/**
- * Represents the components that make up an Azure Storage SAS' query parameters. This type is not constructed directly
- * by the user; it is only generated by the {@link AccountSASSignatureValues} and {@link BlobSASSignatureValues}
- * types. Once generated, it can be encoded into a {@code String} and appended to a URL directly (though caution should
- * be taken here in case there are existing query parameters, which might affect the appropriate means of appending
- * these query parameters).
- *
- * NOTE: Instances of this class are immutable.
- *
- * @export
- * @class SASQueryParameters
- */
-var SASQueryParameters = /** @class */ (function () {
-    /**
-     * Creates an instance of SASQueryParameters.
-     *
-     * @param {string} version Representing the storage version
-     * @param {string} signature Representing the signature for the SAS token
-     * @param {string} [permissions] Representing the storage permissions
-     * @param {string} [services] Representing the storage services being accessed (only for Account SAS)
-     * @param {string} [resourceTypes] Representing the storage resource types being accessed (only for Account SAS)
-     * @param {SASProtocol} [protocol] Representing the allowed HTTP protocol(s)
-     * @param {Date} [startsOn] Representing the start time for this SAS token
-     * @param {Date} [expiresOn] Representing the expiry time for this SAS token
-     * @param {SasIPRange} [ipRange] Representing the range of valid IP addresses for this SAS token
-     * @param {string} [identifier] Representing the signed identifier (only for Service SAS)
-     * @param {string} [resource] Representing the storage container or blob (only for Service SAS)
-     * @param {string} [cacheControl] Representing the cache-control header (only for Blob/File Service SAS)
-     * @param {string} [contentDisposition] Representing the content-disposition header (only for Blob/File Service SAS)
-     * @param {string} [contentEncoding] Representing the content-encoding header (only for Blob/File Service SAS)
-     * @param {string} [contentLanguage] Representing the content-language header (only for Blob/File Service SAS)
-     * @param {string} [contentType] Representing the content-type header (only for Blob/File Service SAS)
-     * @param {userDelegationKey} [userDelegationKey] Representing the user delegation key properties
-     * @memberof SASQueryParameters
-     */
-    function SASQueryParameters(version, signature, permissions, services, resourceTypes, protocol, startsOn, expiresOn, ipRange, identifier, resource, cacheControl, contentDisposition, contentEncoding, contentLanguage, contentType, userDelegationKey) {
-        this.version = version;
-        this.services = services;
-        this.resourceTypes = resourceTypes;
-        this.expiresOn = expiresOn;
-        this.permissions = permissions;
-        this.protocol = protocol;
-        this.startsOn = startsOn;
-        this.ipRangeInner = ipRange;
-        this.identifier = identifier;
-        this.resource = resource;
-        this.signature = signature;
-        this.cacheControl = cacheControl;
-        this.contentDisposition = contentDisposition;
-        this.contentEncoding = contentEncoding;
-        this.contentLanguage = contentLanguage;
-        this.contentType = contentType;
-        if (userDelegationKey) {
-            this.signedOid = userDelegationKey.signedObjectId;
-            this.signedTenantId = userDelegationKey.signedTenantId;
-            this.signedStartsOn = userDelegationKey.signedStartsOn;
-            this.signedExpiresOn = userDelegationKey.signedExpiresOn;
-            this.signedService = userDelegationKey.signedService;
-            this.signedVersion = userDelegationKey.signedVersion;
-        }
-    }
-    Object.defineProperty(SASQueryParameters.prototype, "ipRange", {
-        /**
-         * Optional. IP range allowed for this SAS.
-         *
-         * @readonly
-         * @type {(SasIPRange | undefined)}
-         * @memberof SASQueryParameters
-         */
-        get: function () {
-            if (this.ipRangeInner) {
-                return {
-                    end: this.ipRangeInner.end,
-                    start: this.ipRangeInner.start
-                };
-            }
-            return undefined;
-        },
-        enumerable: false,
-        configurable: true
-    });
-    /**
-     * Encodes all SAS query parameters into a string that can be appended to a URL.
-     *
-     * @returns {string}
-     * @memberof SASQueryParameters
-     */
-    SASQueryParameters.prototype.toString = function () {
-        var params = [
-            "sv",
-            "ss",
-            "srt",
-            "spr",
-            "st",
-            "se",
-            "sip",
-            "si",
-            "skoid",
-            "sktid",
-            "skt",
-            "ske",
-            "sks",
-            "skv",
-            "sr",
-            "sp",
-            "sig",
-            "rscc",
-            "rscd",
-            "rsce",
-            "rscl",
-            "rsct"
-        ];
-        var queries = [];
-        for (var _i = 0, params_1 = params; _i < params_1.length; _i++) {
-            var param = params_1[_i];
-            switch (param) {
-                case "sv":
-                    this.tryAppendQueryParameter(queries, param, this.version);
-                    break;
-                case "ss":
-                    this.tryAppendQueryParameter(queries, param, this.services);
-                    break;
-                case "srt":
-                    this.tryAppendQueryParameter(queries, param, this.resourceTypes);
-                    break;
-                case "spr":
-                    this.tryAppendQueryParameter(queries, param, this.protocol);
-                    break;
-                case "st":
-                    this.tryAppendQueryParameter(queries, param, this.startsOn ? truncatedISO8061Date(this.startsOn, false) : undefined);
-                    break;
-                case "se":
-                    this.tryAppendQueryParameter(queries, param, this.expiresOn ? truncatedISO8061Date(this.expiresOn, false) : undefined);
-                    break;
-                case "sip":
-                    this.tryAppendQueryParameter(queries, param, this.ipRange ? ipRangeToString(this.ipRange) : undefined);
-                    break;
-                case "si":
-                    this.tryAppendQueryParameter(queries, param, this.identifier);
-                    break;
-                case "skoid": // Signed object ID
-                    this.tryAppendQueryParameter(queries, param, this.signedOid);
-                    break;
-                case "sktid": // Signed tenant ID
-                    this.tryAppendQueryParameter(queries, param, this.signedTenantId);
-                    break;
-                case "skt": // Signed key start time
-                    this.tryAppendQueryParameter(queries, param, this.signedStartsOn ? truncatedISO8061Date(this.signedStartsOn, false) : undefined);
-                    break;
-                case "ske": // Signed key expiry time
-                    this.tryAppendQueryParameter(queries, param, this.signedExpiresOn ? truncatedISO8061Date(this.signedExpiresOn, false) : undefined);
-                    break;
-                case "sks": // Signed key service
-                    this.tryAppendQueryParameter(queries, param, this.signedService);
-                    break;
-                case "skv": // Signed key version
-                    this.tryAppendQueryParameter(queries, param, this.signedVersion);
-                    break;
-                case "sr":
-                    this.tryAppendQueryParameter(queries, param, this.resource);
-                    break;
-                case "sp":
-                    this.tryAppendQueryParameter(queries, param, this.permissions);
-                    break;
-                case "sig":
-                    this.tryAppendQueryParameter(queries, param, this.signature);
-                    break;
-                case "rscc":
-                    this.tryAppendQueryParameter(queries, param, this.cacheControl);
-                    break;
-                case "rscd":
-                    this.tryAppendQueryParameter(queries, param, this.contentDisposition);
-                    break;
-                case "rsce":
-                    this.tryAppendQueryParameter(queries, param, this.contentEncoding);
-                    break;
-                case "rscl":
-                    this.tryAppendQueryParameter(queries, param, this.contentLanguage);
-                    break;
-                case "rsct":
-                    this.tryAppendQueryParameter(queries, param, this.contentType);
-                    break;
-            }
-        }
-        return queries.join("&");
-    };
-    /**
-     * A private helper method used to filter and append query key/value pairs into an array.
-     *
-     * @private
-     * @param {string[]} queries
-     * @param {string} key
-     * @param {string} [value]
-     * @returns {void}
-     * @memberof SASQueryParameters
-     */
-    SASQueryParameters.prototype.tryAppendQueryParameter = function (queries, key, value) {
-        if (!value) {
-            return;
-        }
-        key = encodeURIComponent(key);
-        value = encodeURIComponent(value);
-        if (key.length > 0 && value.length > 0) {
-            queries.push(key + "=" + value);
-        }
-    };
-    return SASQueryParameters;
-}());
-
-// Copyright (c) Microsoft Corporation. All rights reserved.
 /**
  * ONLY AVAILABLE IN NODE.JS RUNTIME.
  *
@@ -35020,646 +35034,1000 @@ function generateAccountSASQueryParameters(accountSASSignatureValues, sharedKeyC
     return new SASQueryParameters(version, signature, parsedPermissions.toString(), parsedServices, parsedResourceTypes, accountSASSignatureValues.protocol, accountSASSignatureValues.startsOn, accountSASSignatureValues.expiresOn, accountSASSignatureValues.ipRange);
 }
 
-// Copyright (c) Microsoft Corporation. All rights reserved.
-// Licensed under the MIT License.
 /**
- * ONLY AVAILABLE IN NODE.JS RUNTIME.
- *
- * This is a helper class to construct a string representing the permissions granted by a ServiceSAS to a blob. Setting
- * a value to true means that any SAS which uses these permissions will grant permissions for that operation. Once all
- * the values are set, this should be serialized with toString and set as the permissions field on a
- * {@link BlobSASSignatureValues} object. It is possible to construct the permissions string without this class, but
- * the order of the permissions is particular and this class guarantees correctness.
+ * A BlobServiceClient represents a Client to the Azure Storage Blob service allowing you
+ * to manipulate blob containers.
  *
  * @export
- * @class BlobSASPermissions
+ * @class BlobServiceClient
  */
-var BlobSASPermissions = /** @class */ (function () {
-    function BlobSASPermissions() {
-        /**
-         * Specifies Read access granted.
-         *
-         * @type {boolean}
-         * @memberof BlobSASPermissions
-         */
-        this.read = false;
-        /**
-         * Specifies Add access granted.
-         *
-         * @type {boolean}
-         * @memberof BlobSASPermissions
-         */
-        this.add = false;
-        /**
-         * Specifies Create access granted.
-         *
-         * @type {boolean}
-         * @memberof BlobSASPermissions
-         */
-        this.create = false;
-        /**
-         * Specifies Write access granted.
-         *
-         * @type {boolean}
-         * @memberof BlobSASPermissions
-         */
-        this.write = false;
-        /**
-         * Specifies Delete access granted.
-         *
-         * @type {boolean}
-         * @memberof BlobSASPermissions
-         */
-        this.delete = false;
-        /**
-         * Specifies Delete version access granted.
-         *
-         * @type {boolean}
-         * @memberof BlobSASPermissions
-         */
-        this.deleteVersion = false;
-        /**
-         * Specfies Tag access granted.
-         *
-         * @type {boolean}
-         * @memberof BlobSASPermissions
-         */
-        this.tag = false;
+var BlobServiceClient = /** @class */ (function (_super) {
+    tslib.__extends(BlobServiceClient, _super);
+    function BlobServiceClient(url, credentialOrPipeline, options) {
+        var _this = this;
+        var pipeline;
+        if (credentialOrPipeline instanceof Pipeline) {
+            pipeline = credentialOrPipeline;
+        }
+        else if ((coreHttp.isNode && credentialOrPipeline instanceof StorageSharedKeyCredential) ||
+            credentialOrPipeline instanceof AnonymousCredential ||
+            coreHttp.isTokenCredential(credentialOrPipeline)) {
+            pipeline = newPipeline(credentialOrPipeline, options);
+        }
+        else {
+            // The second parameter is undefined. Use anonymous credential
+            pipeline = newPipeline(new AnonymousCredential(), options);
+        }
+        _this = _super.call(this, url, pipeline) || this;
+        _this.serviceContext = new Service(_this.storageClientContext);
+        return _this;
     }
     /**
-     * Creates a {@link BlobSASPermissions} from the specified permissions string. This method will throw an
-     * Error if it encounters a character that does not correspond to a valid permission.
      *
-     * @static
-     * @param {string} permissions
-     * @returns {BlobSASPermissions}
-     * @memberof BlobSASPermissions
+     * Creates an instance of BlobServiceClient from connection string.
+     *
+     * @param {string} connectionString Account connection string or a SAS connection string of an Azure storage account.
+     *                                  [ Note - Account connection string can only be used in NODE.JS runtime. ]
+     *                                  Account connection string example -
+     *                                  `DefaultEndpointsProtocol=https;AccountName=myaccount;AccountKey=accountKey;EndpointSuffix=core.windows.net`
+     *                                  SAS connection string example -
+     *                                  `BlobEndpoint=https://myaccount.blob.core.windows.net/;QueueEndpoint=https://myaccount.queue.core.windows.net/;FileEndpoint=https://myaccount.file.core.windows.net/;TableEndpoint=https://myaccount.table.core.windows.net/;SharedAccessSignature=sasString`
+     * @param {StoragePipelineOptions} [options] Optional. Options to configure the HTTP pipeline.
+     * @memberof BlobServiceClient
      */
-    BlobSASPermissions.parse = function (permissions) {
-        var blobSASPermissions = new BlobSASPermissions();
-        for (var _i = 0, permissions_1 = permissions; _i < permissions_1.length; _i++) {
-            var char = permissions_1[_i];
-            switch (char) {
-                case "r":
-                    blobSASPermissions.read = true;
-                    break;
-                case "a":
-                    blobSASPermissions.add = true;
-                    break;
-                case "c":
-                    blobSASPermissions.create = true;
-                    break;
-                case "w":
-                    blobSASPermissions.write = true;
-                    break;
-                case "d":
-                    blobSASPermissions.delete = true;
-                    break;
-                case "x":
-                    blobSASPermissions.deleteVersion = true;
-                    break;
-                case "t":
-                    blobSASPermissions.tag = true;
-                    break;
-                default:
-                    throw new RangeError("Invalid permission: " + char);
+    BlobServiceClient.fromConnectionString = function (connectionString, options) {
+        options = options || {};
+        var extractedCreds = extractConnectionStringParts(connectionString);
+        if (extractedCreds.kind === "AccountConnString") {
+            {
+                var sharedKeyCredential = new StorageSharedKeyCredential(extractedCreds.accountName, extractedCreds.accountKey);
+                options.proxyOptions = coreHttp.getDefaultProxySettings(extractedCreds.proxyUri);
+                var pipeline = newPipeline(sharedKeyCredential, options);
+                return new BlobServiceClient(extractedCreds.url, pipeline);
             }
         }
-        return blobSASPermissions;
-    };
-    /**
-     * Converts the given permissions to a string. Using this method will guarantee the permissions are in an
-     * order accepted by the service.
-     *
-     * @returns {string} A string which represents the BlobSASPermissions
-     * @memberof BlobSASPermissions
-     */
-    BlobSASPermissions.prototype.toString = function () {
-        var permissions = [];
-        if (this.read) {
-            permissions.push("r");
-        }
-        if (this.add) {
-            permissions.push("a");
-        }
-        if (this.create) {
-            permissions.push("c");
-        }
-        if (this.write) {
-            permissions.push("w");
-        }
-        if (this.delete) {
-            permissions.push("d");
-        }
-        if (this.deleteVersion) {
-            permissions.push("x");
-        }
-        if (this.tag) {
-            permissions.push("t");
-        }
-        return permissions.join("");
-    };
-    return BlobSASPermissions;
-}());
-
-// Copyright (c) Microsoft Corporation. All rights reserved.
-// Licensed under the MIT License.
-/**
- * This is a helper class to construct a string representing the permissions granted by a ServiceSAS to a container.
- * Setting a value to true means that any SAS which uses these permissions will grant permissions for that operation.
- * Once all the values are set, this should be serialized with toString and set as the permissions field on a
- * {@link BlobSASSignatureValues} object. It is possible to construct the permissions string without this class, but
- * the order of the permissions is particular and this class guarantees correctness.
- *
- * @export
- * @class ContainerSASPermissions
- */
-var ContainerSASPermissions = /** @class */ (function () {
-    function ContainerSASPermissions() {
-        /**
-         * Specifies Read access granted.
-         *
-         * @type {boolean}
-         * @memberof ContainerSASPermissions
-         */
-        this.read = false;
-        /**
-         * Specifies Add access granted.
-         *
-         * @type {boolean}
-         * @memberof ContainerSASPermissions
-         */
-        this.add = false;
-        /**
-         * Specifies Create access granted.
-         *
-         * @type {boolean}
-         * @memberof ContainerSASPermissions
-         */
-        this.create = false;
-        /**
-         * Specifies Write access granted.
-         *
-         * @type {boolean}
-         * @memberof ContainerSASPermissions
-         */
-        this.write = false;
-        /**
-         * Specifies Delete access granted.
-         *
-         * @type {boolean}
-         * @memberof ContainerSASPermissions
-         */
-        this.delete = false;
-        /**
-         * Specifies Delete version access granted.
-         *
-         * @type {boolean}
-         * @memberof ContainerSASPermissions
-         */
-        this.deleteVersion = false;
-        /**
-         * Specifies List access granted.
-         *
-         * @type {boolean}
-         * @memberof ContainerSASPermissions
-         */
-        this.list = false;
-        /**
-         * Specfies Tag access granted.
-         *
-         * @type {boolean}
-         * @memberof ContainerSASPermissions
-         */
-        this.tag = false;
-    }
-    /**
-     * Creates an {@link ContainerSASPermissions} from the specified permissions string. This method will throw an
-     * Error if it encounters a character that does not correspond to a valid permission.
-     *
-     * @static
-     * @param {string} permissions
-     * @returns {ContainerSASPermissions}
-     * @memberof ContainerSASPermissions
-     */
-    ContainerSASPermissions.parse = function (permissions) {
-        var containerSASPermissions = new ContainerSASPermissions();
-        for (var _i = 0, permissions_1 = permissions; _i < permissions_1.length; _i++) {
-            var char = permissions_1[_i];
-            switch (char) {
-                case "r":
-                    containerSASPermissions.read = true;
-                    break;
-                case "a":
-                    containerSASPermissions.add = true;
-                    break;
-                case "c":
-                    containerSASPermissions.create = true;
-                    break;
-                case "w":
-                    containerSASPermissions.write = true;
-                    break;
-                case "d":
-                    containerSASPermissions.delete = true;
-                    break;
-                case "l":
-                    containerSASPermissions.list = true;
-                    break;
-                case "t":
-                    containerSASPermissions.tag = true;
-                    break;
-                case "x":
-                    containerSASPermissions.deleteVersion = true;
-                    break;
-                default:
-                    throw new RangeError("Invalid permission " + char);
-            }
-        }
-        return containerSASPermissions;
-    };
-    /**
-     * Converts the given permissions to a string. Using this method will guarantee the permissions are in an
-     * order accepted by the service.
-     *
-     * The order of the characters should be as specified here to ensure correctness.
-     * @see https://docs.microsoft.com/en-us/rest/api/storageservices/constructing-a-service-sas
-     *
-     * @returns {string}
-     * @memberof ContainerSASPermissions
-     */
-    ContainerSASPermissions.prototype.toString = function () {
-        var permissions = [];
-        if (this.read) {
-            permissions.push("r");
-        }
-        if (this.add) {
-            permissions.push("a");
-        }
-        if (this.create) {
-            permissions.push("c");
-        }
-        if (this.write) {
-            permissions.push("w");
-        }
-        if (this.delete) {
-            permissions.push("d");
-        }
-        if (this.deleteVersion) {
-            permissions.push("x");
-        }
-        if (this.list) {
-            permissions.push("l");
-        }
-        if (this.tag) {
-            permissions.push("t");
-        }
-        return permissions.join("");
-    };
-    return ContainerSASPermissions;
-}());
-
-/**
- * ONLY AVAILABLE IN NODE.JS RUNTIME.
- *
- * UserDelegationKeyCredential is only used for generation of user delegation SAS.
- * @see https://docs.microsoft.com/en-us/rest/api/storageservices/create-user-delegation-sas
- *
- * @export
- * @class UserDelegationKeyCredential
- */
-var UserDelegationKeyCredential = /** @class */ (function () {
-    /**
-     * Creates an instance of UserDelegationKeyCredential.
-     * @param {string} accountName
-     * @param {UserDelegationKey} userDelegationKey
-     * @memberof UserDelegationKeyCredential
-     */
-    function UserDelegationKeyCredential(accountName, userDelegationKey) {
-        this.accountName = accountName;
-        this.userDelegationKey = userDelegationKey;
-        this.key = Buffer.from(userDelegationKey.value, "base64");
-    }
-    /**
-     * Generates a hash signature for an HTTP request or for a SAS.
-     *
-     * @param {string} stringToSign
-     * @returns {string}
-     * @memberof UserDelegationKeyCredential
-     */
-    UserDelegationKeyCredential.prototype.computeHMACSHA256 = function (stringToSign) {
-        // console.log(`stringToSign: ${JSON.stringify(stringToSign)}`);
-        return crypto.createHmac("sha256", this.key)
-            .update(stringToSign, "utf8")
-            .digest("base64");
-    };
-    return UserDelegationKeyCredential;
-}());
-
-// Copyright (c) Microsoft Corporation. All rights reserved.
-function generateBlobSASQueryParameters(blobSASSignatureValues, sharedKeyCredentialOrUserDelegationKey, accountName) {
-    var version = blobSASSignatureValues.version ? blobSASSignatureValues.version : SERVICE_VERSION;
-    var sharedKeyCredential = sharedKeyCredentialOrUserDelegationKey instanceof StorageSharedKeyCredential
-        ? sharedKeyCredentialOrUserDelegationKey
-        : undefined;
-    var userDelegationKeyCredential;
-    if (sharedKeyCredential === undefined && accountName !== undefined) {
-        userDelegationKeyCredential = new UserDelegationKeyCredential(accountName, sharedKeyCredentialOrUserDelegationKey);
-    }
-    if (sharedKeyCredential === undefined && userDelegationKeyCredential === undefined) {
-        throw TypeError("Invalid sharedKeyCredential, userDelegationKey or accountName.");
-    }
-    // Version 2019-12-12 adds support for the blob tags permission.
-    // Version 2018-11-09 adds support for the signed resource and signed blob snapshot time fields.
-    // https://docs.microsoft.com/en-us/rest/api/storageservices/constructing-a-service-sas#constructing-the-signature-string
-    if (version >= "2018-11-09") {
-        if (sharedKeyCredential !== undefined) {
-            return generateBlobSASQueryParameters20181109(blobSASSignatureValues, sharedKeyCredential);
+        else if (extractedCreds.kind === "SASConnString") {
+            var pipeline = newPipeline(new AnonymousCredential(), options);
+            return new BlobServiceClient(extractedCreds.url + "?" + extractedCreds.accountSas, pipeline);
         }
         else {
-            return generateBlobSASQueryParametersUDK20181109(blobSASSignatureValues, userDelegationKeyCredential);
+            throw new Error("Connection string must be either an Account connection string or a SAS connection string");
         }
-    }
-    if (version >= "2015-04-05") {
-        if (sharedKeyCredential !== undefined) {
-            return generateBlobSASQueryParameters20150405(blobSASSignatureValues, sharedKeyCredential);
+    };
+    /**
+     * Creates a {@link ContainerClient} object
+     *
+     * @param {string} containerName A container name
+     * @returns {ContainerClient} A new ContainerClient object for the given container name.
+     * @memberof BlobServiceClient
+     *
+     * Example usage:
+     *
+     * ```js
+     * const containerClient = blobServiceClient.getContainerClient("<container name>");
+     * ```
+     */
+    BlobServiceClient.prototype.getContainerClient = function (containerName) {
+        return new ContainerClient(appendToURLPath(this.url, encodeURIComponent(containerName)), this.pipeline);
+    };
+    /**
+     * Create a Blob container.
+     *
+     * @param {string} containerName Name of the container to create.
+     * @param {ContainerCreateOptions} [options] Options to configure Container Create operation.
+     * @returns {Promise<{ containerClient: ContainerClient; containerCreateResponse: ContainerCreateResponse }>} Container creation response and the corresponding container client.
+     * @memberof BlobServiceClient
+     */
+    BlobServiceClient.prototype.createContainer = function (containerName, options) {
+        if (options === void 0) { options = {}; }
+        return tslib.__awaiter(this, void 0, void 0, function () {
+            var _a, span, spanOptions, containerClient, containerCreateResponse, e_1;
+            return tslib.__generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0:
+                        _a = createSpan("BlobServiceClient-createContainer", options.tracingOptions), span = _a.span, spanOptions = _a.spanOptions;
+                        _b.label = 1;
+                    case 1:
+                        _b.trys.push([1, 3, 4, 5]);
+                        containerClient = this.getContainerClient(containerName);
+                        return [4 /*yield*/, containerClient.create(tslib.__assign(tslib.__assign({}, options), { tracingOptions: tslib.__assign(tslib.__assign({}, options.tracingOptions), { spanOptions: spanOptions }) }))];
+                    case 2:
+                        containerCreateResponse = _b.sent();
+                        return [2 /*return*/, {
+                                containerClient: containerClient,
+                                containerCreateResponse: containerCreateResponse
+                            }];
+                    case 3:
+                        e_1 = _b.sent();
+                        span.setStatus({
+                            code: api.CanonicalCode.UNKNOWN,
+                            message: e_1.message
+                        });
+                        throw e_1;
+                    case 4:
+                        span.end();
+                        return [7 /*endfinally*/];
+                    case 5: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * Deletes a Blob container.
+     *
+     * @param {string} containerName Name of the container to delete.
+     * @param {ContainerDeleteMethodOptions} [options] Options to configure Container Delete operation.
+     * @returns {Promise<ContainerDeleteResponse>} Container deletion response.
+     * @memberof BlobServiceClient
+     */
+    BlobServiceClient.prototype.deleteContainer = function (containerName, options) {
+        if (options === void 0) { options = {}; }
+        return tslib.__awaiter(this, void 0, void 0, function () {
+            var _a, span, spanOptions, containerClient, e_2;
+            return tslib.__generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0:
+                        _a = createSpan("BlobServiceClient-deleteContainer", options.tracingOptions), span = _a.span, spanOptions = _a.spanOptions;
+                        _b.label = 1;
+                    case 1:
+                        _b.trys.push([1, 3, 4, 5]);
+                        containerClient = this.getContainerClient(containerName);
+                        return [4 /*yield*/, containerClient.delete(tslib.__assign(tslib.__assign({}, options), { tracingOptions: tslib.__assign(tslib.__assign({}, options.tracingOptions), { spanOptions: spanOptions }) }))];
+                    case 2: return [2 /*return*/, _b.sent()];
+                    case 3:
+                        e_2 = _b.sent();
+                        span.setStatus({
+                            code: api.CanonicalCode.UNKNOWN,
+                            message: e_2.message
+                        });
+                        throw e_2;
+                    case 4:
+                        span.end();
+                        return [7 /*endfinally*/];
+                    case 5: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * Restore a previously deleted Blob container.
+     * This API is only functional if Container Soft Delete is enabled for the storage account associated with the container.
+     *
+     * @param {string} deletedContainerName Name of the previously deleted container.
+     * @param {string} deletedContainerVersion Version of the previously deleted container, used to uniquely identify the deleted container.
+     * @returns {Promise<ContainerUndeleteResponse>} Container deletion response.
+     * @memberof BlobServiceClient
+     */
+    BlobServiceClient.prototype.undeleteContainer = function (deletedContainerName, deletedContainerVersion, options) {
+        if (options === void 0) { options = {}; }
+        return tslib.__awaiter(this, void 0, void 0, function () {
+            var _a, span, spanOptions, containerClient, containerContext, containerUndeleteResponse, e_3;
+            return tslib.__generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0:
+                        _a = createSpan("BlobServiceClient-undeleteContainer", options.tracingOptions), span = _a.span, spanOptions = _a.spanOptions;
+                        _b.label = 1;
+                    case 1:
+                        _b.trys.push([1, 3, 4, 5]);
+                        containerClient = this.getContainerClient(options.destinationContainerName || deletedContainerName);
+                        containerContext = new Container(containerClient["storageClientContext"]);
+                        return [4 /*yield*/, containerContext.restore(tslib.__assign(tslib.__assign({ deletedContainerName: deletedContainerName,
+                                deletedContainerVersion: deletedContainerVersion }, options), { tracingOptions: tslib.__assign(tslib.__assign({}, options.tracingOptions), { spanOptions: spanOptions }) }))];
+                    case 2:
+                        containerUndeleteResponse = _b.sent();
+                        return [2 /*return*/, { containerClient: containerClient, containerUndeleteResponse: containerUndeleteResponse }];
+                    case 3:
+                        e_3 = _b.sent();
+                        span.setStatus({
+                            code: api.CanonicalCode.UNKNOWN,
+                            message: e_3.message
+                        });
+                        throw e_3;
+                    case 4:
+                        span.end();
+                        return [7 /*endfinally*/];
+                    case 5: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * Gets the properties of a storage account’s Blob service, including properties
+     * for Storage Analytics and CORS (Cross-Origin Resource Sharing) rules.
+     * @see https://docs.microsoft.com/en-us/rest/api/storageservices/get-blob-service-properties
+     *
+     * @param {ServiceGetPropertiesOptions} [options] Options to the Service Get Properties operation.
+     * @returns {Promise<ServiceGetPropertiesResponse>} Response data for the Service Get Properties operation.
+     * @memberof BlobServiceClient
+     */
+    BlobServiceClient.prototype.getProperties = function (options) {
+        if (options === void 0) { options = {}; }
+        return tslib.__awaiter(this, void 0, void 0, function () {
+            var _a, span, spanOptions, e_4;
+            return tslib.__generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0:
+                        _a = createSpan("BlobServiceClient-getProperties", options.tracingOptions), span = _a.span, spanOptions = _a.spanOptions;
+                        _b.label = 1;
+                    case 1:
+                        _b.trys.push([1, 3, 4, 5]);
+                        return [4 /*yield*/, this.serviceContext.getProperties({
+                                abortSignal: options.abortSignal,
+                                spanOptions: spanOptions
+                            })];
+                    case 2: return [2 /*return*/, _b.sent()];
+                    case 3:
+                        e_4 = _b.sent();
+                        span.setStatus({
+                            code: api.CanonicalCode.UNKNOWN,
+                            message: e_4.message
+                        });
+                        throw e_4;
+                    case 4:
+                        span.end();
+                        return [7 /*endfinally*/];
+                    case 5: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * Sets properties for a storage account’s Blob service endpoint, including properties
+     * for Storage Analytics, CORS (Cross-Origin Resource Sharing) rules and soft delete settings.
+     * @see https://docs.microsoft.com/en-us/rest/api/storageservices/set-blob-service-properties}
+     *
+     * @param {BlobServiceProperties} properties
+     * @param {ServiceSetPropertiesOptions} [options] Options to the Service Set Properties operation.
+     * @returns {Promise<ServiceSetPropertiesResponse>} Response data for the Service Set Properties operation.
+     * @memberof BlobServiceClient
+     */
+    BlobServiceClient.prototype.setProperties = function (properties, options) {
+        if (options === void 0) { options = {}; }
+        return tslib.__awaiter(this, void 0, void 0, function () {
+            var _a, span, spanOptions, e_5;
+            return tslib.__generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0:
+                        _a = createSpan("BlobServiceClient-setProperties", options.tracingOptions), span = _a.span, spanOptions = _a.spanOptions;
+                        _b.label = 1;
+                    case 1:
+                        _b.trys.push([1, 3, 4, 5]);
+                        return [4 /*yield*/, this.serviceContext.setProperties(properties, {
+                                abortSignal: options.abortSignal,
+                                spanOptions: spanOptions
+                            })];
+                    case 2: return [2 /*return*/, _b.sent()];
+                    case 3:
+                        e_5 = _b.sent();
+                        span.setStatus({
+                            code: api.CanonicalCode.UNKNOWN,
+                            message: e_5.message
+                        });
+                        throw e_5;
+                    case 4:
+                        span.end();
+                        return [7 /*endfinally*/];
+                    case 5: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * Retrieves statistics related to replication for the Blob service. It is only
+     * available on the secondary location endpoint when read-access geo-redundant
+     * replication is enabled for the storage account.
+     * @see https://docs.microsoft.com/en-us/rest/api/storageservices/get-blob-service-stats}
+     *
+     * @param {ServiceGetStatisticsOptions} [options] Options to the Service Get Statistics operation.
+     * @returns {Promise<ServiceGetStatisticsResponse>} Response data for the Service Get Statistics operation.
+     * @memberof BlobServiceClient
+     */
+    BlobServiceClient.prototype.getStatistics = function (options) {
+        if (options === void 0) { options = {}; }
+        return tslib.__awaiter(this, void 0, void 0, function () {
+            var _a, span, spanOptions, e_6;
+            return tslib.__generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0:
+                        _a = createSpan("BlobServiceClient-getStatistics", options.tracingOptions), span = _a.span, spanOptions = _a.spanOptions;
+                        _b.label = 1;
+                    case 1:
+                        _b.trys.push([1, 3, 4, 5]);
+                        return [4 /*yield*/, this.serviceContext.getStatistics({
+                                abortSignal: options.abortSignal,
+                                spanOptions: spanOptions
+                            })];
+                    case 2: return [2 /*return*/, _b.sent()];
+                    case 3:
+                        e_6 = _b.sent();
+                        span.setStatus({
+                            code: api.CanonicalCode.UNKNOWN,
+                            message: e_6.message
+                        });
+                        throw e_6;
+                    case 4:
+                        span.end();
+                        return [7 /*endfinally*/];
+                    case 5: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * The Get Account Information operation returns the sku name and account kind
+     * for the specified account.
+     * The Get Account Information operation is available on service versions beginning
+     * with version 2018-03-28.
+     * @see https://docs.microsoft.com/en-us/rest/api/storageservices/get-account-information
+     *
+     * @param {ServiceGetAccountInfoOptions} [options] Options to the Service Get Account Info operation.
+     * @returns {Promise<ServiceGetAccountInfoResponse>} Response data for the Service Get Account Info operation.
+     * @memberof BlobServiceClient
+     */
+    BlobServiceClient.prototype.getAccountInfo = function (options) {
+        if (options === void 0) { options = {}; }
+        return tslib.__awaiter(this, void 0, void 0, function () {
+            var _a, span, spanOptions, e_7;
+            return tslib.__generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0:
+                        _a = createSpan("BlobServiceClient-getAccountInfo", options.tracingOptions), span = _a.span, spanOptions = _a.spanOptions;
+                        _b.label = 1;
+                    case 1:
+                        _b.trys.push([1, 3, 4, 5]);
+                        return [4 /*yield*/, this.serviceContext.getAccountInfo({
+                                abortSignal: options.abortSignal,
+                                spanOptions: spanOptions
+                            })];
+                    case 2: return [2 /*return*/, _b.sent()];
+                    case 3:
+                        e_7 = _b.sent();
+                        span.setStatus({
+                            code: api.CanonicalCode.UNKNOWN,
+                            message: e_7.message
+                        });
+                        throw e_7;
+                    case 4:
+                        span.end();
+                        return [7 /*endfinally*/];
+                    case 5: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * Returns a list of the containers under the specified account.
+     * @see https://docs.microsoft.com/en-us/rest/api/storageservices/list-containers2
+     *
+     * @param {string} [marker] A string value that identifies the portion of
+     *                        the list of containers to be returned with the next listing operation. The
+     *                        operation returns the continuationToken value within the response body if the
+     *                        listing operation did not return all containers remaining to be listed
+     *                        with the current page. The continuationToken value can be used as the value for
+     *                        the marker parameter in a subsequent call to request the next page of list
+     *                        items. The marker value is opaque to the client.
+     * @param {ServiceListContainersSegmentOptions} [options] Options to the Service List Container Segment operation.
+     * @returns {Promise<ServiceListContainersSegmentResponse>} Response data for the Service List Container Segment operation.
+     * @memberof BlobServiceClient
+     */
+    BlobServiceClient.prototype.listContainersSegment = function (marker, options) {
+        if (options === void 0) { options = {}; }
+        return tslib.__awaiter(this, void 0, void 0, function () {
+            var _a, span, spanOptions, e_8;
+            return tslib.__generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0:
+                        _a = createSpan("BlobServiceClient-listContainersSegment", options.tracingOptions), span = _a.span, spanOptions = _a.spanOptions;
+                        _b.label = 1;
+                    case 1:
+                        _b.trys.push([1, 3, 4, 5]);
+                        return [4 /*yield*/, this.serviceContext.listContainersSegment(tslib.__assign(tslib.__assign({ abortSignal: options.abortSignal, marker: marker }, options), { include: typeof options.include === "string" ? [options.include] : options.include, spanOptions: spanOptions }))];
+                    case 2: return [2 /*return*/, _b.sent()];
+                    case 3:
+                        e_8 = _b.sent();
+                        span.setStatus({
+                            code: api.CanonicalCode.UNKNOWN,
+                            message: e_8.message
+                        });
+                        throw e_8;
+                    case 4:
+                        span.end();
+                        return [7 /*endfinally*/];
+                    case 5: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * The Filter Blobs operation enables callers to list blobs across all containers whose tags
+     * match a given search expression. Filter blobs searches across all containers within a
+     * storage account but can be scoped within the expression to a single container.
+     *
+     * @private
+     * @param {string} tagFilterSqlExpression The where parameter enables the caller to query blobs whose tags match a given expression.
+     *                                        The given expression must evaluate to true for a blob to be returned in the results.
+     *                                        The[OData - ABNF] filter syntax rule defines the formal grammar for the value of the where query parameter;
+     *                                        however, only a subset of the OData filter syntax is supported in the Blob service.
+     * @param {string} [marker] A string value that identifies the portion of
+     *                          the list of blobs to be returned with the next listing operation. The
+     *                          operation returns the continuationToken value within the response body if the
+     *                          listing operation did not return all blobs remaining to be listed
+     *                          with the current page. The continuationToken value can be used as the value for
+     *                          the marker parameter in a subsequent call to request the next page of list
+     *                          items. The marker value is opaque to the client.
+     * @param {ServiceFindBlobsByTagsSegmentOptions} [options={}] Options to find blobs by tags.
+     * @returns {Promise<ServiceFindBlobsByTagsSegmentResponse>}
+     * @memberof BlobServiceClient
+     */
+    BlobServiceClient.prototype.findBlobsByTagsSegment = function (tagFilterSqlExpression, marker, options) {
+        if (options === void 0) { options = {}; }
+        return tslib.__awaiter(this, void 0, void 0, function () {
+            var _a, span, spanOptions, response, wrappedResponse, e_9;
+            return tslib.__generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0:
+                        _a = createSpan("BlobServiceClient-findBlobsByTagsSegment", options.tracingOptions), span = _a.span, spanOptions = _a.spanOptions;
+                        _b.label = 1;
+                    case 1:
+                        _b.trys.push([1, 3, 4, 5]);
+                        return [4 /*yield*/, this.serviceContext.filterBlobs({
+                                abortSignal: options.abortSignal,
+                                where: tagFilterSqlExpression,
+                                marker: marker,
+                                maxPageSize: options.maxPageSize,
+                                spanOptions: spanOptions
+                            })];
+                    case 2:
+                        response = _b.sent();
+                        wrappedResponse = tslib.__assign(tslib.__assign({}, response), { _response: response._response, blobs: response.blobs.map(function (blob) {
+                                var _a;
+                                var tagValue = "";
+                                if (((_a = blob.tags) === null || _a === void 0 ? void 0 : _a.blobTagSet.length) === 1) {
+                                    tagValue = blob.tags.blobTagSet[0].value;
+                                }
+                                return tslib.__assign(tslib.__assign({}, blob), { tags: toTags(blob.tags), tagValue: tagValue });
+                            }) });
+                        return [2 /*return*/, wrappedResponse];
+                    case 3:
+                        e_9 = _b.sent();
+                        span.setStatus({
+                            code: api.CanonicalCode.UNKNOWN,
+                            message: e_9.message
+                        });
+                        throw e_9;
+                    case 4:
+                        span.end();
+                        return [7 /*endfinally*/];
+                    case 5: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * Returns an AsyncIterableIterator for ServiceFindBlobsByTagsSegmentResponse.
+     *
+     * @private
+     * @param {string} tagFilterSqlExpression  The where parameter enables the caller to query blobs whose tags match a given expression.
+     *                                         The given expression must evaluate to true for a blob to be returned in the results.
+     *                                         The[OData - ABNF] filter syntax rule defines the formal grammar for the value of the where query parameter;
+     *                                         however, only a subset of the OData filter syntax is supported in the Blob service.
+     * @param {string} [marker] A string value that identifies the portion of
+     *                          the list of blobs to be returned with the next listing operation. The
+     *                          operation returns the continuationToken value within the response body if the
+     *                          listing operation did not return all blobs remaining to be listed
+     *                          with the current page. The continuationToken value can be used as the value for
+     *                          the marker parameter in a subsequent call to request the next page of list
+     *                          items. The marker value is opaque to the client.
+     * @param {ServiceFindBlobsByTagsSegmentOptions} [options={}] Options to find blobs by tags.
+     * @returns {AsyncIterableIterator<ServiceFindBlobsByTagsSegmentResponse>}
+     * @memberof BlobServiceClient
+     */
+    BlobServiceClient.prototype.findBlobsByTagsSegments = function (tagFilterSqlExpression, marker, options) {
+        if (options === void 0) { options = {}; }
+        return tslib.__asyncGenerator(this, arguments, function findBlobsByTagsSegments_1() {
+            var response;
+            return tslib.__generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        if (!(!!marker || marker === undefined)) return [3 /*break*/, 6];
+                        _a.label = 1;
+                    case 1: return [4 /*yield*/, tslib.__await(this.findBlobsByTagsSegment(tagFilterSqlExpression, marker, options))];
+                    case 2:
+                        response = _a.sent();
+                        response.blobs = response.blobs || [];
+                        marker = response.continuationToken;
+                        return [4 /*yield*/, tslib.__await(response)];
+                    case 3: return [4 /*yield*/, _a.sent()];
+                    case 4:
+                        _a.sent();
+                        _a.label = 5;
+                    case 5:
+                        if (marker) return [3 /*break*/, 1];
+                        _a.label = 6;
+                    case 6: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * Returns an AsyncIterableIterator for blobs.
+     *
+     * @private
+     * @param {string} tagFilterSqlExpression  The where parameter enables the caller to query blobs whose tags match a given expression.
+     *                                         The given expression must evaluate to true for a blob to be returned in the results.
+     *                                         The[OData - ABNF] filter syntax rule defines the formal grammar for the value of the where query parameter;
+     *                                         however, only a subset of the OData filter syntax is supported in the Blob service.
+     * @param {ServiceFindBlobsByTagsSegmentOptions} [options={}] Options to findBlobsByTagsItems.
+     * @returns {AsyncIterableIterator<FilterBlobItem>}
+     * @memberof BlobServiceClient
+     */
+    BlobServiceClient.prototype.findBlobsByTagsItems = function (tagFilterSqlExpression, options) {
+        if (options === void 0) { options = {}; }
+        return tslib.__asyncGenerator(this, arguments, function findBlobsByTagsItems_1() {
+            var marker, _a, _b, segment, e_10_1;
+            var e_10, _c;
+            return tslib.__generator(this, function (_d) {
+                switch (_d.label) {
+                    case 0:
+                        _d.trys.push([0, 7, 8, 13]);
+                        _a = tslib.__asyncValues(this.findBlobsByTagsSegments(tagFilterSqlExpression, marker, options));
+                        _d.label = 1;
+                    case 1: return [4 /*yield*/, tslib.__await(_a.next())];
+                    case 2:
+                        if (!(_b = _d.sent(), !_b.done)) return [3 /*break*/, 6];
+                        segment = _b.value;
+                        return [5 /*yield**/, tslib.__values(tslib.__asyncDelegator(tslib.__asyncValues(segment.blobs)))];
+                    case 3: return [4 /*yield*/, tslib.__await.apply(void 0, [_d.sent()])];
+                    case 4:
+                        _d.sent();
+                        _d.label = 5;
+                    case 5: return [3 /*break*/, 1];
+                    case 6: return [3 /*break*/, 13];
+                    case 7:
+                        e_10_1 = _d.sent();
+                        e_10 = { error: e_10_1 };
+                        return [3 /*break*/, 13];
+                    case 8:
+                        _d.trys.push([8, , 11, 12]);
+                        if (!(_b && !_b.done && (_c = _a.return))) return [3 /*break*/, 10];
+                        return [4 /*yield*/, tslib.__await(_c.call(_a))];
+                    case 9:
+                        _d.sent();
+                        _d.label = 10;
+                    case 10: return [3 /*break*/, 12];
+                    case 11:
+                        if (e_10) throw e_10.error;
+                        return [7 /*endfinally*/];
+                    case 12: return [7 /*endfinally*/];
+                    case 13: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * Returns an async iterable iterator to find all blobs with specified tag
+     * under the specified account.
+     *
+     * .byPage() returns an async iterable iterator to list the blobs in pages.
+     *
+     * @see https://docs.microsoft.com/en-us/rest/api/storageservices/get-blob-service-properties
+     *
+     * Example using `for await` syntax:
+     *
+     * ```js
+     * let i = 1;
+     * for await (const blob of blobServiceClient.findBlobsByTags("tagkey='tagvalue'")) {
+     *   console.log(`Blob ${i++}: ${container.name}`);
+     * }
+     * ```
+     *
+     * Example using `iter.next()`:
+     *
+     * ```js
+     * let i = 1;
+     * const iter = blobServiceClient.findBlobsByTags("tagkey='tagvalue'");
+     * let blobItem = await iter.next();
+     * while (!blobItem.done) {
+     *   console.log(`Blob ${i++}: ${blobItem.value.name}`);
+     *   blobItem = await iter.next();
+     * }
+     * ```
+     *
+     * Example using `byPage()`:
+     *
+     * ```js
+     * // passing optional maxPageSize in the page settings
+     * let i = 1;
+     * for await (const response of blobServiceClient.findBlobsByTags("tagkey='tagvalue'").byPage({ maxPageSize: 20 })) {
+     *   if (response.blobs) {
+     *     for (const blob of response.blobs) {
+     *       console.log(`Blob ${i++}: ${blob.name}`);
+     *     }
+     *   }
+     * }
+     * ```
+     *
+     * Example using paging with a marker:
+     *
+     * ```js
+     * let i = 1;
+     * let iterator = blobServiceClient.findBlobsByTags("tagkey='tagvalue'").byPage({ maxPageSize: 2 });
+     * let response = (await iterator.next()).value;
+     *
+     * // Prints 2 blob names
+     * if (response.blobs) {
+     *   for (const blob of response.blobs) {
+     *     console.log(`Blob ${i++}: ${blob.name}`);
+     *   }
+     * }
+     *
+     * // Gets next marker
+     * let marker = response.continuationToken;
+     * // Passing next marker as continuationToken
+     * iterator = blobServiceClient
+     *   .findBlobsByTags("tagkey='tagvalue'")
+     *   .byPage({ continuationToken: marker, maxPageSize: 10 });
+     * response = (await iterator.next()).value;
+     *
+     * // Prints blob names
+     * if (response.blobs) {
+     *   for (const blob of response.blobs) {
+     *      console.log(`Blob ${i++}: ${blob.name}`);
+     *   }
+     * }
+     * ```
+     *
+     * @param {string} tagFilterSqlExpression  The where parameter enables the caller to query blobs whose tags match a given expression.
+     *                                         The given expression must evaluate to true for a blob to be returned in the results.
+     *                                         The[OData - ABNF] filter syntax rule defines the formal grammar for the value of the where query parameter;
+     *                                         however, only a subset of the OData filter syntax is supported in the Blob service.
+     * @param {ServiceFindBlobByTagsOptions} [options={}] Options to find blobs by tags.
+     * @returns {PagedAsyncIterableIterator<FilterBlobItem, ServiceFindBlobsByTagsSegmentResponse>}
+     * @memberof BlobServiceClient
+     */
+    BlobServiceClient.prototype.findBlobsByTags = function (tagFilterSqlExpression, options) {
+        var _a;
+        var _this = this;
+        if (options === void 0) { options = {}; }
+        // AsyncIterableIterator to iterate over blobs
+        var listSegmentOptions = tslib.__assign({}, options);
+        var iter = this.findBlobsByTagsItems(tagFilterSqlExpression, listSegmentOptions);
+        return _a = {
+                /**
+                 * @member {Promise} [next] The next method, part of the iteration protocol
+                 */
+                next: function () {
+                    return iter.next();
+                }
+            },
+            /**
+             * @member {Symbol} [asyncIterator] The connection to the async iterator, part of the iteration protocol
+             */
+            _a[Symbol.asyncIterator] = function () {
+                return this;
+            },
+            /**
+             * @member {Function} [byPage] Return an AsyncIterableIterator that works a page at a time
+             */
+            _a.byPage = function (settings) {
+                if (settings === void 0) { settings = {}; }
+                return _this.findBlobsByTagsSegments(tagFilterSqlExpression, settings.continuationToken, tslib.__assign({ maxPageSize: settings.maxPageSize }, listSegmentOptions));
+            },
+            _a;
+    };
+    /**
+     * Returns an AsyncIterableIterator for ServiceListContainersSegmentResponses
+     *
+     * @private
+     * @param {string} [marker] A string value that identifies the portion of
+     *                        the list of containers to be returned with the next listing operation. The
+     *                        operation returns the continuationToken value within the response body if the
+     *                        listing operation did not return all containers remaining to be listed
+     *                        with the current page. The continuationToken value can be used as the value for
+     *                        the marker parameter in a subsequent call to request the next page of list
+     *                        items. The marker value is opaque to the client.
+     * @param {ServiceListContainersSegmentOptions} [options] Options to list containers operation.
+     * @returns {AsyncIterableIterator<ServiceListContainersSegmentResponse>}
+     * @memberof BlobServiceClient
+     */
+    BlobServiceClient.prototype.listSegments = function (marker, options) {
+        if (options === void 0) { options = {}; }
+        return tslib.__asyncGenerator(this, arguments, function listSegments_1() {
+            var listContainersSegmentResponse;
+            return tslib.__generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        if (!(!!marker || marker === undefined)) return [3 /*break*/, 7];
+                        _a.label = 1;
+                    case 1: return [4 /*yield*/, tslib.__await(this.listContainersSegment(marker, options))];
+                    case 2:
+                        listContainersSegmentResponse = _a.sent();
+                        listContainersSegmentResponse.containerItems =
+                            listContainersSegmentResponse.containerItems || [];
+                        marker = listContainersSegmentResponse.continuationToken;
+                        return [4 /*yield*/, tslib.__await(listContainersSegmentResponse)];
+                    case 3: return [4 /*yield*/, tslib.__await.apply(void 0, [_a.sent()])];
+                    case 4: return [4 /*yield*/, _a.sent()];
+                    case 5:
+                        _a.sent();
+                        _a.label = 6;
+                    case 6:
+                        if (marker) return [3 /*break*/, 1];
+                        _a.label = 7;
+                    case 7: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * Returns an AsyncIterableIterator for Container Items
+     *
+     * @private
+     * @param {ServiceListContainersSegmentOptions} [options] Options to list containers operation.
+     * @returns {AsyncIterableIterator<ContainerItem>}
+     * @memberof BlobServiceClient
+     */
+    BlobServiceClient.prototype.listItems = function (options) {
+        if (options === void 0) { options = {}; }
+        return tslib.__asyncGenerator(this, arguments, function listItems_1() {
+            var marker, _a, _b, segment, e_11_1;
+            var e_11, _c;
+            return tslib.__generator(this, function (_d) {
+                switch (_d.label) {
+                    case 0:
+                        _d.trys.push([0, 7, 8, 13]);
+                        _a = tslib.__asyncValues(this.listSegments(marker, options));
+                        _d.label = 1;
+                    case 1: return [4 /*yield*/, tslib.__await(_a.next())];
+                    case 2:
+                        if (!(_b = _d.sent(), !_b.done)) return [3 /*break*/, 6];
+                        segment = _b.value;
+                        return [5 /*yield**/, tslib.__values(tslib.__asyncDelegator(tslib.__asyncValues(segment.containerItems)))];
+                    case 3: return [4 /*yield*/, tslib.__await.apply(void 0, [_d.sent()])];
+                    case 4:
+                        _d.sent();
+                        _d.label = 5;
+                    case 5: return [3 /*break*/, 1];
+                    case 6: return [3 /*break*/, 13];
+                    case 7:
+                        e_11_1 = _d.sent();
+                        e_11 = { error: e_11_1 };
+                        return [3 /*break*/, 13];
+                    case 8:
+                        _d.trys.push([8, , 11, 12]);
+                        if (!(_b && !_b.done && (_c = _a.return))) return [3 /*break*/, 10];
+                        return [4 /*yield*/, tslib.__await(_c.call(_a))];
+                    case 9:
+                        _d.sent();
+                        _d.label = 10;
+                    case 10: return [3 /*break*/, 12];
+                    case 11:
+                        if (e_11) throw e_11.error;
+                        return [7 /*endfinally*/];
+                    case 12: return [7 /*endfinally*/];
+                    case 13: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * Returns an async iterable iterator to list all the containers
+     * under the specified account.
+     *
+     * .byPage() returns an async iterable iterator to list the containers in pages.
+     *
+     * Example using `for await` syntax:
+     *
+     * ```js
+     * let i = 1;
+     * for await (const container of blobServiceClient.listContainers()) {
+     *   console.log(`Container ${i++}: ${container.name}`);
+     * }
+     * ```
+     *
+     * Example using `iter.next()`:
+     *
+     * ```js
+     * let i = 1;
+     * const iter = blobServiceClient.listContainers();
+     * let containerItem = await iter.next();
+     * while (!containerItem.done) {
+     *   console.log(`Container ${i++}: ${containerItem.value.name}`);
+     *   containerItem = await iter.next();
+     * }
+     * ```
+     *
+     * Example using `byPage()`:
+     *
+     * ```js
+     * // passing optional maxPageSize in the page settings
+     * let i = 1;
+     * for await (const response of blobServiceClient.listContainers().byPage({ maxPageSize: 20 })) {
+     *   if (response.containerItems) {
+     *     for (const container of response.containerItems) {
+     *       console.log(`Container ${i++}: ${container.name}`);
+     *     }
+     *   }
+     * }
+     * ```
+     *
+     * Example using paging with a marker:
+     *
+     * ```js
+     * let i = 1;
+     * let iterator = blobServiceClient.listContainers().byPage({ maxPageSize: 2 });
+     * let response = (await iterator.next()).value;
+     *
+     * // Prints 2 container names
+     * if (response.containerItems) {
+     *   for (const container of response.containerItems) {
+     *     console.log(`Container ${i++}: ${container.name}`);
+     *   }
+     * }
+     *
+     * // Gets next marker
+     * let marker = response.continuationToken;
+     * // Passing next marker as continuationToken
+     * iterator = blobServiceClient
+     *   .listContainers()
+     *   .byPage({ continuationToken: marker, maxPageSize: 10 });
+     * response = (await iterator.next()).value;
+     *
+     * // Prints 10 container names
+     * if (response.containerItems) {
+     *   for (const container of response.containerItems) {
+     *      console.log(`Container ${i++}: ${container.name}`);
+     *   }
+     * }
+     * ```
+     *
+     * @param {ServiceListContainersOptions} [options={}] Options to list containers.
+     * @returns {PagedAsyncIterableIterator<ContainerItem, ServiceListContainersSegmentResponse>} An asyncIterableIterator that supports paging.
+     * @memberof BlobServiceClient
+     */
+    BlobServiceClient.prototype.listContainers = function (options) {
+        var _a;
+        var _this = this;
+        if (options === void 0) { options = {}; }
+        if (options.prefix === "") {
+            options.prefix = undefined;
         }
-        else {
-            throw new RangeError("'version' must be >= '2018-11-09' when generating user delegation SAS using user delegation key.");
+        var include = [];
+        if (options.includeDeleted) {
+            include.push("deleted");
         }
-    }
-    throw new RangeError("'version' must be >= '2015-04-05'.");
-}
-/**
- * ONLY AVAILABLE IN NODE.JS RUNTIME.
- * IMPLEMENTATION FOR API VERSION FROM 2015-04-05 AND BEFORE 2018-11-09.
- *
- * Creates an instance of SASQueryParameters.
- *
- * Only accepts required settings needed to create a SAS. For optional settings please
- * set corresponding properties directly, such as permissions, startsOn and identifier.
- *
- * WARNING: When identifier is not provided, permissions and expiresOn are required.
- * You MUST assign value to identifier or expiresOn & permissions manually if you initial with
- * this constructor.
- *
- * @param {BlobSASSignatureValues} blobSASSignatureValues
- * @param {StorageSharedKeyCredential} sharedKeyCredential
- * @returns {SASQueryParameters}
- */
-function generateBlobSASQueryParameters20150405(blobSASSignatureValues, sharedKeyCredential) {
-    if (!blobSASSignatureValues.identifier &&
-        !blobSASSignatureValues.permissions &&
-        !blobSASSignatureValues.expiresOn) {
-        throw new RangeError("Must provide 'permissions' and 'expiresOn' for Blob SAS generation when 'identifier' is not provided.");
-    }
-    var version = blobSASSignatureValues.version ? blobSASSignatureValues.version : SERVICE_VERSION;
-    var resource = "c";
-    var verifiedPermissions;
-    if (blobSASSignatureValues.snapshotTime) {
-        throw RangeError("'version' must be >= '2018-11-09' when provided 'snapshotTime'.");
-    }
-    if (blobSASSignatureValues.versionId) {
-        throw RangeError("'version' must be >= '2019-10-10' when provided 'versionId'.");
-    }
-    if (blobSASSignatureValues.permissions &&
-        blobSASSignatureValues.permissions.deleteVersion &&
-        version < "2019-10-10") {
-        throw RangeError("'version' must be >= '2019-10-10' when provided 'x' permission.");
-    }
-    if (blobSASSignatureValues.permissions &&
-        blobSASSignatureValues.permissions.tag &&
-        version < "2019-12-12") {
-        throw RangeError("'version' must be >= '2019-12-12' when provided 't' permission.");
-    }
-    if (blobSASSignatureValues.blobName) {
-        resource = "b";
-    }
-    // Calling parse and toString guarantees the proper ordering and throws on invalid characters.
-    if (blobSASSignatureValues.permissions) {
-        if (blobSASSignatureValues.blobName) {
-            verifiedPermissions = BlobSASPermissions.parse(blobSASSignatureValues.permissions.toString()).toString();
+        if (options.includeMetadata) {
+            include.push("metadata");
         }
-        else {
-            verifiedPermissions = ContainerSASPermissions.parse(blobSASSignatureValues.permissions.toString()).toString();
+        // AsyncIterableIterator to iterate over containers
+        var listSegmentOptions = tslib.__assign(tslib.__assign({}, options), (include.length > 0 ? { include: include } : {}));
+        var iter = this.listItems(listSegmentOptions);
+        return _a = {
+                /**
+                 * @member {Promise} [next] The next method, part of the iteration protocol
+                 */
+                next: function () {
+                    return iter.next();
+                }
+            },
+            /**
+             * @member {Symbol} [asyncIterator] The connection to the async iterator, part of the iteration protocol
+             */
+            _a[Symbol.asyncIterator] = function () {
+                return this;
+            },
+            /**
+             * @member {Function} [byPage] Return an AsyncIterableIterator that works a page at a time
+             */
+            _a.byPage = function (settings) {
+                if (settings === void 0) { settings = {}; }
+                return _this.listSegments(settings.continuationToken, tslib.__assign({ maxPageSize: settings.maxPageSize }, listSegmentOptions));
+            },
+            _a;
+    };
+    /**
+     * ONLY AVAILABLE WHEN USING BEARER TOKEN AUTHENTICATION (TokenCredential).
+     *
+     * Retrieves a user delegation key for the Blob service. This is only a valid operation when using
+     * bearer token authentication.
+     *
+     * @see https://docs.microsoft.com/en-us/rest/api/storageservices/get-user-delegation-key
+     *
+     * @param {Date} startsOn      The start time for the user delegation SAS. Must be within 7 days of the current time
+     * @param {Date} expiresOn     The end time for the user delegation SAS. Must be within 7 days of the current time
+     * @returns {Promise<ServiceGetUserDelegationKeyResponse>}
+     * @memberof BlobServiceClient
+     */
+    BlobServiceClient.prototype.getUserDelegationKey = function (startsOn, expiresOn, options) {
+        if (options === void 0) { options = {}; }
+        return tslib.__awaiter(this, void 0, void 0, function () {
+            var _a, span, spanOptions, response, userDelegationKey, res, e_12;
+            return tslib.__generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0:
+                        _a = createSpan("BlobServiceClient-getUserDelegationKey", options.tracingOptions), span = _a.span, spanOptions = _a.spanOptions;
+                        _b.label = 1;
+                    case 1:
+                        _b.trys.push([1, 3, 4, 5]);
+                        return [4 /*yield*/, this.serviceContext.getUserDelegationKey({
+                                startsOn: truncatedISO8061Date(startsOn, false),
+                                expiresOn: truncatedISO8061Date(expiresOn, false)
+                            }, {
+                                abortSignal: options.abortSignal,
+                                spanOptions: spanOptions
+                            })];
+                    case 2:
+                        response = _b.sent();
+                        userDelegationKey = {
+                            signedObjectId: response.signedObjectId,
+                            signedTenantId: response.signedTenantId,
+                            signedStartsOn: new Date(response.signedStartsOn),
+                            signedExpiresOn: new Date(response.signedExpiresOn),
+                            signedService: response.signedService,
+                            signedVersion: response.signedVersion,
+                            value: response.value
+                        };
+                        res = tslib.__assign({ _response: response._response, requestId: response.requestId, clientRequestId: response.clientRequestId, version: response.version, date: response.date, errorCode: response.errorCode }, userDelegationKey);
+                        return [2 /*return*/, res];
+                    case 3:
+                        e_12 = _b.sent();
+                        span.setStatus({
+                            code: api.CanonicalCode.UNKNOWN,
+                            message: e_12.message
+                        });
+                        throw e_12;
+                    case 4:
+                        span.end();
+                        return [7 /*endfinally*/];
+                    case 5: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * Creates a BlobBatchClient object to conduct batch operations.
+     *
+     * @see https://docs.microsoft.com/en-us/rest/api/storageservices/blob-batch
+     *
+     * @returns {BlobBatchClient} A new BlobBatchClient object for this service.
+     * @memberof BlobServiceClient
+     */
+    BlobServiceClient.prototype.getBlobBatchClient = function () {
+        return new BlobBatchClient(this.url, this.pipeline);
+    };
+    /**
+     * Only available for BlobServiceClient constructed with a shared key credential.
+     *
+     * Generates a Blob account Shared Access Signature (SAS) URI based on the client properties
+     * and parameters passed in. The SAS is signed by the shared key credential of the client.
+     *
+     * @see https://docs.microsoft.com/en-us/rest/api/storageservices/create-account-sas
+     *
+     * @param {Date} expiresOn Optional. The time at which the shared access signature becomes invalid. Default to an hour later if not provided.
+     * @param {AccountSASPermissions} [permissions=AccountSASPermissions.parse("r")] Specifies the list of permissions to be associated with the SAS.
+     * @param {string} [resourceTypes="sco"] Specifies the resource types associated with the shared access signature.
+     * @param {ServiceGenerateAccountSasUrlOptions} [options={}] Optional parameters.
+     * @returns {string} An account SAS URI consisting of the URI to the resource represented by this client, followed by the generated SAS token.
+     * @memberof BlobServiceClient
+     */
+    BlobServiceClient.prototype.generateAccountSasUrl = function (expiresOn, permissions, resourceTypes, options) {
+        if (permissions === void 0) { permissions = AccountSASPermissions.parse("r"); }
+        if (resourceTypes === void 0) { resourceTypes = "sco"; }
+        if (options === void 0) { options = {}; }
+        if (!(this.credential instanceof StorageSharedKeyCredential)) {
+            throw RangeError("Can only generate the account SAS when the client is initialized with a shared key credential");
         }
-    }
-    // Signature is generated on the un-url-encoded values.
-    var stringToSign = [
-        verifiedPermissions ? verifiedPermissions : "",
-        blobSASSignatureValues.startsOn
-            ? truncatedISO8061Date(blobSASSignatureValues.startsOn, false)
-            : "",
-        blobSASSignatureValues.expiresOn
-            ? truncatedISO8061Date(blobSASSignatureValues.expiresOn, false)
-            : "",
-        getCanonicalName(sharedKeyCredential.accountName, blobSASSignatureValues.containerName, blobSASSignatureValues.blobName),
-        blobSASSignatureValues.identifier,
-        blobSASSignatureValues.ipRange ? ipRangeToString(blobSASSignatureValues.ipRange) : "",
-        blobSASSignatureValues.protocol ? blobSASSignatureValues.protocol : "",
-        version,
-        blobSASSignatureValues.cacheControl ? blobSASSignatureValues.cacheControl : "",
-        blobSASSignatureValues.contentDisposition ? blobSASSignatureValues.contentDisposition : "",
-        blobSASSignatureValues.contentEncoding ? blobSASSignatureValues.contentEncoding : "",
-        blobSASSignatureValues.contentLanguage ? blobSASSignatureValues.contentLanguage : "",
-        blobSASSignatureValues.contentType ? blobSASSignatureValues.contentType : ""
-    ].join("\n");
-    var signature = sharedKeyCredential.computeHMACSHA256(stringToSign);
-    return new SASQueryParameters(version, signature, verifiedPermissions, undefined, undefined, blobSASSignatureValues.protocol, blobSASSignatureValues.startsOn, blobSASSignatureValues.expiresOn, blobSASSignatureValues.ipRange, blobSASSignatureValues.identifier, resource, blobSASSignatureValues.cacheControl, blobSASSignatureValues.contentDisposition, blobSASSignatureValues.contentEncoding, blobSASSignatureValues.contentLanguage, blobSASSignatureValues.contentType);
-}
-/**
- * ONLY AVAILABLE IN NODE.JS RUNTIME.
- * IMPLEMENTATION FOR API VERSION FROM 2018-11-09.
- *
- * Creates an instance of SASQueryParameters.
- *
- * Only accepts required settings needed to create a SAS. For optional settings please
- * set corresponding properties directly, such as permissions, startsOn and identifier.
- *
- * WARNING: When identifier is not provided, permissions and expiresOn are required.
- * You MUST assign value to identifier or expiresOn & permissions manually if you initial with
- * this constructor.
- *
- * @param {BlobSASSignatureValues} blobSASSignatureValues
- * @param {StorageSharedKeyCredential} sharedKeyCredential
- * @returns {SASQueryParameters}
- */
-function generateBlobSASQueryParameters20181109(blobSASSignatureValues, sharedKeyCredential) {
-    if (!blobSASSignatureValues.identifier &&
-        !blobSASSignatureValues.permissions &&
-        !blobSASSignatureValues.expiresOn) {
-        throw new RangeError("Must provide 'permissions' and 'expiresOn' for Blob SAS generation when 'identifier' is not provided.");
-    }
-    var version = blobSASSignatureValues.version ? blobSASSignatureValues.version : SERVICE_VERSION;
-    var resource = "c";
-    var verifiedPermissions;
-    if (blobSASSignatureValues.versionId && version < "2019-10-10") {
-        throw RangeError("'version' must be >= '2019-10-10' when provided 'versionId'.");
-    }
-    if (blobSASSignatureValues.permissions &&
-        blobSASSignatureValues.permissions.deleteVersion &&
-        version < "2019-10-10") {
-        throw RangeError("'version' must be >= '2019-10-10' when provided 'x' permission.");
-    }
-    if (blobSASSignatureValues.permissions &&
-        blobSASSignatureValues.permissions.tag &&
-        version < "2019-12-12") {
-        throw RangeError("'version' must be >= '2019-12-12' when provided 't' permission.");
-    }
-    if (blobSASSignatureValues.blobName === undefined && blobSASSignatureValues.snapshotTime) {
-        throw RangeError("Must provide 'blobName' when provided 'snapshotTime'.");
-    }
-    if (blobSASSignatureValues.blobName === undefined && blobSASSignatureValues.versionId) {
-        throw RangeError("Must provide 'blobName' when provided 'versionId'.");
-    }
-    var timestamp = blobSASSignatureValues.snapshotTime;
-    if (blobSASSignatureValues.blobName) {
-        resource = "b";
-        if (blobSASSignatureValues.snapshotTime) {
-            resource = "bs";
+        if (expiresOn === undefined) {
+            var now = new Date();
+            expiresOn = new Date(now.getTime() + 3600 * 1000);
         }
-        else if (blobSASSignatureValues.versionId) {
-            resource = "bv";
-            timestamp = blobSASSignatureValues.versionId;
-        }
-    }
-    // Calling parse and toString guarantees the proper ordering and throws on invalid characters.
-    if (blobSASSignatureValues.permissions) {
-        if (blobSASSignatureValues.blobName) {
-            verifiedPermissions = BlobSASPermissions.parse(blobSASSignatureValues.permissions.toString()).toString();
-        }
-        else {
-            verifiedPermissions = ContainerSASPermissions.parse(blobSASSignatureValues.permissions.toString()).toString();
-        }
-    }
-    // Signature is generated on the un-url-encoded values.
-    var stringToSign = [
-        verifiedPermissions ? verifiedPermissions : "",
-        blobSASSignatureValues.startsOn
-            ? truncatedISO8061Date(blobSASSignatureValues.startsOn, false)
-            : "",
-        blobSASSignatureValues.expiresOn
-            ? truncatedISO8061Date(blobSASSignatureValues.expiresOn, false)
-            : "",
-        getCanonicalName(sharedKeyCredential.accountName, blobSASSignatureValues.containerName, blobSASSignatureValues.blobName),
-        blobSASSignatureValues.identifier,
-        blobSASSignatureValues.ipRange ? ipRangeToString(blobSASSignatureValues.ipRange) : "",
-        blobSASSignatureValues.protocol ? blobSASSignatureValues.protocol : "",
-        version,
-        resource,
-        timestamp,
-        blobSASSignatureValues.cacheControl ? blobSASSignatureValues.cacheControl : "",
-        blobSASSignatureValues.contentDisposition ? blobSASSignatureValues.contentDisposition : "",
-        blobSASSignatureValues.contentEncoding ? blobSASSignatureValues.contentEncoding : "",
-        blobSASSignatureValues.contentLanguage ? blobSASSignatureValues.contentLanguage : "",
-        blobSASSignatureValues.contentType ? blobSASSignatureValues.contentType : ""
-    ].join("\n");
-    var signature = sharedKeyCredential.computeHMACSHA256(stringToSign);
-    return new SASQueryParameters(version, signature, verifiedPermissions, undefined, undefined, blobSASSignatureValues.protocol, blobSASSignatureValues.startsOn, blobSASSignatureValues.expiresOn, blobSASSignatureValues.ipRange, blobSASSignatureValues.identifier, resource, blobSASSignatureValues.cacheControl, blobSASSignatureValues.contentDisposition, blobSASSignatureValues.contentEncoding, blobSASSignatureValues.contentLanguage, blobSASSignatureValues.contentType);
-}
-/**
- * ONLY AVAILABLE IN NODE.JS RUNTIME.
- * IMPLEMENTATION FOR API VERSION FROM 2018-11-09.
- *
- * Creates an instance of SASQueryParameters.
- *
- * Only accepts required settings needed to create a SAS. For optional settings please
- * set corresponding properties directly, such as permissions, startsOn and identifier.
- *
- * WARNING: identifier will be ignored, permissions and expiresOn are required.
- *
- * @param {BlobSASSignatureValues} blobSASSignatureValues
- * @param {UserDelegationKeyCredential} userDelegationKeyCredential
- * @returns {SASQueryParameters}
- */
-function generateBlobSASQueryParametersUDK20181109(blobSASSignatureValues, userDelegationKeyCredential) {
-    if (!blobSASSignatureValues.permissions || !blobSASSignatureValues.expiresOn) {
-        throw new RangeError("Must provide 'permissions' and 'expiresOn' for Blob SAS generation when generating user delegation SAS.");
-    }
-    var version = blobSASSignatureValues.version ? blobSASSignatureValues.version : SERVICE_VERSION;
-    if (blobSASSignatureValues.versionId && version < "2019-10-10") {
-        throw RangeError("'version' must be >= '2019-10-10' when provided 'versionId'.");
-    }
-    if (blobSASSignatureValues.permissions &&
-        blobSASSignatureValues.permissions.deleteVersion &&
-        version < "2019-10-10") {
-        throw RangeError("'version' must be >= '2019-10-10' when provided 'x' permission.");
-    }
-    if (blobSASSignatureValues.permissions &&
-        blobSASSignatureValues.permissions.tag &&
-        version < "2019-12-12") {
-        throw RangeError("'version' must be >= '2019-12-12' when provided 't' permission.");
-    }
-    var resource = "c";
-    var verifiedPermissions;
-    if (blobSASSignatureValues.blobName === undefined && blobSASSignatureValues.snapshotTime) {
-        throw RangeError("Must provide 'blobName' when provided 'snapshotTime'.");
-    }
-    if (blobSASSignatureValues.blobName === undefined && blobSASSignatureValues.versionId) {
-        throw RangeError("Must provide 'blobName' when provided 'versionId'.");
-    }
-    var timestamp = blobSASSignatureValues.snapshotTime;
-    if (blobSASSignatureValues.blobName) {
-        resource = "b";
-        if (blobSASSignatureValues.snapshotTime) {
-            resource = "bs";
-        }
-        else if (blobSASSignatureValues.versionId) {
-            resource = "bv";
-            timestamp = blobSASSignatureValues.versionId;
-        }
-    }
-    // Calling parse and toString guarantees the proper ordering and throws on invalid characters.
-    if (blobSASSignatureValues.permissions) {
-        if (blobSASSignatureValues.blobName) {
-            verifiedPermissions = BlobSASPermissions.parse(blobSASSignatureValues.permissions.toString()).toString();
-        }
-        else {
-            verifiedPermissions = ContainerSASPermissions.parse(blobSASSignatureValues.permissions.toString()).toString();
-        }
-    }
-    // Signature is generated on the un-url-encoded values.
-    var stringToSign = [
-        verifiedPermissions ? verifiedPermissions : "",
-        blobSASSignatureValues.startsOn
-            ? truncatedISO8061Date(blobSASSignatureValues.startsOn, false)
-            : "",
-        blobSASSignatureValues.expiresOn
-            ? truncatedISO8061Date(blobSASSignatureValues.expiresOn, false)
-            : "",
-        getCanonicalName(userDelegationKeyCredential.accountName, blobSASSignatureValues.containerName, blobSASSignatureValues.blobName),
-        userDelegationKeyCredential.userDelegationKey.signedObjectId,
-        userDelegationKeyCredential.userDelegationKey.signedTenantId,
-        userDelegationKeyCredential.userDelegationKey.signedStartsOn
-            ? truncatedISO8061Date(userDelegationKeyCredential.userDelegationKey.signedStartsOn, false)
-            : "",
-        userDelegationKeyCredential.userDelegationKey.signedExpiresOn
-            ? truncatedISO8061Date(userDelegationKeyCredential.userDelegationKey.signedExpiresOn, false)
-            : "",
-        userDelegationKeyCredential.userDelegationKey.signedService,
-        userDelegationKeyCredential.userDelegationKey.signedVersion,
-        blobSASSignatureValues.ipRange ? ipRangeToString(blobSASSignatureValues.ipRange) : "",
-        blobSASSignatureValues.protocol ? blobSASSignatureValues.protocol : "",
-        version,
-        resource,
-        timestamp,
-        blobSASSignatureValues.cacheControl,
-        blobSASSignatureValues.contentDisposition,
-        blobSASSignatureValues.contentEncoding,
-        blobSASSignatureValues.contentLanguage,
-        blobSASSignatureValues.contentType
-    ].join("\n");
-    var signature = userDelegationKeyCredential.computeHMACSHA256(stringToSign);
-    return new SASQueryParameters(version, signature, verifiedPermissions, undefined, undefined, blobSASSignatureValues.protocol, blobSASSignatureValues.startsOn, blobSASSignatureValues.expiresOn, blobSASSignatureValues.ipRange, blobSASSignatureValues.identifier, resource, blobSASSignatureValues.cacheControl, blobSASSignatureValues.contentDisposition, blobSASSignatureValues.contentEncoding, blobSASSignatureValues.contentLanguage, blobSASSignatureValues.contentType, userDelegationKeyCredential.userDelegationKey);
-}
-function getCanonicalName(accountName, containerName, blobName) {
-    // Container: "/blob/account/containerName"
-    // Blob:      "/blob/account/containerName/blobName"
-    var elements = ["/blob/" + accountName + "/" + containerName];
-    if (blobName) {
-        elements.push("/" + blobName);
-    }
-    return elements.join("");
-}
+        var sas = generateAccountSASQueryParameters(tslib.__assign({ permissions: permissions,
+            expiresOn: expiresOn,
+            resourceTypes: resourceTypes, services: AccountSASServices.parse("b").toString() }, options), this.credential).toString();
+        return appendToURLQuery(this.url, sas);
+    };
+    return BlobServiceClient;
+}(StorageClient));
 
 Object.defineProperty(exports, 'BaseRequestPolicy', {
     enumerable: true,
@@ -35746,10 +36114,20 @@ exports.newPipeline = newPipeline;
 
 "use strict";
 
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
+    result["default"] = mod;
+    return result;
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-const assert = __webpack_require__(357);
-const path = __webpack_require__(622);
-const pathHelper = __webpack_require__(972);
+const path = __importStar(__webpack_require__(622));
+const pathHelper = __importStar(__webpack_require__(972));
+const assert_1 = __importDefault(__webpack_require__(357));
 const IS_WINDOWS = process.platform === 'win32';
 /**
  * Helper class for parsing paths into segments
@@ -35763,7 +36141,7 @@ class Path {
         this.segments = [];
         // String
         if (typeof itemPath === 'string') {
-            assert(itemPath, `Parameter 'itemPath' must not be empty`);
+            assert_1.default(itemPath, `Parameter 'itemPath' must not be empty`);
             // Normalize slashes and trim unnecessary trailing slash
             itemPath = pathHelper.safeTrimTrailingSeparator(itemPath);
             // Not rooted
@@ -35790,24 +36168,24 @@ class Path {
         // Array
         else {
             // Must not be empty
-            assert(itemPath.length > 0, `Parameter 'itemPath' must not be an empty array`);
+            assert_1.default(itemPath.length > 0, `Parameter 'itemPath' must not be an empty array`);
             // Each segment
             for (let i = 0; i < itemPath.length; i++) {
                 let segment = itemPath[i];
                 // Must not be empty
-                assert(segment, `Parameter 'itemPath' must not contain any empty segments`);
+                assert_1.default(segment, `Parameter 'itemPath' must not contain any empty segments`);
                 // Normalize slashes
                 segment = pathHelper.normalizeSeparators(itemPath[i]);
                 // Root segment
                 if (i === 0 && pathHelper.hasRoot(segment)) {
                     segment = pathHelper.safeTrimTrailingSeparator(segment);
-                    assert(segment === pathHelper.dirname(segment), `Parameter 'itemPath' root segment contains information for multiple segments`);
+                    assert_1.default(segment === pathHelper.dirname(segment), `Parameter 'itemPath' root segment contains information for multiple segments`);
                     this.segments.push(segment);
                 }
                 // All other segments
                 else {
                     // Must not contain slash
-                    assert(!segment.includes(path.sep), `Parameter 'itemPath' contains unexpected path separators`);
+                    assert_1.default(!segment.includes(path.sep), `Parameter 'itemPath' contains unexpected path separators`);
                     this.segments.push(segment);
                 }
             }
@@ -38743,288 +39121,7 @@ module.exports = require("crypto");
 /* 419 */,
 /* 420 */,
 /* 421 */,
-/* 422 */
-/***/ (function(module) {
-
-/*! *****************************************************************************
-Copyright (c) Microsoft Corporation. All rights reserved.
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use
-this file except in compliance with the License. You may obtain a copy of the
-License at http://www.apache.org/licenses/LICENSE-2.0
-
-THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION ANY IMPLIED
-WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE,
-MERCHANTABLITY OR NON-INFRINGEMENT.
-
-See the Apache Version 2.0 License for specific language governing permissions
-and limitations under the License.
-***************************************************************************** */
-/* global global, define, System, Reflect, Promise */
-var __extends;
-var __assign;
-var __rest;
-var __decorate;
-var __param;
-var __metadata;
-var __awaiter;
-var __generator;
-var __exportStar;
-var __values;
-var __read;
-var __spread;
-var __spreadArrays;
-var __await;
-var __asyncGenerator;
-var __asyncDelegator;
-var __asyncValues;
-var __makeTemplateObject;
-var __importStar;
-var __importDefault;
-var __classPrivateFieldGet;
-var __classPrivateFieldSet;
-(function (factory) {
-    var root = typeof global === "object" ? global : typeof self === "object" ? self : typeof this === "object" ? this : {};
-    if (typeof define === "function" && define.amd) {
-        define("tslib", ["exports"], function (exports) { factory(createExporter(root, createExporter(exports))); });
-    }
-    else if ( true && typeof module.exports === "object") {
-        factory(createExporter(root, createExporter(module.exports)));
-    }
-    else {
-        factory(createExporter(root));
-    }
-    function createExporter(exports, previous) {
-        if (exports !== root) {
-            if (typeof Object.create === "function") {
-                Object.defineProperty(exports, "__esModule", { value: true });
-            }
-            else {
-                exports.__esModule = true;
-            }
-        }
-        return function (id, v) { return exports[id] = previous ? previous(id, v) : v; };
-    }
-})
-(function (exporter) {
-    var extendStatics = Object.setPrototypeOf ||
-        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
-        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
-
-    __extends = function (d, b) {
-        extendStatics(d, b);
-        function __() { this.constructor = d; }
-        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
-    };
-
-    __assign = Object.assign || function (t) {
-        for (var s, i = 1, n = arguments.length; i < n; i++) {
-            s = arguments[i];
-            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p)) t[p] = s[p];
-        }
-        return t;
-    };
-
-    __rest = function (s, e) {
-        var t = {};
-        for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
-            t[p] = s[p];
-        if (s != null && typeof Object.getOwnPropertySymbols === "function")
-            for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
-                if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
-                    t[p[i]] = s[p[i]];
-            }
-        return t;
-    };
-
-    __decorate = function (decorators, target, key, desc) {
-        var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-        if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-        else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-        return c > 3 && r && Object.defineProperty(target, key, r), r;
-    };
-
-    __param = function (paramIndex, decorator) {
-        return function (target, key) { decorator(target, key, paramIndex); }
-    };
-
-    __metadata = function (metadataKey, metadataValue) {
-        if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(metadataKey, metadataValue);
-    };
-
-    __awaiter = function (thisArg, _arguments, P, generator) {
-        function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-        return new (P || (P = Promise))(function (resolve, reject) {
-            function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-            function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-            function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-            step((generator = generator.apply(thisArg, _arguments || [])).next());
-        });
-    };
-
-    __generator = function (thisArg, body) {
-        var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
-        return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
-        function verb(n) { return function (v) { return step([n, v]); }; }
-        function step(op) {
-            if (f) throw new TypeError("Generator is already executing.");
-            while (_) try {
-                if (f = 1, y && (t = op[0] & 2 ? y["return"] : op[0] ? y["throw"] || ((t = y["return"]) && t.call(y), 0) : y.next) && !(t = t.call(y, op[1])).done) return t;
-                if (y = 0, t) op = [op[0] & 2, t.value];
-                switch (op[0]) {
-                    case 0: case 1: t = op; break;
-                    case 4: _.label++; return { value: op[1], done: false };
-                    case 5: _.label++; y = op[1]; op = [0]; continue;
-                    case 7: op = _.ops.pop(); _.trys.pop(); continue;
-                    default:
-                        if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
-                        if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
-                        if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
-                        if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
-                        if (t[2]) _.ops.pop();
-                        _.trys.pop(); continue;
-                }
-                op = body.call(thisArg, _);
-            } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
-            if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
-        }
-    };
-
-    __exportStar = function (m, exports) {
-        for (var p in m) if (!exports.hasOwnProperty(p)) exports[p] = m[p];
-    };
-
-    __values = function (o) {
-        var s = typeof Symbol === "function" && Symbol.iterator, m = s && o[s], i = 0;
-        if (m) return m.call(o);
-        if (o && typeof o.length === "number") return {
-            next: function () {
-                if (o && i >= o.length) o = void 0;
-                return { value: o && o[i++], done: !o };
-            }
-        };
-        throw new TypeError(s ? "Object is not iterable." : "Symbol.iterator is not defined.");
-    };
-
-    __read = function (o, n) {
-        var m = typeof Symbol === "function" && o[Symbol.iterator];
-        if (!m) return o;
-        var i = m.call(o), r, ar = [], e;
-        try {
-            while ((n === void 0 || n-- > 0) && !(r = i.next()).done) ar.push(r.value);
-        }
-        catch (error) { e = { error: error }; }
-        finally {
-            try {
-                if (r && !r.done && (m = i["return"])) m.call(i);
-            }
-            finally { if (e) throw e.error; }
-        }
-        return ar;
-    };
-
-    __spread = function () {
-        for (var ar = [], i = 0; i < arguments.length; i++)
-            ar = ar.concat(__read(arguments[i]));
-        return ar;
-    };
-
-    __spreadArrays = function () {
-        for (var s = 0, i = 0, il = arguments.length; i < il; i++) s += arguments[i].length;
-        for (var r = Array(s), k = 0, i = 0; i < il; i++)
-            for (var a = arguments[i], j = 0, jl = a.length; j < jl; j++, k++)
-                r[k] = a[j];
-        return r;
-    };
-
-    __await = function (v) {
-        return this instanceof __await ? (this.v = v, this) : new __await(v);
-    };
-
-    __asyncGenerator = function (thisArg, _arguments, generator) {
-        if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
-        var g = generator.apply(thisArg, _arguments || []), i, q = [];
-        return i = {}, verb("next"), verb("throw"), verb("return"), i[Symbol.asyncIterator] = function () { return this; }, i;
-        function verb(n) { if (g[n]) i[n] = function (v) { return new Promise(function (a, b) { q.push([n, v, a, b]) > 1 || resume(n, v); }); }; }
-        function resume(n, v) { try { step(g[n](v)); } catch (e) { settle(q[0][3], e); } }
-        function step(r) { r.value instanceof __await ? Promise.resolve(r.value.v).then(fulfill, reject) : settle(q[0][2], r);  }
-        function fulfill(value) { resume("next", value); }
-        function reject(value) { resume("throw", value); }
-        function settle(f, v) { if (f(v), q.shift(), q.length) resume(q[0][0], q[0][1]); }
-    };
-
-    __asyncDelegator = function (o) {
-        var i, p;
-        return i = {}, verb("next"), verb("throw", function (e) { throw e; }), verb("return"), i[Symbol.iterator] = function () { return this; }, i;
-        function verb(n, f) { i[n] = o[n] ? function (v) { return (p = !p) ? { value: __await(o[n](v)), done: n === "return" } : f ? f(v) : v; } : f; }
-    };
-
-    __asyncValues = function (o) {
-        if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
-        var m = o[Symbol.asyncIterator], i;
-        return m ? m.call(o) : (o = typeof __values === "function" ? __values(o) : o[Symbol.iterator](), i = {}, verb("next"), verb("throw"), verb("return"), i[Symbol.asyncIterator] = function () { return this; }, i);
-        function verb(n) { i[n] = o[n] && function (v) { return new Promise(function (resolve, reject) { v = o[n](v), settle(resolve, reject, v.done, v.value); }); }; }
-        function settle(resolve, reject, d, v) { Promise.resolve(v).then(function(v) { resolve({ value: v, done: d }); }, reject); }
-    };
-
-    __makeTemplateObject = function (cooked, raw) {
-        if (Object.defineProperty) { Object.defineProperty(cooked, "raw", { value: raw }); } else { cooked.raw = raw; }
-        return cooked;
-    };
-
-    __importStar = function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
-        result["default"] = mod;
-        return result;
-    };
-
-    __importDefault = function (mod) {
-        return (mod && mod.__esModule) ? mod : { "default": mod };
-    };
-
-    __classPrivateFieldGet = function (receiver, privateMap) {
-        if (!privateMap.has(receiver)) {
-            throw new TypeError("attempted to get private field on non-instance");
-        }
-        return privateMap.get(receiver);
-    };
-
-    __classPrivateFieldSet = function (receiver, privateMap, value) {
-        if (!privateMap.has(receiver)) {
-            throw new TypeError("attempted to set private field on non-instance");
-        }
-        privateMap.set(receiver, value);
-        return value;
-    }
-
-    exporter("__extends", __extends);
-    exporter("__assign", __assign);
-    exporter("__rest", __rest);
-    exporter("__decorate", __decorate);
-    exporter("__param", __param);
-    exporter("__metadata", __metadata);
-    exporter("__awaiter", __awaiter);
-    exporter("__generator", __generator);
-    exporter("__exportStar", __exportStar);
-    exporter("__values", __values);
-    exporter("__read", __read);
-    exporter("__spread", __spread);
-    exporter("__spreadArrays", __spreadArrays);
-    exporter("__await", __await);
-    exporter("__asyncGenerator", __asyncGenerator);
-    exporter("__asyncDelegator", __asyncDelegator);
-    exporter("__asyncValues", __asyncValues);
-    exporter("__makeTemplateObject", __makeTemplateObject);
-    exporter("__importStar", __importStar);
-    exporter("__importDefault", __importDefault);
-    exporter("__classPrivateFieldGet", __classPrivateFieldGet);
-    exporter("__classPrivateFieldSet", __classPrivateFieldSet);
-});
-
-
-/***/ }),
+/* 422 */,
 /* 423 */
 /***/ (function(module, __unusedexports, __webpack_require__) {
 
@@ -39631,20 +39728,31 @@ const utils = __importStar(__webpack_require__(15));
 const constants_1 = __webpack_require__(931);
 function getTarPath(args, compressionMethod) {
     return __awaiter(this, void 0, void 0, function* () {
-        const IS_WINDOWS = process.platform === 'win32';
-        if (IS_WINDOWS) {
-            const systemTar = `${process.env['windir']}\\System32\\tar.exe`;
-            if (compressionMethod !== constants_1.CompressionMethod.Gzip) {
-                // We only use zstandard compression on windows when gnu tar is installed due to
-                // a bug with compressing large files with bsdtar + zstd
-                args.push('--force-local');
+        switch (process.platform) {
+            case 'win32': {
+                const systemTar = `${process.env['windir']}\\System32\\tar.exe`;
+                if (compressionMethod !== constants_1.CompressionMethod.Gzip) {
+                    // We only use zstandard compression on windows when gnu tar is installed due to
+                    // a bug with compressing large files with bsdtar + zstd
+                    args.push('--force-local');
+                }
+                else if (fs_1.existsSync(systemTar)) {
+                    return systemTar;
+                }
+                else if (yield utils.isGnuTarInstalled()) {
+                    args.push('--force-local');
+                }
+                break;
             }
-            else if (fs_1.existsSync(systemTar)) {
-                return systemTar;
+            case 'darwin': {
+                const gnuTar = yield io.which('gtar', false);
+                if (gnuTar) {
+                    return gnuTar;
+                }
+                break;
             }
-            else if (yield utils.isGnuTarInstalled()) {
-                args.push('--force-local');
-            }
+            default:
+                break;
         }
         return yield io.which('tar', true);
     });
@@ -39729,6 +39837,32 @@ function createTar(archiveFolder, sourceDirectories, compressionMethod) {
     });
 }
 exports.createTar = createTar;
+function listTar(archivePath, compressionMethod) {
+    return __awaiter(this, void 0, void 0, function* () {
+        // --d: Decompress.
+        // --long=#: Enables long distance matching with # bits.
+        // Maximum is 30 (1GB) on 32-bit OS and 31 (2GB) on 64-bit.
+        // Using 30 here because we also support 32-bit self-hosted runners.
+        function getCompressionProgram() {
+            switch (compressionMethod) {
+                case constants_1.CompressionMethod.Zstd:
+                    return ['--use-compress-program', 'zstd -d --long=30'];
+                case constants_1.CompressionMethod.ZstdWithoutLong:
+                    return ['--use-compress-program', 'zstd -d'];
+                default:
+                    return ['-z'];
+            }
+        }
+        const args = [
+            ...getCompressionProgram(),
+            '-tf',
+            archivePath.replace(new RegExp(`\\${path.sep}`, 'g'), '/'),
+            '-P'
+        ];
+        yield execTar(args, compressionMethod);
+    });
+}
+exports.listTar = listTar;
 //# sourceMappingURL=tar.js.map
 
 /***/ }),
@@ -39806,7 +39940,7 @@ __exportStar(__webpack_require__(975), exports);
 __exportStar(__webpack_require__(70), exports);
 __exportStar(__webpack_require__(694), exports);
 __exportStar(__webpack_require__(695), exports);
-var context_base_1 = __webpack_require__(231);
+var context_base_1 = __webpack_require__(459);
 Object.defineProperty(exports, "Context", { enumerable: true, get: function () { return context_base_1.Context; } });
 var context_1 = __webpack_require__(492);
 /** Entrypoint for context API */
@@ -42028,7 +42162,43 @@ exports.FetchError = FetchError;
 
 
 /***/ }),
-/* 459 */,
+/* 459 */
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+"use strict";
+
+/*
+ * Copyright The OpenTelemetry Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !exports.hasOwnProperty(p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+__exportStar(__webpack_require__(765), exports);
+__exportStar(__webpack_require__(560), exports);
+__exportStar(__webpack_require__(53), exports);
+//# sourceMappingURL=index.js.map
+
+/***/ }),
 /* 460 */
 /***/ (function(module) {
 
@@ -42621,7 +42791,7 @@ exports.getState = getState;
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ContextAPI = void 0;
-var context_base_1 = __webpack_require__(231);
+var context_base_1 = __webpack_require__(459);
 var global_utils_1 = __webpack_require__(976);
 var NOOP_CONTEXT_MANAGER = new context_base_1.NoopContextManager();
 /**
@@ -42793,7 +42963,7 @@ function addHook (state, kind, name, hook) {
 /* 512 */
 /***/ (function(module) {
 
-module.exports = {"application/1d-interleaved-parityfec":{"source":"iana"},"application/3gpdash-qoe-report+xml":{"source":"iana","charset":"UTF-8","compressible":true},"application/3gpp-ims+xml":{"source":"iana","compressible":true},"application/a2l":{"source":"iana"},"application/activemessage":{"source":"iana"},"application/activity+json":{"source":"iana","compressible":true},"application/alto-costmap+json":{"source":"iana","compressible":true},"application/alto-costmapfilter+json":{"source":"iana","compressible":true},"application/alto-directory+json":{"source":"iana","compressible":true},"application/alto-endpointcost+json":{"source":"iana","compressible":true},"application/alto-endpointcostparams+json":{"source":"iana","compressible":true},"application/alto-endpointprop+json":{"source":"iana","compressible":true},"application/alto-endpointpropparams+json":{"source":"iana","compressible":true},"application/alto-error+json":{"source":"iana","compressible":true},"application/alto-networkmap+json":{"source":"iana","compressible":true},"application/alto-networkmapfilter+json":{"source":"iana","compressible":true},"application/alto-updatestreamcontrol+json":{"source":"iana","compressible":true},"application/alto-updatestreamparams+json":{"source":"iana","compressible":true},"application/aml":{"source":"iana"},"application/andrew-inset":{"source":"iana","extensions":["ez"]},"application/applefile":{"source":"iana"},"application/applixware":{"source":"apache","extensions":["aw"]},"application/atf":{"source":"iana"},"application/atfx":{"source":"iana"},"application/atom+xml":{"source":"iana","compressible":true,"extensions":["atom"]},"application/atomcat+xml":{"source":"iana","compressible":true,"extensions":["atomcat"]},"application/atomdeleted+xml":{"source":"iana","compressible":true,"extensions":["atomdeleted"]},"application/atomicmail":{"source":"iana"},"application/atomsvc+xml":{"source":"iana","compressible":true,"extensions":["atomsvc"]},"application/atsc-dwd+xml":{"source":"iana","compressible":true,"extensions":["dwd"]},"application/atsc-dynamic-event-message":{"source":"iana"},"application/atsc-held+xml":{"source":"iana","compressible":true,"extensions":["held"]},"application/atsc-rdt+json":{"source":"iana","compressible":true},"application/atsc-rsat+xml":{"source":"iana","compressible":true,"extensions":["rsat"]},"application/atxml":{"source":"iana"},"application/auth-policy+xml":{"source":"iana","compressible":true},"application/bacnet-xdd+zip":{"source":"iana","compressible":false},"application/batch-smtp":{"source":"iana"},"application/bdoc":{"compressible":false,"extensions":["bdoc"]},"application/beep+xml":{"source":"iana","charset":"UTF-8","compressible":true},"application/calendar+json":{"source":"iana","compressible":true},"application/calendar+xml":{"source":"iana","compressible":true,"extensions":["xcs"]},"application/call-completion":{"source":"iana"},"application/cals-1840":{"source":"iana"},"application/cap+xml":{"source":"iana","charset":"UTF-8","compressible":true},"application/cbor":{"source":"iana"},"application/cbor-seq":{"source":"iana"},"application/cccex":{"source":"iana"},"application/ccmp+xml":{"source":"iana","compressible":true},"application/ccxml+xml":{"source":"iana","compressible":true,"extensions":["ccxml"]},"application/cdfx+xml":{"source":"iana","compressible":true,"extensions":["cdfx"]},"application/cdmi-capability":{"source":"iana","extensions":["cdmia"]},"application/cdmi-container":{"source":"iana","extensions":["cdmic"]},"application/cdmi-domain":{"source":"iana","extensions":["cdmid"]},"application/cdmi-object":{"source":"iana","extensions":["cdmio"]},"application/cdmi-queue":{"source":"iana","extensions":["cdmiq"]},"application/cdni":{"source":"iana"},"application/cea":{"source":"iana"},"application/cea-2018+xml":{"source":"iana","compressible":true},"application/cellml+xml":{"source":"iana","compressible":true},"application/cfw":{"source":"iana"},"application/clue+xml":{"source":"iana","compressible":true},"application/clue_info+xml":{"source":"iana","compressible":true},"application/cms":{"source":"iana"},"application/cnrp+xml":{"source":"iana","compressible":true},"application/coap-group+json":{"source":"iana","compressible":true},"application/coap-payload":{"source":"iana"},"application/commonground":{"source":"iana"},"application/conference-info+xml":{"source":"iana","compressible":true},"application/cose":{"source":"iana"},"application/cose-key":{"source":"iana"},"application/cose-key-set":{"source":"iana"},"application/cpl+xml":{"source":"iana","compressible":true},"application/csrattrs":{"source":"iana"},"application/csta+xml":{"source":"iana","compressible":true},"application/cstadata+xml":{"source":"iana","compressible":true},"application/csvm+json":{"source":"iana","compressible":true},"application/cu-seeme":{"source":"apache","extensions":["cu"]},"application/cwt":{"source":"iana"},"application/cybercash":{"source":"iana"},"application/dart":{"compressible":true},"application/dash+xml":{"source":"iana","compressible":true,"extensions":["mpd"]},"application/dashdelta":{"source":"iana"},"application/davmount+xml":{"source":"iana","compressible":true,"extensions":["davmount"]},"application/dca-rft":{"source":"iana"},"application/dcd":{"source":"iana"},"application/dec-dx":{"source":"iana"},"application/dialog-info+xml":{"source":"iana","compressible":true},"application/dicom":{"source":"iana"},"application/dicom+json":{"source":"iana","compressible":true},"application/dicom+xml":{"source":"iana","compressible":true},"application/dii":{"source":"iana"},"application/dit":{"source":"iana"},"application/dns":{"source":"iana"},"application/dns+json":{"source":"iana","compressible":true},"application/dns-message":{"source":"iana"},"application/docbook+xml":{"source":"apache","compressible":true,"extensions":["dbk"]},"application/dots+cbor":{"source":"iana"},"application/dskpp+xml":{"source":"iana","compressible":true},"application/dssc+der":{"source":"iana","extensions":["dssc"]},"application/dssc+xml":{"source":"iana","compressible":true,"extensions":["xdssc"]},"application/dvcs":{"source":"iana"},"application/ecmascript":{"source":"iana","compressible":true,"extensions":["ecma","es"]},"application/edi-consent":{"source":"iana"},"application/edi-x12":{"source":"iana","compressible":false},"application/edifact":{"source":"iana","compressible":false},"application/efi":{"source":"iana"},"application/emergencycalldata.comment+xml":{"source":"iana","compressible":true},"application/emergencycalldata.control+xml":{"source":"iana","compressible":true},"application/emergencycalldata.deviceinfo+xml":{"source":"iana","compressible":true},"application/emergencycalldata.ecall.msd":{"source":"iana"},"application/emergencycalldata.providerinfo+xml":{"source":"iana","compressible":true},"application/emergencycalldata.serviceinfo+xml":{"source":"iana","compressible":true},"application/emergencycalldata.subscriberinfo+xml":{"source":"iana","compressible":true},"application/emergencycalldata.veds+xml":{"source":"iana","compressible":true},"application/emma+xml":{"source":"iana","compressible":true,"extensions":["emma"]},"application/emotionml+xml":{"source":"iana","compressible":true,"extensions":["emotionml"]},"application/encaprtp":{"source":"iana"},"application/epp+xml":{"source":"iana","compressible":true},"application/epub+zip":{"source":"iana","compressible":false,"extensions":["epub"]},"application/eshop":{"source":"iana"},"application/exi":{"source":"iana","extensions":["exi"]},"application/expect-ct-report+json":{"source":"iana","compressible":true},"application/fastinfoset":{"source":"iana"},"application/fastsoap":{"source":"iana"},"application/fdt+xml":{"source":"iana","compressible":true,"extensions":["fdt"]},"application/fhir+json":{"source":"iana","charset":"UTF-8","compressible":true},"application/fhir+xml":{"source":"iana","charset":"UTF-8","compressible":true},"application/fido.trusted-apps+json":{"compressible":true},"application/fits":{"source":"iana"},"application/flexfec":{"source":"iana"},"application/font-sfnt":{"source":"iana"},"application/font-tdpfr":{"source":"iana","extensions":["pfr"]},"application/font-woff":{"source":"iana","compressible":false},"application/framework-attributes+xml":{"source":"iana","compressible":true},"application/geo+json":{"source":"iana","compressible":true,"extensions":["geojson"]},"application/geo+json-seq":{"source":"iana"},"application/geopackage+sqlite3":{"source":"iana"},"application/geoxacml+xml":{"source":"iana","compressible":true},"application/gltf-buffer":{"source":"iana"},"application/gml+xml":{"source":"iana","compressible":true,"extensions":["gml"]},"application/gpx+xml":{"source":"apache","compressible":true,"extensions":["gpx"]},"application/gxf":{"source":"apache","extensions":["gxf"]},"application/gzip":{"source":"iana","compressible":false,"extensions":["gz"]},"application/h224":{"source":"iana"},"application/held+xml":{"source":"iana","compressible":true},"application/hjson":{"extensions":["hjson"]},"application/http":{"source":"iana"},"application/hyperstudio":{"source":"iana","extensions":["stk"]},"application/ibe-key-request+xml":{"source":"iana","compressible":true},"application/ibe-pkg-reply+xml":{"source":"iana","compressible":true},"application/ibe-pp-data":{"source":"iana"},"application/iges":{"source":"iana"},"application/im-iscomposing+xml":{"source":"iana","charset":"UTF-8","compressible":true},"application/index":{"source":"iana"},"application/index.cmd":{"source":"iana"},"application/index.obj":{"source":"iana"},"application/index.response":{"source":"iana"},"application/index.vnd":{"source":"iana"},"application/inkml+xml":{"source":"iana","compressible":true,"extensions":["ink","inkml"]},"application/iotp":{"source":"iana"},"application/ipfix":{"source":"iana","extensions":["ipfix"]},"application/ipp":{"source":"iana"},"application/isup":{"source":"iana"},"application/its+xml":{"source":"iana","compressible":true,"extensions":["its"]},"application/java-archive":{"source":"apache","compressible":false,"extensions":["jar","war","ear"]},"application/java-serialized-object":{"source":"apache","compressible":false,"extensions":["ser"]},"application/java-vm":{"source":"apache","compressible":false,"extensions":["class"]},"application/javascript":{"source":"iana","charset":"UTF-8","compressible":true,"extensions":["js","mjs"]},"application/jf2feed+json":{"source":"iana","compressible":true},"application/jose":{"source":"iana"},"application/jose+json":{"source":"iana","compressible":true},"application/jrd+json":{"source":"iana","compressible":true},"application/json":{"source":"iana","charset":"UTF-8","compressible":true,"extensions":["json","map"]},"application/json-patch+json":{"source":"iana","compressible":true},"application/json-seq":{"source":"iana"},"application/json5":{"extensions":["json5"]},"application/jsonml+json":{"source":"apache","compressible":true,"extensions":["jsonml"]},"application/jwk+json":{"source":"iana","compressible":true},"application/jwk-set+json":{"source":"iana","compressible":true},"application/jwt":{"source":"iana"},"application/kpml-request+xml":{"source":"iana","compressible":true},"application/kpml-response+xml":{"source":"iana","compressible":true},"application/ld+json":{"source":"iana","compressible":true,"extensions":["jsonld"]},"application/lgr+xml":{"source":"iana","compressible":true,"extensions":["lgr"]},"application/link-format":{"source":"iana"},"application/load-control+xml":{"source":"iana","compressible":true},"application/lost+xml":{"source":"iana","compressible":true,"extensions":["lostxml"]},"application/lostsync+xml":{"source":"iana","compressible":true},"application/lpf+zip":{"source":"iana","compressible":false},"application/lxf":{"source":"iana"},"application/mac-binhex40":{"source":"iana","extensions":["hqx"]},"application/mac-compactpro":{"source":"apache","extensions":["cpt"]},"application/macwriteii":{"source":"iana"},"application/mads+xml":{"source":"iana","compressible":true,"extensions":["mads"]},"application/manifest+json":{"charset":"UTF-8","compressible":true,"extensions":["webmanifest"]},"application/marc":{"source":"iana","extensions":["mrc"]},"application/marcxml+xml":{"source":"iana","compressible":true,"extensions":["mrcx"]},"application/mathematica":{"source":"iana","extensions":["ma","nb","mb"]},"application/mathml+xml":{"source":"iana","compressible":true,"extensions":["mathml"]},"application/mathml-content+xml":{"source":"iana","compressible":true},"application/mathml-presentation+xml":{"source":"iana","compressible":true},"application/mbms-associated-procedure-description+xml":{"source":"iana","compressible":true},"application/mbms-deregister+xml":{"source":"iana","compressible":true},"application/mbms-envelope+xml":{"source":"iana","compressible":true},"application/mbms-msk+xml":{"source":"iana","compressible":true},"application/mbms-msk-response+xml":{"source":"iana","compressible":true},"application/mbms-protection-description+xml":{"source":"iana","compressible":true},"application/mbms-reception-report+xml":{"source":"iana","compressible":true},"application/mbms-register+xml":{"source":"iana","compressible":true},"application/mbms-register-response+xml":{"source":"iana","compressible":true},"application/mbms-schedule+xml":{"source":"iana","compressible":true},"application/mbms-user-service-description+xml":{"source":"iana","compressible":true},"application/mbox":{"source":"iana","extensions":["mbox"]},"application/media-policy-dataset+xml":{"source":"iana","compressible":true},"application/media_control+xml":{"source":"iana","compressible":true},"application/mediaservercontrol+xml":{"source":"iana","compressible":true,"extensions":["mscml"]},"application/merge-patch+json":{"source":"iana","compressible":true},"application/metalink+xml":{"source":"apache","compressible":true,"extensions":["metalink"]},"application/metalink4+xml":{"source":"iana","compressible":true,"extensions":["meta4"]},"application/mets+xml":{"source":"iana","compressible":true,"extensions":["mets"]},"application/mf4":{"source":"iana"},"application/mikey":{"source":"iana"},"application/mipc":{"source":"iana"},"application/mmt-aei+xml":{"source":"iana","compressible":true,"extensions":["maei"]},"application/mmt-usd+xml":{"source":"iana","compressible":true,"extensions":["musd"]},"application/mods+xml":{"source":"iana","compressible":true,"extensions":["mods"]},"application/moss-keys":{"source":"iana"},"application/moss-signature":{"source":"iana"},"application/mosskey-data":{"source":"iana"},"application/mosskey-request":{"source":"iana"},"application/mp21":{"source":"iana","extensions":["m21","mp21"]},"application/mp4":{"source":"iana","extensions":["mp4s","m4p"]},"application/mpeg4-generic":{"source":"iana"},"application/mpeg4-iod":{"source":"iana"},"application/mpeg4-iod-xmt":{"source":"iana"},"application/mrb-consumer+xml":{"source":"iana","compressible":true,"extensions":["xdf"]},"application/mrb-publish+xml":{"source":"iana","compressible":true,"extensions":["xdf"]},"application/msc-ivr+xml":{"source":"iana","charset":"UTF-8","compressible":true},"application/msc-mixer+xml":{"source":"iana","charset":"UTF-8","compressible":true},"application/msword":{"source":"iana","compressible":false,"extensions":["doc","dot"]},"application/mud+json":{"source":"iana","compressible":true},"application/multipart-core":{"source":"iana"},"application/mxf":{"source":"iana","extensions":["mxf"]},"application/n-quads":{"source":"iana","extensions":["nq"]},"application/n-triples":{"source":"iana","extensions":["nt"]},"application/nasdata":{"source":"iana"},"application/news-checkgroups":{"source":"iana","charset":"US-ASCII"},"application/news-groupinfo":{"source":"iana","charset":"US-ASCII"},"application/news-transmission":{"source":"iana"},"application/nlsml+xml":{"source":"iana","compressible":true},"application/node":{"source":"iana","extensions":["cjs"]},"application/nss":{"source":"iana"},"application/ocsp-request":{"source":"iana"},"application/ocsp-response":{"source":"iana"},"application/octet-stream":{"source":"iana","compressible":false,"extensions":["bin","dms","lrf","mar","so","dist","distz","pkg","bpk","dump","elc","deploy","exe","dll","deb","dmg","iso","img","msi","msp","msm","buffer"]},"application/oda":{"source":"iana","extensions":["oda"]},"application/odm+xml":{"source":"iana","compressible":true},"application/odx":{"source":"iana"},"application/oebps-package+xml":{"source":"iana","compressible":true,"extensions":["opf"]},"application/ogg":{"source":"iana","compressible":false,"extensions":["ogx"]},"application/omdoc+xml":{"source":"apache","compressible":true,"extensions":["omdoc"]},"application/onenote":{"source":"apache","extensions":["onetoc","onetoc2","onetmp","onepkg"]},"application/oscore":{"source":"iana"},"application/oxps":{"source":"iana","extensions":["oxps"]},"application/p2p-overlay+xml":{"source":"iana","compressible":true,"extensions":["relo"]},"application/parityfec":{"source":"iana"},"application/passport":{"source":"iana"},"application/patch-ops-error+xml":{"source":"iana","compressible":true,"extensions":["xer"]},"application/pdf":{"source":"iana","compressible":false,"extensions":["pdf"]},"application/pdx":{"source":"iana"},"application/pem-certificate-chain":{"source":"iana"},"application/pgp-encrypted":{"source":"iana","compressible":false,"extensions":["pgp"]},"application/pgp-keys":{"source":"iana"},"application/pgp-signature":{"source":"iana","extensions":["asc","sig"]},"application/pics-rules":{"source":"apache","extensions":["prf"]},"application/pidf+xml":{"source":"iana","charset":"UTF-8","compressible":true},"application/pidf-diff+xml":{"source":"iana","charset":"UTF-8","compressible":true},"application/pkcs10":{"source":"iana","extensions":["p10"]},"application/pkcs12":{"source":"iana"},"application/pkcs7-mime":{"source":"iana","extensions":["p7m","p7c"]},"application/pkcs7-signature":{"source":"iana","extensions":["p7s"]},"application/pkcs8":{"source":"iana","extensions":["p8"]},"application/pkcs8-encrypted":{"source":"iana"},"application/pkix-attr-cert":{"source":"iana","extensions":["ac"]},"application/pkix-cert":{"source":"iana","extensions":["cer"]},"application/pkix-crl":{"source":"iana","extensions":["crl"]},"application/pkix-pkipath":{"source":"iana","extensions":["pkipath"]},"application/pkixcmp":{"source":"iana","extensions":["pki"]},"application/pls+xml":{"source":"iana","compressible":true,"extensions":["pls"]},"application/poc-settings+xml":{"source":"iana","charset":"UTF-8","compressible":true},"application/postscript":{"source":"iana","compressible":true,"extensions":["ai","eps","ps"]},"application/ppsp-tracker+json":{"source":"iana","compressible":true},"application/problem+json":{"source":"iana","compressible":true},"application/problem+xml":{"source":"iana","compressible":true},"application/provenance+xml":{"source":"iana","compressible":true,"extensions":["provx"]},"application/prs.alvestrand.titrax-sheet":{"source":"iana"},"application/prs.cww":{"source":"iana","extensions":["cww"]},"application/prs.hpub+zip":{"source":"iana","compressible":false},"application/prs.nprend":{"source":"iana"},"application/prs.plucker":{"source":"iana"},"application/prs.rdf-xml-crypt":{"source":"iana"},"application/prs.xsf+xml":{"source":"iana","compressible":true},"application/pskc+xml":{"source":"iana","compressible":true,"extensions":["pskcxml"]},"application/pvd+json":{"source":"iana","compressible":true},"application/qsig":{"source":"iana"},"application/raml+yaml":{"compressible":true,"extensions":["raml"]},"application/raptorfec":{"source":"iana"},"application/rdap+json":{"source":"iana","compressible":true},"application/rdf+xml":{"source":"iana","compressible":true,"extensions":["rdf","owl"]},"application/reginfo+xml":{"source":"iana","compressible":true,"extensions":["rif"]},"application/relax-ng-compact-syntax":{"source":"iana","extensions":["rnc"]},"application/remote-printing":{"source":"iana"},"application/reputon+json":{"source":"iana","compressible":true},"application/resource-lists+xml":{"source":"iana","compressible":true,"extensions":["rl"]},"application/resource-lists-diff+xml":{"source":"iana","compressible":true,"extensions":["rld"]},"application/rfc+xml":{"source":"iana","compressible":true},"application/riscos":{"source":"iana"},"application/rlmi+xml":{"source":"iana","compressible":true},"application/rls-services+xml":{"source":"iana","compressible":true,"extensions":["rs"]},"application/route-apd+xml":{"source":"iana","compressible":true,"extensions":["rapd"]},"application/route-s-tsid+xml":{"source":"iana","compressible":true,"extensions":["sls"]},"application/route-usd+xml":{"source":"iana","compressible":true,"extensions":["rusd"]},"application/rpki-ghostbusters":{"source":"iana","extensions":["gbr"]},"application/rpki-manifest":{"source":"iana","extensions":["mft"]},"application/rpki-publication":{"source":"iana"},"application/rpki-roa":{"source":"iana","extensions":["roa"]},"application/rpki-updown":{"source":"iana"},"application/rsd+xml":{"source":"apache","compressible":true,"extensions":["rsd"]},"application/rss+xml":{"source":"apache","compressible":true,"extensions":["rss"]},"application/rtf":{"source":"iana","compressible":true,"extensions":["rtf"]},"application/rtploopback":{"source":"iana"},"application/rtx":{"source":"iana"},"application/samlassertion+xml":{"source":"iana","compressible":true},"application/samlmetadata+xml":{"source":"iana","compressible":true},"application/sbe":{"source":"iana"},"application/sbml+xml":{"source":"iana","compressible":true,"extensions":["sbml"]},"application/scaip+xml":{"source":"iana","compressible":true},"application/scim+json":{"source":"iana","compressible":true},"application/scvp-cv-request":{"source":"iana","extensions":["scq"]},"application/scvp-cv-response":{"source":"iana","extensions":["scs"]},"application/scvp-vp-request":{"source":"iana","extensions":["spq"]},"application/scvp-vp-response":{"source":"iana","extensions":["spp"]},"application/sdp":{"source":"iana","extensions":["sdp"]},"application/secevent+jwt":{"source":"iana"},"application/senml+cbor":{"source":"iana"},"application/senml+json":{"source":"iana","compressible":true},"application/senml+xml":{"source":"iana","compressible":true,"extensions":["senmlx"]},"application/senml-etch+cbor":{"source":"iana"},"application/senml-etch+json":{"source":"iana","compressible":true},"application/senml-exi":{"source":"iana"},"application/sensml+cbor":{"source":"iana"},"application/sensml+json":{"source":"iana","compressible":true},"application/sensml+xml":{"source":"iana","compressible":true,"extensions":["sensmlx"]},"application/sensml-exi":{"source":"iana"},"application/sep+xml":{"source":"iana","compressible":true},"application/sep-exi":{"source":"iana"},"application/session-info":{"source":"iana"},"application/set-payment":{"source":"iana"},"application/set-payment-initiation":{"source":"iana","extensions":["setpay"]},"application/set-registration":{"source":"iana"},"application/set-registration-initiation":{"source":"iana","extensions":["setreg"]},"application/sgml":{"source":"iana"},"application/sgml-open-catalog":{"source":"iana"},"application/shf+xml":{"source":"iana","compressible":true,"extensions":["shf"]},"application/sieve":{"source":"iana","extensions":["siv","sieve"]},"application/simple-filter+xml":{"source":"iana","compressible":true},"application/simple-message-summary":{"source":"iana"},"application/simplesymbolcontainer":{"source":"iana"},"application/sipc":{"source":"iana"},"application/slate":{"source":"iana"},"application/smil":{"source":"iana"},"application/smil+xml":{"source":"iana","compressible":true,"extensions":["smi","smil"]},"application/smpte336m":{"source":"iana"},"application/soap+fastinfoset":{"source":"iana"},"application/soap+xml":{"source":"iana","compressible":true},"application/sparql-query":{"source":"iana","extensions":["rq"]},"application/sparql-results+xml":{"source":"iana","compressible":true,"extensions":["srx"]},"application/spirits-event+xml":{"source":"iana","compressible":true},"application/sql":{"source":"iana"},"application/srgs":{"source":"iana","extensions":["gram"]},"application/srgs+xml":{"source":"iana","compressible":true,"extensions":["grxml"]},"application/sru+xml":{"source":"iana","compressible":true,"extensions":["sru"]},"application/ssdl+xml":{"source":"apache","compressible":true,"extensions":["ssdl"]},"application/ssml+xml":{"source":"iana","compressible":true,"extensions":["ssml"]},"application/stix+json":{"source":"iana","compressible":true},"application/swid+xml":{"source":"iana","compressible":true,"extensions":["swidtag"]},"application/tamp-apex-update":{"source":"iana"},"application/tamp-apex-update-confirm":{"source":"iana"},"application/tamp-community-update":{"source":"iana"},"application/tamp-community-update-confirm":{"source":"iana"},"application/tamp-error":{"source":"iana"},"application/tamp-sequence-adjust":{"source":"iana"},"application/tamp-sequence-adjust-confirm":{"source":"iana"},"application/tamp-status-query":{"source":"iana"},"application/tamp-status-response":{"source":"iana"},"application/tamp-update":{"source":"iana"},"application/tamp-update-confirm":{"source":"iana"},"application/tar":{"compressible":true},"application/taxii+json":{"source":"iana","compressible":true},"application/td+json":{"source":"iana","compressible":true},"application/tei+xml":{"source":"iana","compressible":true,"extensions":["tei","teicorpus"]},"application/tetra_isi":{"source":"iana"},"application/thraud+xml":{"source":"iana","compressible":true,"extensions":["tfi"]},"application/timestamp-query":{"source":"iana"},"application/timestamp-reply":{"source":"iana"},"application/timestamped-data":{"source":"iana","extensions":["tsd"]},"application/tlsrpt+gzip":{"source":"iana"},"application/tlsrpt+json":{"source":"iana","compressible":true},"application/tnauthlist":{"source":"iana"},"application/toml":{"compressible":true,"extensions":["toml"]},"application/trickle-ice-sdpfrag":{"source":"iana"},"application/trig":{"source":"iana"},"application/ttml+xml":{"source":"iana","compressible":true,"extensions":["ttml"]},"application/tve-trigger":{"source":"iana"},"application/tzif":{"source":"iana"},"application/tzif-leap":{"source":"iana"},"application/ulpfec":{"source":"iana"},"application/urc-grpsheet+xml":{"source":"iana","compressible":true},"application/urc-ressheet+xml":{"source":"iana","compressible":true,"extensions":["rsheet"]},"application/urc-targetdesc+xml":{"source":"iana","compressible":true},"application/urc-uisocketdesc+xml":{"source":"iana","compressible":true},"application/vcard+json":{"source":"iana","compressible":true},"application/vcard+xml":{"source":"iana","compressible":true},"application/vemmi":{"source":"iana"},"application/vividence.scriptfile":{"source":"apache"},"application/vnd.1000minds.decision-model+xml":{"source":"iana","compressible":true,"extensions":["1km"]},"application/vnd.3gpp-prose+xml":{"source":"iana","compressible":true},"application/vnd.3gpp-prose-pc3ch+xml":{"source":"iana","compressible":true},"application/vnd.3gpp-v2x-local-service-information":{"source":"iana"},"application/vnd.3gpp.access-transfer-events+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.bsf+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.gmop+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mc-signalling-ear":{"source":"iana"},"application/vnd.3gpp.mcdata-affiliation-command+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcdata-info+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcdata-payload":{"source":"iana"},"application/vnd.3gpp.mcdata-service-config+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcdata-signalling":{"source":"iana"},"application/vnd.3gpp.mcdata-ue-config+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcdata-user-profile+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcptt-affiliation-command+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcptt-floor-request+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcptt-info+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcptt-location-info+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcptt-mbms-usage-info+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcptt-service-config+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcptt-signed+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcptt-ue-config+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcptt-ue-init-config+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcptt-user-profile+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcvideo-affiliation-command+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcvideo-affiliation-info+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcvideo-info+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcvideo-location-info+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcvideo-mbms-usage-info+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcvideo-service-config+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcvideo-transmission-request+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcvideo-ue-config+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcvideo-user-profile+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mid-call+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.pic-bw-large":{"source":"iana","extensions":["plb"]},"application/vnd.3gpp.pic-bw-small":{"source":"iana","extensions":["psb"]},"application/vnd.3gpp.pic-bw-var":{"source":"iana","extensions":["pvb"]},"application/vnd.3gpp.sms":{"source":"iana"},"application/vnd.3gpp.sms+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.srvcc-ext+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.srvcc-info+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.state-and-event-info+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.ussd+xml":{"source":"iana","compressible":true},"application/vnd.3gpp2.bcmcsinfo+xml":{"source":"iana","compressible":true},"application/vnd.3gpp2.sms":{"source":"iana"},"application/vnd.3gpp2.tcap":{"source":"iana","extensions":["tcap"]},"application/vnd.3lightssoftware.imagescal":{"source":"iana"},"application/vnd.3m.post-it-notes":{"source":"iana","extensions":["pwn"]},"application/vnd.accpac.simply.aso":{"source":"iana","extensions":["aso"]},"application/vnd.accpac.simply.imp":{"source":"iana","extensions":["imp"]},"application/vnd.acucobol":{"source":"iana","extensions":["acu"]},"application/vnd.acucorp":{"source":"iana","extensions":["atc","acutc"]},"application/vnd.adobe.air-application-installer-package+zip":{"source":"apache","compressible":false,"extensions":["air"]},"application/vnd.adobe.flash.movie":{"source":"iana"},"application/vnd.adobe.formscentral.fcdt":{"source":"iana","extensions":["fcdt"]},"application/vnd.adobe.fxp":{"source":"iana","extensions":["fxp","fxpl"]},"application/vnd.adobe.partial-upload":{"source":"iana"},"application/vnd.adobe.xdp+xml":{"source":"iana","compressible":true,"extensions":["xdp"]},"application/vnd.adobe.xfdf":{"source":"iana","extensions":["xfdf"]},"application/vnd.aether.imp":{"source":"iana"},"application/vnd.afpc.afplinedata":{"source":"iana"},"application/vnd.afpc.afplinedata-pagedef":{"source":"iana"},"application/vnd.afpc.foca-charset":{"source":"iana"},"application/vnd.afpc.foca-codedfont":{"source":"iana"},"application/vnd.afpc.foca-codepage":{"source":"iana"},"application/vnd.afpc.modca":{"source":"iana"},"application/vnd.afpc.modca-formdef":{"source":"iana"},"application/vnd.afpc.modca-mediummap":{"source":"iana"},"application/vnd.afpc.modca-objectcontainer":{"source":"iana"},"application/vnd.afpc.modca-overlay":{"source":"iana"},"application/vnd.afpc.modca-pagesegment":{"source":"iana"},"application/vnd.ah-barcode":{"source":"iana"},"application/vnd.ahead.space":{"source":"iana","extensions":["ahead"]},"application/vnd.airzip.filesecure.azf":{"source":"iana","extensions":["azf"]},"application/vnd.airzip.filesecure.azs":{"source":"iana","extensions":["azs"]},"application/vnd.amadeus+json":{"source":"iana","compressible":true},"application/vnd.amazon.ebook":{"source":"apache","extensions":["azw"]},"application/vnd.amazon.mobi8-ebook":{"source":"iana"},"application/vnd.americandynamics.acc":{"source":"iana","extensions":["acc"]},"application/vnd.amiga.ami":{"source":"iana","extensions":["ami"]},"application/vnd.amundsen.maze+xml":{"source":"iana","compressible":true},"application/vnd.android.ota":{"source":"iana"},"application/vnd.android.package-archive":{"source":"apache","compressible":false,"extensions":["apk"]},"application/vnd.anki":{"source":"iana"},"application/vnd.anser-web-certificate-issue-initiation":{"source":"iana","extensions":["cii"]},"application/vnd.anser-web-funds-transfer-initiation":{"source":"apache","extensions":["fti"]},"application/vnd.antix.game-component":{"source":"iana","extensions":["atx"]},"application/vnd.apache.thrift.binary":{"source":"iana"},"application/vnd.apache.thrift.compact":{"source":"iana"},"application/vnd.apache.thrift.json":{"source":"iana"},"application/vnd.api+json":{"source":"iana","compressible":true},"application/vnd.aplextor.warrp+json":{"source":"iana","compressible":true},"application/vnd.apothekende.reservation+json":{"source":"iana","compressible":true},"application/vnd.apple.installer+xml":{"source":"iana","compressible":true,"extensions":["mpkg"]},"application/vnd.apple.keynote":{"source":"iana","extensions":["keynote"]},"application/vnd.apple.mpegurl":{"source":"iana","extensions":["m3u8"]},"application/vnd.apple.numbers":{"source":"iana","extensions":["numbers"]},"application/vnd.apple.pages":{"source":"iana","extensions":["pages"]},"application/vnd.apple.pkpass":{"compressible":false,"extensions":["pkpass"]},"application/vnd.arastra.swi":{"source":"iana"},"application/vnd.aristanetworks.swi":{"source":"iana","extensions":["swi"]},"application/vnd.artisan+json":{"source":"iana","compressible":true},"application/vnd.artsquare":{"source":"iana"},"application/vnd.astraea-software.iota":{"source":"iana","extensions":["iota"]},"application/vnd.audiograph":{"source":"iana","extensions":["aep"]},"application/vnd.autopackage":{"source":"iana"},"application/vnd.avalon+json":{"source":"iana","compressible":true},"application/vnd.avistar+xml":{"source":"iana","compressible":true},"application/vnd.balsamiq.bmml+xml":{"source":"iana","compressible":true,"extensions":["bmml"]},"application/vnd.balsamiq.bmpr":{"source":"iana"},"application/vnd.banana-accounting":{"source":"iana"},"application/vnd.bbf.usp.error":{"source":"iana"},"application/vnd.bbf.usp.msg":{"source":"iana"},"application/vnd.bbf.usp.msg+json":{"source":"iana","compressible":true},"application/vnd.bekitzur-stech+json":{"source":"iana","compressible":true},"application/vnd.bint.med-content":{"source":"iana"},"application/vnd.biopax.rdf+xml":{"source":"iana","compressible":true},"application/vnd.blink-idb-value-wrapper":{"source":"iana"},"application/vnd.blueice.multipass":{"source":"iana","extensions":["mpm"]},"application/vnd.bluetooth.ep.oob":{"source":"iana"},"application/vnd.bluetooth.le.oob":{"source":"iana"},"application/vnd.bmi":{"source":"iana","extensions":["bmi"]},"application/vnd.bpf":{"source":"iana"},"application/vnd.bpf3":{"source":"iana"},"application/vnd.businessobjects":{"source":"iana","extensions":["rep"]},"application/vnd.byu.uapi+json":{"source":"iana","compressible":true},"application/vnd.cab-jscript":{"source":"iana"},"application/vnd.canon-cpdl":{"source":"iana"},"application/vnd.canon-lips":{"source":"iana"},"application/vnd.capasystems-pg+json":{"source":"iana","compressible":true},"application/vnd.cendio.thinlinc.clientconf":{"source":"iana"},"application/vnd.century-systems.tcp_stream":{"source":"iana"},"application/vnd.chemdraw+xml":{"source":"iana","compressible":true,"extensions":["cdxml"]},"application/vnd.chess-pgn":{"source":"iana"},"application/vnd.chipnuts.karaoke-mmd":{"source":"iana","extensions":["mmd"]},"application/vnd.ciedi":{"source":"iana"},"application/vnd.cinderella":{"source":"iana","extensions":["cdy"]},"application/vnd.cirpack.isdn-ext":{"source":"iana"},"application/vnd.citationstyles.style+xml":{"source":"iana","compressible":true,"extensions":["csl"]},"application/vnd.claymore":{"source":"iana","extensions":["cla"]},"application/vnd.cloanto.rp9":{"source":"iana","extensions":["rp9"]},"application/vnd.clonk.c4group":{"source":"iana","extensions":["c4g","c4d","c4f","c4p","c4u"]},"application/vnd.cluetrust.cartomobile-config":{"source":"iana","extensions":["c11amc"]},"application/vnd.cluetrust.cartomobile-config-pkg":{"source":"iana","extensions":["c11amz"]},"application/vnd.coffeescript":{"source":"iana"},"application/vnd.collabio.xodocuments.document":{"source":"iana"},"application/vnd.collabio.xodocuments.document-template":{"source":"iana"},"application/vnd.collabio.xodocuments.presentation":{"source":"iana"},"application/vnd.collabio.xodocuments.presentation-template":{"source":"iana"},"application/vnd.collabio.xodocuments.spreadsheet":{"source":"iana"},"application/vnd.collabio.xodocuments.spreadsheet-template":{"source":"iana"},"application/vnd.collection+json":{"source":"iana","compressible":true},"application/vnd.collection.doc+json":{"source":"iana","compressible":true},"application/vnd.collection.next+json":{"source":"iana","compressible":true},"application/vnd.comicbook+zip":{"source":"iana","compressible":false},"application/vnd.comicbook-rar":{"source":"iana"},"application/vnd.commerce-battelle":{"source":"iana"},"application/vnd.commonspace":{"source":"iana","extensions":["csp"]},"application/vnd.contact.cmsg":{"source":"iana","extensions":["cdbcmsg"]},"application/vnd.coreos.ignition+json":{"source":"iana","compressible":true},"application/vnd.cosmocaller":{"source":"iana","extensions":["cmc"]},"application/vnd.crick.clicker":{"source":"iana","extensions":["clkx"]},"application/vnd.crick.clicker.keyboard":{"source":"iana","extensions":["clkk"]},"application/vnd.crick.clicker.palette":{"source":"iana","extensions":["clkp"]},"application/vnd.crick.clicker.template":{"source":"iana","extensions":["clkt"]},"application/vnd.crick.clicker.wordbank":{"source":"iana","extensions":["clkw"]},"application/vnd.criticaltools.wbs+xml":{"source":"iana","compressible":true,"extensions":["wbs"]},"application/vnd.cryptii.pipe+json":{"source":"iana","compressible":true},"application/vnd.crypto-shade-file":{"source":"iana"},"application/vnd.ctc-posml":{"source":"iana","extensions":["pml"]},"application/vnd.ctct.ws+xml":{"source":"iana","compressible":true},"application/vnd.cups-pdf":{"source":"iana"},"application/vnd.cups-postscript":{"source":"iana"},"application/vnd.cups-ppd":{"source":"iana","extensions":["ppd"]},"application/vnd.cups-raster":{"source":"iana"},"application/vnd.cups-raw":{"source":"iana"},"application/vnd.curl":{"source":"iana"},"application/vnd.curl.car":{"source":"apache","extensions":["car"]},"application/vnd.curl.pcurl":{"source":"apache","extensions":["pcurl"]},"application/vnd.cyan.dean.root+xml":{"source":"iana","compressible":true},"application/vnd.cybank":{"source":"iana"},"application/vnd.d2l.coursepackage1p0+zip":{"source":"iana","compressible":false},"application/vnd.dart":{"source":"iana","compressible":true,"extensions":["dart"]},"application/vnd.data-vision.rdz":{"source":"iana","extensions":["rdz"]},"application/vnd.datapackage+json":{"source":"iana","compressible":true},"application/vnd.dataresource+json":{"source":"iana","compressible":true},"application/vnd.dbf":{"source":"iana"},"application/vnd.debian.binary-package":{"source":"iana"},"application/vnd.dece.data":{"source":"iana","extensions":["uvf","uvvf","uvd","uvvd"]},"application/vnd.dece.ttml+xml":{"source":"iana","compressible":true,"extensions":["uvt","uvvt"]},"application/vnd.dece.unspecified":{"source":"iana","extensions":["uvx","uvvx"]},"application/vnd.dece.zip":{"source":"iana","extensions":["uvz","uvvz"]},"application/vnd.denovo.fcselayout-link":{"source":"iana","extensions":["fe_launch"]},"application/vnd.desmume.movie":{"source":"iana"},"application/vnd.dir-bi.plate-dl-nosuffix":{"source":"iana"},"application/vnd.dm.delegation+xml":{"source":"iana","compressible":true},"application/vnd.dna":{"source":"iana","extensions":["dna"]},"application/vnd.document+json":{"source":"iana","compressible":true},"application/vnd.dolby.mlp":{"source":"apache","extensions":["mlp"]},"application/vnd.dolby.mobile.1":{"source":"iana"},"application/vnd.dolby.mobile.2":{"source":"iana"},"application/vnd.doremir.scorecloud-binary-document":{"source":"iana"},"application/vnd.dpgraph":{"source":"iana","extensions":["dpg"]},"application/vnd.dreamfactory":{"source":"iana","extensions":["dfac"]},"application/vnd.drive+json":{"source":"iana","compressible":true},"application/vnd.ds-keypoint":{"source":"apache","extensions":["kpxx"]},"application/vnd.dtg.local":{"source":"iana"},"application/vnd.dtg.local.flash":{"source":"iana"},"application/vnd.dtg.local.html":{"source":"iana"},"application/vnd.dvb.ait":{"source":"iana","extensions":["ait"]},"application/vnd.dvb.dvbisl+xml":{"source":"iana","compressible":true},"application/vnd.dvb.dvbj":{"source":"iana"},"application/vnd.dvb.esgcontainer":{"source":"iana"},"application/vnd.dvb.ipdcdftnotifaccess":{"source":"iana"},"application/vnd.dvb.ipdcesgaccess":{"source":"iana"},"application/vnd.dvb.ipdcesgaccess2":{"source":"iana"},"application/vnd.dvb.ipdcesgpdd":{"source":"iana"},"application/vnd.dvb.ipdcroaming":{"source":"iana"},"application/vnd.dvb.iptv.alfec-base":{"source":"iana"},"application/vnd.dvb.iptv.alfec-enhancement":{"source":"iana"},"application/vnd.dvb.notif-aggregate-root+xml":{"source":"iana","compressible":true},"application/vnd.dvb.notif-container+xml":{"source":"iana","compressible":true},"application/vnd.dvb.notif-generic+xml":{"source":"iana","compressible":true},"application/vnd.dvb.notif-ia-msglist+xml":{"source":"iana","compressible":true},"application/vnd.dvb.notif-ia-registration-request+xml":{"source":"iana","compressible":true},"application/vnd.dvb.notif-ia-registration-response+xml":{"source":"iana","compressible":true},"application/vnd.dvb.notif-init+xml":{"source":"iana","compressible":true},"application/vnd.dvb.pfr":{"source":"iana"},"application/vnd.dvb.service":{"source":"iana","extensions":["svc"]},"application/vnd.dxr":{"source":"iana"},"application/vnd.dynageo":{"source":"iana","extensions":["geo"]},"application/vnd.dzr":{"source":"iana"},"application/vnd.easykaraoke.cdgdownload":{"source":"iana"},"application/vnd.ecdis-update":{"source":"iana"},"application/vnd.ecip.rlp":{"source":"iana"},"application/vnd.ecowin.chart":{"source":"iana","extensions":["mag"]},"application/vnd.ecowin.filerequest":{"source":"iana"},"application/vnd.ecowin.fileupdate":{"source":"iana"},"application/vnd.ecowin.series":{"source":"iana"},"application/vnd.ecowin.seriesrequest":{"source":"iana"},"application/vnd.ecowin.seriesupdate":{"source":"iana"},"application/vnd.efi.img":{"source":"iana"},"application/vnd.efi.iso":{"source":"iana"},"application/vnd.emclient.accessrequest+xml":{"source":"iana","compressible":true},"application/vnd.enliven":{"source":"iana","extensions":["nml"]},"application/vnd.enphase.envoy":{"source":"iana"},"application/vnd.eprints.data+xml":{"source":"iana","compressible":true},"application/vnd.epson.esf":{"source":"iana","extensions":["esf"]},"application/vnd.epson.msf":{"source":"iana","extensions":["msf"]},"application/vnd.epson.quickanime":{"source":"iana","extensions":["qam"]},"application/vnd.epson.salt":{"source":"iana","extensions":["slt"]},"application/vnd.epson.ssf":{"source":"iana","extensions":["ssf"]},"application/vnd.ericsson.quickcall":{"source":"iana"},"application/vnd.espass-espass+zip":{"source":"iana","compressible":false},"application/vnd.eszigno3+xml":{"source":"iana","compressible":true,"extensions":["es3","et3"]},"application/vnd.etsi.aoc+xml":{"source":"iana","compressible":true},"application/vnd.etsi.asic-e+zip":{"source":"iana","compressible":false},"application/vnd.etsi.asic-s+zip":{"source":"iana","compressible":false},"application/vnd.etsi.cug+xml":{"source":"iana","compressible":true},"application/vnd.etsi.iptvcommand+xml":{"source":"iana","compressible":true},"application/vnd.etsi.iptvdiscovery+xml":{"source":"iana","compressible":true},"application/vnd.etsi.iptvprofile+xml":{"source":"iana","compressible":true},"application/vnd.etsi.iptvsad-bc+xml":{"source":"iana","compressible":true},"application/vnd.etsi.iptvsad-cod+xml":{"source":"iana","compressible":true},"application/vnd.etsi.iptvsad-npvr+xml":{"source":"iana","compressible":true},"application/vnd.etsi.iptvservice+xml":{"source":"iana","compressible":true},"application/vnd.etsi.iptvsync+xml":{"source":"iana","compressible":true},"application/vnd.etsi.iptvueprofile+xml":{"source":"iana","compressible":true},"application/vnd.etsi.mcid+xml":{"source":"iana","compressible":true},"application/vnd.etsi.mheg5":{"source":"iana"},"application/vnd.etsi.overload-control-policy-dataset+xml":{"source":"iana","compressible":true},"application/vnd.etsi.pstn+xml":{"source":"iana","compressible":true},"application/vnd.etsi.sci+xml":{"source":"iana","compressible":true},"application/vnd.etsi.simservs+xml":{"source":"iana","compressible":true},"application/vnd.etsi.timestamp-token":{"source":"iana"},"application/vnd.etsi.tsl+xml":{"source":"iana","compressible":true},"application/vnd.etsi.tsl.der":{"source":"iana"},"application/vnd.eudora.data":{"source":"iana"},"application/vnd.evolv.ecig.profile":{"source":"iana"},"application/vnd.evolv.ecig.settings":{"source":"iana"},"application/vnd.evolv.ecig.theme":{"source":"iana"},"application/vnd.exstream-empower+zip":{"source":"iana","compressible":false},"application/vnd.exstream-package":{"source":"iana"},"application/vnd.ezpix-album":{"source":"iana","extensions":["ez2"]},"application/vnd.ezpix-package":{"source":"iana","extensions":["ez3"]},"application/vnd.f-secure.mobile":{"source":"iana"},"application/vnd.fastcopy-disk-image":{"source":"iana"},"application/vnd.fdf":{"source":"iana","extensions":["fdf"]},"application/vnd.fdsn.mseed":{"source":"iana","extensions":["mseed"]},"application/vnd.fdsn.seed":{"source":"iana","extensions":["seed","dataless"]},"application/vnd.ffsns":{"source":"iana"},"application/vnd.ficlab.flb+zip":{"source":"iana","compressible":false},"application/vnd.filmit.zfc":{"source":"iana"},"application/vnd.fints":{"source":"iana"},"application/vnd.firemonkeys.cloudcell":{"source":"iana"},"application/vnd.flographit":{"source":"iana","extensions":["gph"]},"application/vnd.fluxtime.clip":{"source":"iana","extensions":["ftc"]},"application/vnd.font-fontforge-sfd":{"source":"iana"},"application/vnd.framemaker":{"source":"iana","extensions":["fm","frame","maker","book"]},"application/vnd.frogans.fnc":{"source":"iana","extensions":["fnc"]},"application/vnd.frogans.ltf":{"source":"iana","extensions":["ltf"]},"application/vnd.fsc.weblaunch":{"source":"iana","extensions":["fsc"]},"application/vnd.fujitsu.oasys":{"source":"iana","extensions":["oas"]},"application/vnd.fujitsu.oasys2":{"source":"iana","extensions":["oa2"]},"application/vnd.fujitsu.oasys3":{"source":"iana","extensions":["oa3"]},"application/vnd.fujitsu.oasysgp":{"source":"iana","extensions":["fg5"]},"application/vnd.fujitsu.oasysprs":{"source":"iana","extensions":["bh2"]},"application/vnd.fujixerox.art-ex":{"source":"iana"},"application/vnd.fujixerox.art4":{"source":"iana"},"application/vnd.fujixerox.ddd":{"source":"iana","extensions":["ddd"]},"application/vnd.fujixerox.docuworks":{"source":"iana","extensions":["xdw"]},"application/vnd.fujixerox.docuworks.binder":{"source":"iana","extensions":["xbd"]},"application/vnd.fujixerox.docuworks.container":{"source":"iana"},"application/vnd.fujixerox.hbpl":{"source":"iana"},"application/vnd.fut-misnet":{"source":"iana"},"application/vnd.futoin+cbor":{"source":"iana"},"application/vnd.futoin+json":{"source":"iana","compressible":true},"application/vnd.fuzzysheet":{"source":"iana","extensions":["fzs"]},"application/vnd.genomatix.tuxedo":{"source":"iana","extensions":["txd"]},"application/vnd.gentics.grd+json":{"source":"iana","compressible":true},"application/vnd.geo+json":{"source":"iana","compressible":true},"application/vnd.geocube+xml":{"source":"iana","compressible":true},"application/vnd.geogebra.file":{"source":"iana","extensions":["ggb"]},"application/vnd.geogebra.tool":{"source":"iana","extensions":["ggt"]},"application/vnd.geometry-explorer":{"source":"iana","extensions":["gex","gre"]},"application/vnd.geonext":{"source":"iana","extensions":["gxt"]},"application/vnd.geoplan":{"source":"iana","extensions":["g2w"]},"application/vnd.geospace":{"source":"iana","extensions":["g3w"]},"application/vnd.gerber":{"source":"iana"},"application/vnd.globalplatform.card-content-mgt":{"source":"iana"},"application/vnd.globalplatform.card-content-mgt-response":{"source":"iana"},"application/vnd.gmx":{"source":"iana","extensions":["gmx"]},"application/vnd.google-apps.document":{"compressible":false,"extensions":["gdoc"]},"application/vnd.google-apps.presentation":{"compressible":false,"extensions":["gslides"]},"application/vnd.google-apps.spreadsheet":{"compressible":false,"extensions":["gsheet"]},"application/vnd.google-earth.kml+xml":{"source":"iana","compressible":true,"extensions":["kml"]},"application/vnd.google-earth.kmz":{"source":"iana","compressible":false,"extensions":["kmz"]},"application/vnd.gov.sk.e-form+xml":{"source":"iana","compressible":true},"application/vnd.gov.sk.e-form+zip":{"source":"iana","compressible":false},"application/vnd.gov.sk.xmldatacontainer+xml":{"source":"iana","compressible":true},"application/vnd.grafeq":{"source":"iana","extensions":["gqf","gqs"]},"application/vnd.gridmp":{"source":"iana"},"application/vnd.groove-account":{"source":"iana","extensions":["gac"]},"application/vnd.groove-help":{"source":"iana","extensions":["ghf"]},"application/vnd.groove-identity-message":{"source":"iana","extensions":["gim"]},"application/vnd.groove-injector":{"source":"iana","extensions":["grv"]},"application/vnd.groove-tool-message":{"source":"iana","extensions":["gtm"]},"application/vnd.groove-tool-template":{"source":"iana","extensions":["tpl"]},"application/vnd.groove-vcard":{"source":"iana","extensions":["vcg"]},"application/vnd.hal+json":{"source":"iana","compressible":true},"application/vnd.hal+xml":{"source":"iana","compressible":true,"extensions":["hal"]},"application/vnd.handheld-entertainment+xml":{"source":"iana","compressible":true,"extensions":["zmm"]},"application/vnd.hbci":{"source":"iana","extensions":["hbci"]},"application/vnd.hc+json":{"source":"iana","compressible":true},"application/vnd.hcl-bireports":{"source":"iana"},"application/vnd.hdt":{"source":"iana"},"application/vnd.heroku+json":{"source":"iana","compressible":true},"application/vnd.hhe.lesson-player":{"source":"iana","extensions":["les"]},"application/vnd.hp-hpgl":{"source":"iana","extensions":["hpgl"]},"application/vnd.hp-hpid":{"source":"iana","extensions":["hpid"]},"application/vnd.hp-hps":{"source":"iana","extensions":["hps"]},"application/vnd.hp-jlyt":{"source":"iana","extensions":["jlt"]},"application/vnd.hp-pcl":{"source":"iana","extensions":["pcl"]},"application/vnd.hp-pclxl":{"source":"iana","extensions":["pclxl"]},"application/vnd.httphone":{"source":"iana"},"application/vnd.hydrostatix.sof-data":{"source":"iana","extensions":["sfd-hdstx"]},"application/vnd.hyper+json":{"source":"iana","compressible":true},"application/vnd.hyper-item+json":{"source":"iana","compressible":true},"application/vnd.hyperdrive+json":{"source":"iana","compressible":true},"application/vnd.hzn-3d-crossword":{"source":"iana"},"application/vnd.ibm.afplinedata":{"source":"iana"},"application/vnd.ibm.electronic-media":{"source":"iana"},"application/vnd.ibm.minipay":{"source":"iana","extensions":["mpy"]},"application/vnd.ibm.modcap":{"source":"iana","extensions":["afp","listafp","list3820"]},"application/vnd.ibm.rights-management":{"source":"iana","extensions":["irm"]},"application/vnd.ibm.secure-container":{"source":"iana","extensions":["sc"]},"application/vnd.iccprofile":{"source":"iana","extensions":["icc","icm"]},"application/vnd.ieee.1905":{"source":"iana"},"application/vnd.igloader":{"source":"iana","extensions":["igl"]},"application/vnd.imagemeter.folder+zip":{"source":"iana","compressible":false},"application/vnd.imagemeter.image+zip":{"source":"iana","compressible":false},"application/vnd.immervision-ivp":{"source":"iana","extensions":["ivp"]},"application/vnd.immervision-ivu":{"source":"iana","extensions":["ivu"]},"application/vnd.ims.imsccv1p1":{"source":"iana"},"application/vnd.ims.imsccv1p2":{"source":"iana"},"application/vnd.ims.imsccv1p3":{"source":"iana"},"application/vnd.ims.lis.v2.result+json":{"source":"iana","compressible":true},"application/vnd.ims.lti.v2.toolconsumerprofile+json":{"source":"iana","compressible":true},"application/vnd.ims.lti.v2.toolproxy+json":{"source":"iana","compressible":true},"application/vnd.ims.lti.v2.toolproxy.id+json":{"source":"iana","compressible":true},"application/vnd.ims.lti.v2.toolsettings+json":{"source":"iana","compressible":true},"application/vnd.ims.lti.v2.toolsettings.simple+json":{"source":"iana","compressible":true},"application/vnd.informedcontrol.rms+xml":{"source":"iana","compressible":true},"application/vnd.informix-visionary":{"source":"iana"},"application/vnd.infotech.project":{"source":"iana"},"application/vnd.infotech.project+xml":{"source":"iana","compressible":true},"application/vnd.innopath.wamp.notification":{"source":"iana"},"application/vnd.insors.igm":{"source":"iana","extensions":["igm"]},"application/vnd.intercon.formnet":{"source":"iana","extensions":["xpw","xpx"]},"application/vnd.intergeo":{"source":"iana","extensions":["i2g"]},"application/vnd.intertrust.digibox":{"source":"iana"},"application/vnd.intertrust.nncp":{"source":"iana"},"application/vnd.intu.qbo":{"source":"iana","extensions":["qbo"]},"application/vnd.intu.qfx":{"source":"iana","extensions":["qfx"]},"application/vnd.iptc.g2.catalogitem+xml":{"source":"iana","compressible":true},"application/vnd.iptc.g2.conceptitem+xml":{"source":"iana","compressible":true},"application/vnd.iptc.g2.knowledgeitem+xml":{"source":"iana","compressible":true},"application/vnd.iptc.g2.newsitem+xml":{"source":"iana","compressible":true},"application/vnd.iptc.g2.newsmessage+xml":{"source":"iana","compressible":true},"application/vnd.iptc.g2.packageitem+xml":{"source":"iana","compressible":true},"application/vnd.iptc.g2.planningitem+xml":{"source":"iana","compressible":true},"application/vnd.ipunplugged.rcprofile":{"source":"iana","extensions":["rcprofile"]},"application/vnd.irepository.package+xml":{"source":"iana","compressible":true,"extensions":["irp"]},"application/vnd.is-xpr":{"source":"iana","extensions":["xpr"]},"application/vnd.isac.fcs":{"source":"iana","extensions":["fcs"]},"application/vnd.iso11783-10+zip":{"source":"iana","compressible":false},"application/vnd.jam":{"source":"iana","extensions":["jam"]},"application/vnd.japannet-directory-service":{"source":"iana"},"application/vnd.japannet-jpnstore-wakeup":{"source":"iana"},"application/vnd.japannet-payment-wakeup":{"source":"iana"},"application/vnd.japannet-registration":{"source":"iana"},"application/vnd.japannet-registration-wakeup":{"source":"iana"},"application/vnd.japannet-setstore-wakeup":{"source":"iana"},"application/vnd.japannet-verification":{"source":"iana"},"application/vnd.japannet-verification-wakeup":{"source":"iana"},"application/vnd.jcp.javame.midlet-rms":{"source":"iana","extensions":["rms"]},"application/vnd.jisp":{"source":"iana","extensions":["jisp"]},"application/vnd.joost.joda-archive":{"source":"iana","extensions":["joda"]},"application/vnd.jsk.isdn-ngn":{"source":"iana"},"application/vnd.kahootz":{"source":"iana","extensions":["ktz","ktr"]},"application/vnd.kde.karbon":{"source":"iana","extensions":["karbon"]},"application/vnd.kde.kchart":{"source":"iana","extensions":["chrt"]},"application/vnd.kde.kformula":{"source":"iana","extensions":["kfo"]},"application/vnd.kde.kivio":{"source":"iana","extensions":["flw"]},"application/vnd.kde.kontour":{"source":"iana","extensions":["kon"]},"application/vnd.kde.kpresenter":{"source":"iana","extensions":["kpr","kpt"]},"application/vnd.kde.kspread":{"source":"iana","extensions":["ksp"]},"application/vnd.kde.kword":{"source":"iana","extensions":["kwd","kwt"]},"application/vnd.kenameaapp":{"source":"iana","extensions":["htke"]},"application/vnd.kidspiration":{"source":"iana","extensions":["kia"]},"application/vnd.kinar":{"source":"iana","extensions":["kne","knp"]},"application/vnd.koan":{"source":"iana","extensions":["skp","skd","skt","skm"]},"application/vnd.kodak-descriptor":{"source":"iana","extensions":["sse"]},"application/vnd.las":{"source":"iana"},"application/vnd.las.las+json":{"source":"iana","compressible":true},"application/vnd.las.las+xml":{"source":"iana","compressible":true,"extensions":["lasxml"]},"application/vnd.laszip":{"source":"iana"},"application/vnd.leap+json":{"source":"iana","compressible":true},"application/vnd.liberty-request+xml":{"source":"iana","compressible":true},"application/vnd.llamagraphics.life-balance.desktop":{"source":"iana","extensions":["lbd"]},"application/vnd.llamagraphics.life-balance.exchange+xml":{"source":"iana","compressible":true,"extensions":["lbe"]},"application/vnd.logipipe.circuit+zip":{"source":"iana","compressible":false},"application/vnd.loom":{"source":"iana"},"application/vnd.lotus-1-2-3":{"source":"iana","extensions":["123"]},"application/vnd.lotus-approach":{"source":"iana","extensions":["apr"]},"application/vnd.lotus-freelance":{"source":"iana","extensions":["pre"]},"application/vnd.lotus-notes":{"source":"iana","extensions":["nsf"]},"application/vnd.lotus-organizer":{"source":"iana","extensions":["org"]},"application/vnd.lotus-screencam":{"source":"iana","extensions":["scm"]},"application/vnd.lotus-wordpro":{"source":"iana","extensions":["lwp"]},"application/vnd.macports.portpkg":{"source":"iana","extensions":["portpkg"]},"application/vnd.mapbox-vector-tile":{"source":"iana"},"application/vnd.marlin.drm.actiontoken+xml":{"source":"iana","compressible":true},"application/vnd.marlin.drm.conftoken+xml":{"source":"iana","compressible":true},"application/vnd.marlin.drm.license+xml":{"source":"iana","compressible":true},"application/vnd.marlin.drm.mdcf":{"source":"iana"},"application/vnd.mason+json":{"source":"iana","compressible":true},"application/vnd.maxmind.maxmind-db":{"source":"iana"},"application/vnd.mcd":{"source":"iana","extensions":["mcd"]},"application/vnd.medcalcdata":{"source":"iana","extensions":["mc1"]},"application/vnd.mediastation.cdkey":{"source":"iana","extensions":["cdkey"]},"application/vnd.meridian-slingshot":{"source":"iana"},"application/vnd.mfer":{"source":"iana","extensions":["mwf"]},"application/vnd.mfmp":{"source":"iana","extensions":["mfm"]},"application/vnd.micro+json":{"source":"iana","compressible":true},"application/vnd.micrografx.flo":{"source":"iana","extensions":["flo"]},"application/vnd.micrografx.igx":{"source":"iana","extensions":["igx"]},"application/vnd.microsoft.portable-executable":{"source":"iana"},"application/vnd.microsoft.windows.thumbnail-cache":{"source":"iana"},"application/vnd.miele+json":{"source":"iana","compressible":true},"application/vnd.mif":{"source":"iana","extensions":["mif"]},"application/vnd.minisoft-hp3000-save":{"source":"iana"},"application/vnd.mitsubishi.misty-guard.trustweb":{"source":"iana"},"application/vnd.mobius.daf":{"source":"iana","extensions":["daf"]},"application/vnd.mobius.dis":{"source":"iana","extensions":["dis"]},"application/vnd.mobius.mbk":{"source":"iana","extensions":["mbk"]},"application/vnd.mobius.mqy":{"source":"iana","extensions":["mqy"]},"application/vnd.mobius.msl":{"source":"iana","extensions":["msl"]},"application/vnd.mobius.plc":{"source":"iana","extensions":["plc"]},"application/vnd.mobius.txf":{"source":"iana","extensions":["txf"]},"application/vnd.mophun.application":{"source":"iana","extensions":["mpn"]},"application/vnd.mophun.certificate":{"source":"iana","extensions":["mpc"]},"application/vnd.motorola.flexsuite":{"source":"iana"},"application/vnd.motorola.flexsuite.adsi":{"source":"iana"},"application/vnd.motorola.flexsuite.fis":{"source":"iana"},"application/vnd.motorola.flexsuite.gotap":{"source":"iana"},"application/vnd.motorola.flexsuite.kmr":{"source":"iana"},"application/vnd.motorola.flexsuite.ttc":{"source":"iana"},"application/vnd.motorola.flexsuite.wem":{"source":"iana"},"application/vnd.motorola.iprm":{"source":"iana"},"application/vnd.mozilla.xul+xml":{"source":"iana","compressible":true,"extensions":["xul"]},"application/vnd.ms-3mfdocument":{"source":"iana"},"application/vnd.ms-artgalry":{"source":"iana","extensions":["cil"]},"application/vnd.ms-asf":{"source":"iana"},"application/vnd.ms-cab-compressed":{"source":"iana","extensions":["cab"]},"application/vnd.ms-color.iccprofile":{"source":"apache"},"application/vnd.ms-excel":{"source":"iana","compressible":false,"extensions":["xls","xlm","xla","xlc","xlt","xlw"]},"application/vnd.ms-excel.addin.macroenabled.12":{"source":"iana","extensions":["xlam"]},"application/vnd.ms-excel.sheet.binary.macroenabled.12":{"source":"iana","extensions":["xlsb"]},"application/vnd.ms-excel.sheet.macroenabled.12":{"source":"iana","extensions":["xlsm"]},"application/vnd.ms-excel.template.macroenabled.12":{"source":"iana","extensions":["xltm"]},"application/vnd.ms-fontobject":{"source":"iana","compressible":true,"extensions":["eot"]},"application/vnd.ms-htmlhelp":{"source":"iana","extensions":["chm"]},"application/vnd.ms-ims":{"source":"iana","extensions":["ims"]},"application/vnd.ms-lrm":{"source":"iana","extensions":["lrm"]},"application/vnd.ms-office.activex+xml":{"source":"iana","compressible":true},"application/vnd.ms-officetheme":{"source":"iana","extensions":["thmx"]},"application/vnd.ms-opentype":{"source":"apache","compressible":true},"application/vnd.ms-outlook":{"compressible":false,"extensions":["msg"]},"application/vnd.ms-package.obfuscated-opentype":{"source":"apache"},"application/vnd.ms-pki.seccat":{"source":"apache","extensions":["cat"]},"application/vnd.ms-pki.stl":{"source":"apache","extensions":["stl"]},"application/vnd.ms-playready.initiator+xml":{"source":"iana","compressible":true},"application/vnd.ms-powerpoint":{"source":"iana","compressible":false,"extensions":["ppt","pps","pot"]},"application/vnd.ms-powerpoint.addin.macroenabled.12":{"source":"iana","extensions":["ppam"]},"application/vnd.ms-powerpoint.presentation.macroenabled.12":{"source":"iana","extensions":["pptm"]},"application/vnd.ms-powerpoint.slide.macroenabled.12":{"source":"iana","extensions":["sldm"]},"application/vnd.ms-powerpoint.slideshow.macroenabled.12":{"source":"iana","extensions":["ppsm"]},"application/vnd.ms-powerpoint.template.macroenabled.12":{"source":"iana","extensions":["potm"]},"application/vnd.ms-printdevicecapabilities+xml":{"source":"iana","compressible":true},"application/vnd.ms-printing.printticket+xml":{"source":"apache","compressible":true},"application/vnd.ms-printschematicket+xml":{"source":"iana","compressible":true},"application/vnd.ms-project":{"source":"iana","extensions":["mpp","mpt"]},"application/vnd.ms-tnef":{"source":"iana"},"application/vnd.ms-windows.devicepairing":{"source":"iana"},"application/vnd.ms-windows.nwprinting.oob":{"source":"iana"},"application/vnd.ms-windows.printerpairing":{"source":"iana"},"application/vnd.ms-windows.wsd.oob":{"source":"iana"},"application/vnd.ms-wmdrm.lic-chlg-req":{"source":"iana"},"application/vnd.ms-wmdrm.lic-resp":{"source":"iana"},"application/vnd.ms-wmdrm.meter-chlg-req":{"source":"iana"},"application/vnd.ms-wmdrm.meter-resp":{"source":"iana"},"application/vnd.ms-word.document.macroenabled.12":{"source":"iana","extensions":["docm"]},"application/vnd.ms-word.template.macroenabled.12":{"source":"iana","extensions":["dotm"]},"application/vnd.ms-works":{"source":"iana","extensions":["wps","wks","wcm","wdb"]},"application/vnd.ms-wpl":{"source":"iana","extensions":["wpl"]},"application/vnd.ms-xpsdocument":{"source":"iana","compressible":false,"extensions":["xps"]},"application/vnd.msa-disk-image":{"source":"iana"},"application/vnd.mseq":{"source":"iana","extensions":["mseq"]},"application/vnd.msign":{"source":"iana"},"application/vnd.multiad.creator":{"source":"iana"},"application/vnd.multiad.creator.cif":{"source":"iana"},"application/vnd.music-niff":{"source":"iana"},"application/vnd.musician":{"source":"iana","extensions":["mus"]},"application/vnd.muvee.style":{"source":"iana","extensions":["msty"]},"application/vnd.mynfc":{"source":"iana","extensions":["taglet"]},"application/vnd.ncd.control":{"source":"iana"},"application/vnd.ncd.reference":{"source":"iana"},"application/vnd.nearst.inv+json":{"source":"iana","compressible":true},"application/vnd.nervana":{"source":"iana"},"application/vnd.netfpx":{"source":"iana"},"application/vnd.neurolanguage.nlu":{"source":"iana","extensions":["nlu"]},"application/vnd.nimn":{"source":"iana"},"application/vnd.nintendo.nitro.rom":{"source":"iana"},"application/vnd.nintendo.snes.rom":{"source":"iana"},"application/vnd.nitf":{"source":"iana","extensions":["ntf","nitf"]},"application/vnd.noblenet-directory":{"source":"iana","extensions":["nnd"]},"application/vnd.noblenet-sealer":{"source":"iana","extensions":["nns"]},"application/vnd.noblenet-web":{"source":"iana","extensions":["nnw"]},"application/vnd.nokia.catalogs":{"source":"iana"},"application/vnd.nokia.conml+wbxml":{"source":"iana"},"application/vnd.nokia.conml+xml":{"source":"iana","compressible":true},"application/vnd.nokia.iptv.config+xml":{"source":"iana","compressible":true},"application/vnd.nokia.isds-radio-presets":{"source":"iana"},"application/vnd.nokia.landmark+wbxml":{"source":"iana"},"application/vnd.nokia.landmark+xml":{"source":"iana","compressible":true},"application/vnd.nokia.landmarkcollection+xml":{"source":"iana","compressible":true},"application/vnd.nokia.n-gage.ac+xml":{"source":"iana","compressible":true,"extensions":["ac"]},"application/vnd.nokia.n-gage.data":{"source":"iana","extensions":["ngdat"]},"application/vnd.nokia.n-gage.symbian.install":{"source":"iana","extensions":["n-gage"]},"application/vnd.nokia.ncd":{"source":"iana"},"application/vnd.nokia.pcd+wbxml":{"source":"iana"},"application/vnd.nokia.pcd+xml":{"source":"iana","compressible":true},"application/vnd.nokia.radio-preset":{"source":"iana","extensions":["rpst"]},"application/vnd.nokia.radio-presets":{"source":"iana","extensions":["rpss"]},"application/vnd.novadigm.edm":{"source":"iana","extensions":["edm"]},"application/vnd.novadigm.edx":{"source":"iana","extensions":["edx"]},"application/vnd.novadigm.ext":{"source":"iana","extensions":["ext"]},"application/vnd.ntt-local.content-share":{"source":"iana"},"application/vnd.ntt-local.file-transfer":{"source":"iana"},"application/vnd.ntt-local.ogw_remote-access":{"source":"iana"},"application/vnd.ntt-local.sip-ta_remote":{"source":"iana"},"application/vnd.ntt-local.sip-ta_tcp_stream":{"source":"iana"},"application/vnd.oasis.opendocument.chart":{"source":"iana","extensions":["odc"]},"application/vnd.oasis.opendocument.chart-template":{"source":"iana","extensions":["otc"]},"application/vnd.oasis.opendocument.database":{"source":"iana","extensions":["odb"]},"application/vnd.oasis.opendocument.formula":{"source":"iana","extensions":["odf"]},"application/vnd.oasis.opendocument.formula-template":{"source":"iana","extensions":["odft"]},"application/vnd.oasis.opendocument.graphics":{"source":"iana","compressible":false,"extensions":["odg"]},"application/vnd.oasis.opendocument.graphics-template":{"source":"iana","extensions":["otg"]},"application/vnd.oasis.opendocument.image":{"source":"iana","extensions":["odi"]},"application/vnd.oasis.opendocument.image-template":{"source":"iana","extensions":["oti"]},"application/vnd.oasis.opendocument.presentation":{"source":"iana","compressible":false,"extensions":["odp"]},"application/vnd.oasis.opendocument.presentation-template":{"source":"iana","extensions":["otp"]},"application/vnd.oasis.opendocument.spreadsheet":{"source":"iana","compressible":false,"extensions":["ods"]},"application/vnd.oasis.opendocument.spreadsheet-template":{"source":"iana","extensions":["ots"]},"application/vnd.oasis.opendocument.text":{"source":"iana","compressible":false,"extensions":["odt"]},"application/vnd.oasis.opendocument.text-master":{"source":"iana","extensions":["odm"]},"application/vnd.oasis.opendocument.text-template":{"source":"iana","extensions":["ott"]},"application/vnd.oasis.opendocument.text-web":{"source":"iana","extensions":["oth"]},"application/vnd.obn":{"source":"iana"},"application/vnd.ocf+cbor":{"source":"iana"},"application/vnd.oci.image.manifest.v1+json":{"source":"iana","compressible":true},"application/vnd.oftn.l10n+json":{"source":"iana","compressible":true},"application/vnd.oipf.contentaccessdownload+xml":{"source":"iana","compressible":true},"application/vnd.oipf.contentaccessstreaming+xml":{"source":"iana","compressible":true},"application/vnd.oipf.cspg-hexbinary":{"source":"iana"},"application/vnd.oipf.dae.svg+xml":{"source":"iana","compressible":true},"application/vnd.oipf.dae.xhtml+xml":{"source":"iana","compressible":true},"application/vnd.oipf.mippvcontrolmessage+xml":{"source":"iana","compressible":true},"application/vnd.oipf.pae.gem":{"source":"iana"},"application/vnd.oipf.spdiscovery+xml":{"source":"iana","compressible":true},"application/vnd.oipf.spdlist+xml":{"source":"iana","compressible":true},"application/vnd.oipf.ueprofile+xml":{"source":"iana","compressible":true},"application/vnd.oipf.userprofile+xml":{"source":"iana","compressible":true},"application/vnd.olpc-sugar":{"source":"iana","extensions":["xo"]},"application/vnd.oma-scws-config":{"source":"iana"},"application/vnd.oma-scws-http-request":{"source":"iana"},"application/vnd.oma-scws-http-response":{"source":"iana"},"application/vnd.oma.bcast.associated-procedure-parameter+xml":{"source":"iana","compressible":true},"application/vnd.oma.bcast.drm-trigger+xml":{"source":"iana","compressible":true},"application/vnd.oma.bcast.imd+xml":{"source":"iana","compressible":true},"application/vnd.oma.bcast.ltkm":{"source":"iana"},"application/vnd.oma.bcast.notification+xml":{"source":"iana","compressible":true},"application/vnd.oma.bcast.provisioningtrigger":{"source":"iana"},"application/vnd.oma.bcast.sgboot":{"source":"iana"},"application/vnd.oma.bcast.sgdd+xml":{"source":"iana","compressible":true},"application/vnd.oma.bcast.sgdu":{"source":"iana"},"application/vnd.oma.bcast.simple-symbol-container":{"source":"iana"},"application/vnd.oma.bcast.smartcard-trigger+xml":{"source":"iana","compressible":true},"application/vnd.oma.bcast.sprov+xml":{"source":"iana","compressible":true},"application/vnd.oma.bcast.stkm":{"source":"iana"},"application/vnd.oma.cab-address-book+xml":{"source":"iana","compressible":true},"application/vnd.oma.cab-feature-handler+xml":{"source":"iana","compressible":true},"application/vnd.oma.cab-pcc+xml":{"source":"iana","compressible":true},"application/vnd.oma.cab-subs-invite+xml":{"source":"iana","compressible":true},"application/vnd.oma.cab-user-prefs+xml":{"source":"iana","compressible":true},"application/vnd.oma.dcd":{"source":"iana"},"application/vnd.oma.dcdc":{"source":"iana"},"application/vnd.oma.dd2+xml":{"source":"iana","compressible":true,"extensions":["dd2"]},"application/vnd.oma.drm.risd+xml":{"source":"iana","compressible":true},"application/vnd.oma.group-usage-list+xml":{"source":"iana","compressible":true},"application/vnd.oma.lwm2m+json":{"source":"iana","compressible":true},"application/vnd.oma.lwm2m+tlv":{"source":"iana"},"application/vnd.oma.pal+xml":{"source":"iana","compressible":true},"application/vnd.oma.poc.detailed-progress-report+xml":{"source":"iana","compressible":true},"application/vnd.oma.poc.final-report+xml":{"source":"iana","compressible":true},"application/vnd.oma.poc.groups+xml":{"source":"iana","compressible":true},"application/vnd.oma.poc.invocation-descriptor+xml":{"source":"iana","compressible":true},"application/vnd.oma.poc.optimized-progress-report+xml":{"source":"iana","compressible":true},"application/vnd.oma.push":{"source":"iana"},"application/vnd.oma.scidm.messages+xml":{"source":"iana","compressible":true},"application/vnd.oma.xcap-directory+xml":{"source":"iana","compressible":true},"application/vnd.omads-email+xml":{"source":"iana","charset":"UTF-8","compressible":true},"application/vnd.omads-file+xml":{"source":"iana","charset":"UTF-8","compressible":true},"application/vnd.omads-folder+xml":{"source":"iana","charset":"UTF-8","compressible":true},"application/vnd.omaloc-supl-init":{"source":"iana"},"application/vnd.onepager":{"source":"iana"},"application/vnd.onepagertamp":{"source":"iana"},"application/vnd.onepagertamx":{"source":"iana"},"application/vnd.onepagertat":{"source":"iana"},"application/vnd.onepagertatp":{"source":"iana"},"application/vnd.onepagertatx":{"source":"iana"},"application/vnd.openblox.game+xml":{"source":"iana","compressible":true,"extensions":["obgx"]},"application/vnd.openblox.game-binary":{"source":"iana"},"application/vnd.openeye.oeb":{"source":"iana"},"application/vnd.openofficeorg.extension":{"source":"apache","extensions":["oxt"]},"application/vnd.openstreetmap.data+xml":{"source":"iana","compressible":true,"extensions":["osm"]},"application/vnd.openxmlformats-officedocument.custom-properties+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.customxmlproperties+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.drawing+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.drawingml.chart+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.drawingml.chartshapes+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.drawingml.diagramcolors+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.drawingml.diagramdata+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.drawingml.diagramlayout+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.drawingml.diagramstyle+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.extended-properties+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.presentationml.commentauthors+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.presentationml.comments+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.presentationml.handoutmaster+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.presentationml.notesmaster+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.presentationml.notesslide+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.presentationml.presentation":{"source":"iana","compressible":false,"extensions":["pptx"]},"application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.presentationml.presprops+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.presentationml.slide":{"source":"iana","extensions":["sldx"]},"application/vnd.openxmlformats-officedocument.presentationml.slide+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.presentationml.slidelayout+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.presentationml.slidemaster+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.presentationml.slideshow":{"source":"iana","extensions":["ppsx"]},"application/vnd.openxmlformats-officedocument.presentationml.slideshow.main+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.presentationml.slideupdateinfo+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.presentationml.tablestyles+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.presentationml.tags+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.presentationml.template":{"source":"iana","extensions":["potx"]},"application/vnd.openxmlformats-officedocument.presentationml.template.main+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.presentationml.viewprops+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.calcchain+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.chartsheet+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.comments+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.connections+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.dialogsheet+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.externallink+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.pivotcachedefinition+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.pivotcacherecords+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.pivottable+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.querytable+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.revisionheaders+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.revisionlog+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.sharedstrings+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":{"source":"iana","compressible":false,"extensions":["xlsx"]},"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.sheetmetadata+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.tablesinglecells+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.template":{"source":"iana","extensions":["xltx"]},"application/vnd.openxmlformats-officedocument.spreadsheetml.template.main+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.usernames+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.volatiledependencies+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.theme+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.themeoverride+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.vmldrawing":{"source":"iana"},"application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.wordprocessingml.document":{"source":"iana","compressible":false,"extensions":["docx"]},"application/vnd.openxmlformats-officedocument.wordprocessingml.document.glossary+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.wordprocessingml.fonttable+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.wordprocessingml.template":{"source":"iana","extensions":["dotx"]},"application/vnd.openxmlformats-officedocument.wordprocessingml.template.main+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.wordprocessingml.websettings+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-package.core-properties+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-package.digital-signature-xmlsignature+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-package.relationships+xml":{"source":"iana","compressible":true},"application/vnd.oracle.resource+json":{"source":"iana","compressible":true},"application/vnd.orange.indata":{"source":"iana"},"application/vnd.osa.netdeploy":{"source":"iana"},"application/vnd.osgeo.mapguide.package":{"source":"iana","extensions":["mgp"]},"application/vnd.osgi.bundle":{"source":"iana"},"application/vnd.osgi.dp":{"source":"iana","extensions":["dp"]},"application/vnd.osgi.subsystem":{"source":"iana","extensions":["esa"]},"application/vnd.otps.ct-kip+xml":{"source":"iana","compressible":true},"application/vnd.oxli.countgraph":{"source":"iana"},"application/vnd.pagerduty+json":{"source":"iana","compressible":true},"application/vnd.palm":{"source":"iana","extensions":["pdb","pqa","oprc"]},"application/vnd.panoply":{"source":"iana"},"application/vnd.paos.xml":{"source":"iana"},"application/vnd.patentdive":{"source":"iana"},"application/vnd.patientecommsdoc":{"source":"iana"},"application/vnd.pawaafile":{"source":"iana","extensions":["paw"]},"application/vnd.pcos":{"source":"iana"},"application/vnd.pg.format":{"source":"iana","extensions":["str"]},"application/vnd.pg.osasli":{"source":"iana","extensions":["ei6"]},"application/vnd.piaccess.application-licence":{"source":"iana"},"application/vnd.picsel":{"source":"iana","extensions":["efif"]},"application/vnd.pmi.widget":{"source":"iana","extensions":["wg"]},"application/vnd.poc.group-advertisement+xml":{"source":"iana","compressible":true},"application/vnd.pocketlearn":{"source":"iana","extensions":["plf"]},"application/vnd.powerbuilder6":{"source":"iana","extensions":["pbd"]},"application/vnd.powerbuilder6-s":{"source":"iana"},"application/vnd.powerbuilder7":{"source":"iana"},"application/vnd.powerbuilder7-s":{"source":"iana"},"application/vnd.powerbuilder75":{"source":"iana"},"application/vnd.powerbuilder75-s":{"source":"iana"},"application/vnd.preminet":{"source":"iana"},"application/vnd.previewsystems.box":{"source":"iana","extensions":["box"]},"application/vnd.proteus.magazine":{"source":"iana","extensions":["mgz"]},"application/vnd.psfs":{"source":"iana"},"application/vnd.publishare-delta-tree":{"source":"iana","extensions":["qps"]},"application/vnd.pvi.ptid1":{"source":"iana","extensions":["ptid"]},"application/vnd.pwg-multiplexed":{"source":"iana"},"application/vnd.pwg-xhtml-print+xml":{"source":"iana","compressible":true},"application/vnd.qualcomm.brew-app-res":{"source":"iana"},"application/vnd.quarantainenet":{"source":"iana"},"application/vnd.quark.quarkxpress":{"source":"iana","extensions":["qxd","qxt","qwd","qwt","qxl","qxb"]},"application/vnd.quobject-quoxdocument":{"source":"iana"},"application/vnd.radisys.moml+xml":{"source":"iana","compressible":true},"application/vnd.radisys.msml+xml":{"source":"iana","compressible":true},"application/vnd.radisys.msml-audit+xml":{"source":"iana","compressible":true},"application/vnd.radisys.msml-audit-conf+xml":{"source":"iana","compressible":true},"application/vnd.radisys.msml-audit-conn+xml":{"source":"iana","compressible":true},"application/vnd.radisys.msml-audit-dialog+xml":{"source":"iana","compressible":true},"application/vnd.radisys.msml-audit-stream+xml":{"source":"iana","compressible":true},"application/vnd.radisys.msml-conf+xml":{"source":"iana","compressible":true},"application/vnd.radisys.msml-dialog+xml":{"source":"iana","compressible":true},"application/vnd.radisys.msml-dialog-base+xml":{"source":"iana","compressible":true},"application/vnd.radisys.msml-dialog-fax-detect+xml":{"source":"iana","compressible":true},"application/vnd.radisys.msml-dialog-fax-sendrecv+xml":{"source":"iana","compressible":true},"application/vnd.radisys.msml-dialog-group+xml":{"source":"iana","compressible":true},"application/vnd.radisys.msml-dialog-speech+xml":{"source":"iana","compressible":true},"application/vnd.radisys.msml-dialog-transform+xml":{"source":"iana","compressible":true},"application/vnd.rainstor.data":{"source":"iana"},"application/vnd.rapid":{"source":"iana"},"application/vnd.rar":{"source":"iana"},"application/vnd.realvnc.bed":{"source":"iana","extensions":["bed"]},"application/vnd.recordare.musicxml":{"source":"iana","extensions":["mxl"]},"application/vnd.recordare.musicxml+xml":{"source":"iana","compressible":true,"extensions":["musicxml"]},"application/vnd.renlearn.rlprint":{"source":"iana"},"application/vnd.restful+json":{"source":"iana","compressible":true},"application/vnd.rig.cryptonote":{"source":"iana","extensions":["cryptonote"]},"application/vnd.rim.cod":{"source":"apache","extensions":["cod"]},"application/vnd.rn-realmedia":{"source":"apache","extensions":["rm"]},"application/vnd.rn-realmedia-vbr":{"source":"apache","extensions":["rmvb"]},"application/vnd.route66.link66+xml":{"source":"iana","compressible":true,"extensions":["link66"]},"application/vnd.rs-274x":{"source":"iana"},"application/vnd.ruckus.download":{"source":"iana"},"application/vnd.s3sms":{"source":"iana"},"application/vnd.sailingtracker.track":{"source":"iana","extensions":["st"]},"application/vnd.sar":{"source":"iana"},"application/vnd.sbm.cid":{"source":"iana"},"application/vnd.sbm.mid2":{"source":"iana"},"application/vnd.scribus":{"source":"iana"},"application/vnd.sealed.3df":{"source":"iana"},"application/vnd.sealed.csf":{"source":"iana"},"application/vnd.sealed.doc":{"source":"iana"},"application/vnd.sealed.eml":{"source":"iana"},"application/vnd.sealed.mht":{"source":"iana"},"application/vnd.sealed.net":{"source":"iana"},"application/vnd.sealed.ppt":{"source":"iana"},"application/vnd.sealed.tiff":{"source":"iana"},"application/vnd.sealed.xls":{"source":"iana"},"application/vnd.sealedmedia.softseal.html":{"source":"iana"},"application/vnd.sealedmedia.softseal.pdf":{"source":"iana"},"application/vnd.seemail":{"source":"iana","extensions":["see"]},"application/vnd.sema":{"source":"iana","extensions":["sema"]},"application/vnd.semd":{"source":"iana","extensions":["semd"]},"application/vnd.semf":{"source":"iana","extensions":["semf"]},"application/vnd.shade-save-file":{"source":"iana"},"application/vnd.shana.informed.formdata":{"source":"iana","extensions":["ifm"]},"application/vnd.shana.informed.formtemplate":{"source":"iana","extensions":["itp"]},"application/vnd.shana.informed.interchange":{"source":"iana","extensions":["iif"]},"application/vnd.shana.informed.package":{"source":"iana","extensions":["ipk"]},"application/vnd.shootproof+json":{"source":"iana","compressible":true},"application/vnd.shopkick+json":{"source":"iana","compressible":true},"application/vnd.shp":{"source":"iana"},"application/vnd.shx":{"source":"iana"},"application/vnd.sigrok.session":{"source":"iana"},"application/vnd.simtech-mindmapper":{"source":"iana","extensions":["twd","twds"]},"application/vnd.siren+json":{"source":"iana","compressible":true},"application/vnd.smaf":{"source":"iana","extensions":["mmf"]},"application/vnd.smart.notebook":{"source":"iana"},"application/vnd.smart.teacher":{"source":"iana","extensions":["teacher"]},"application/vnd.snesdev-page-table":{"source":"iana"},"application/vnd.software602.filler.form+xml":{"source":"iana","compressible":true,"extensions":["fo"]},"application/vnd.software602.filler.form-xml-zip":{"source":"iana"},"application/vnd.solent.sdkm+xml":{"source":"iana","compressible":true,"extensions":["sdkm","sdkd"]},"application/vnd.spotfire.dxp":{"source":"iana","extensions":["dxp"]},"application/vnd.spotfire.sfs":{"source":"iana","extensions":["sfs"]},"application/vnd.sqlite3":{"source":"iana"},"application/vnd.sss-cod":{"source":"iana"},"application/vnd.sss-dtf":{"source":"iana"},"application/vnd.sss-ntf":{"source":"iana"},"application/vnd.stardivision.calc":{"source":"apache","extensions":["sdc"]},"application/vnd.stardivision.draw":{"source":"apache","extensions":["sda"]},"application/vnd.stardivision.impress":{"source":"apache","extensions":["sdd"]},"application/vnd.stardivision.math":{"source":"apache","extensions":["smf"]},"application/vnd.stardivision.writer":{"source":"apache","extensions":["sdw","vor"]},"application/vnd.stardivision.writer-global":{"source":"apache","extensions":["sgl"]},"application/vnd.stepmania.package":{"source":"iana","extensions":["smzip"]},"application/vnd.stepmania.stepchart":{"source":"iana","extensions":["sm"]},"application/vnd.street-stream":{"source":"iana"},"application/vnd.sun.wadl+xml":{"source":"iana","compressible":true,"extensions":["wadl"]},"application/vnd.sun.xml.calc":{"source":"apache","extensions":["sxc"]},"application/vnd.sun.xml.calc.template":{"source":"apache","extensions":["stc"]},"application/vnd.sun.xml.draw":{"source":"apache","extensions":["sxd"]},"application/vnd.sun.xml.draw.template":{"source":"apache","extensions":["std"]},"application/vnd.sun.xml.impress":{"source":"apache","extensions":["sxi"]},"application/vnd.sun.xml.impress.template":{"source":"apache","extensions":["sti"]},"application/vnd.sun.xml.math":{"source":"apache","extensions":["sxm"]},"application/vnd.sun.xml.writer":{"source":"apache","extensions":["sxw"]},"application/vnd.sun.xml.writer.global":{"source":"apache","extensions":["sxg"]},"application/vnd.sun.xml.writer.template":{"source":"apache","extensions":["stw"]},"application/vnd.sus-calendar":{"source":"iana","extensions":["sus","susp"]},"application/vnd.svd":{"source":"iana","extensions":["svd"]},"application/vnd.swiftview-ics":{"source":"iana"},"application/vnd.symbian.install":{"source":"apache","extensions":["sis","sisx"]},"application/vnd.syncml+xml":{"source":"iana","charset":"UTF-8","compressible":true,"extensions":["xsm"]},"application/vnd.syncml.dm+wbxml":{"source":"iana","charset":"UTF-8","extensions":["bdm"]},"application/vnd.syncml.dm+xml":{"source":"iana","charset":"UTF-8","compressible":true,"extensions":["xdm"]},"application/vnd.syncml.dm.notification":{"source":"iana"},"application/vnd.syncml.dmddf+wbxml":{"source":"iana"},"application/vnd.syncml.dmddf+xml":{"source":"iana","charset":"UTF-8","compressible":true,"extensions":["ddf"]},"application/vnd.syncml.dmtnds+wbxml":{"source":"iana"},"application/vnd.syncml.dmtnds+xml":{"source":"iana","charset":"UTF-8","compressible":true},"application/vnd.syncml.ds.notification":{"source":"iana"},"application/vnd.tableschema+json":{"source":"iana","compressible":true},"application/vnd.tao.intent-module-archive":{"source":"iana","extensions":["tao"]},"application/vnd.tcpdump.pcap":{"source":"iana","extensions":["pcap","cap","dmp"]},"application/vnd.think-cell.ppttc+json":{"source":"iana","compressible":true},"application/vnd.tmd.mediaflex.api+xml":{"source":"iana","compressible":true},"application/vnd.tml":{"source":"iana"},"application/vnd.tmobile-livetv":{"source":"iana","extensions":["tmo"]},"application/vnd.tri.onesource":{"source":"iana"},"application/vnd.trid.tpt":{"source":"iana","extensions":["tpt"]},"application/vnd.triscape.mxs":{"source":"iana","extensions":["mxs"]},"application/vnd.trueapp":{"source":"iana","extensions":["tra"]},"application/vnd.truedoc":{"source":"iana"},"application/vnd.ubisoft.webplayer":{"source":"iana"},"application/vnd.ufdl":{"source":"iana","extensions":["ufd","ufdl"]},"application/vnd.uiq.theme":{"source":"iana","extensions":["utz"]},"application/vnd.umajin":{"source":"iana","extensions":["umj"]},"application/vnd.unity":{"source":"iana","extensions":["unityweb"]},"application/vnd.uoml+xml":{"source":"iana","compressible":true,"extensions":["uoml"]},"application/vnd.uplanet.alert":{"source":"iana"},"application/vnd.uplanet.alert-wbxml":{"source":"iana"},"application/vnd.uplanet.bearer-choice":{"source":"iana"},"application/vnd.uplanet.bearer-choice-wbxml":{"source":"iana"},"application/vnd.uplanet.cacheop":{"source":"iana"},"application/vnd.uplanet.cacheop-wbxml":{"source":"iana"},"application/vnd.uplanet.channel":{"source":"iana"},"application/vnd.uplanet.channel-wbxml":{"source":"iana"},"application/vnd.uplanet.list":{"source":"iana"},"application/vnd.uplanet.list-wbxml":{"source":"iana"},"application/vnd.uplanet.listcmd":{"source":"iana"},"application/vnd.uplanet.listcmd-wbxml":{"source":"iana"},"application/vnd.uplanet.signal":{"source":"iana"},"application/vnd.uri-map":{"source":"iana"},"application/vnd.valve.source.material":{"source":"iana"},"application/vnd.vcx":{"source":"iana","extensions":["vcx"]},"application/vnd.vd-study":{"source":"iana"},"application/vnd.vectorworks":{"source":"iana"},"application/vnd.vel+json":{"source":"iana","compressible":true},"application/vnd.verimatrix.vcas":{"source":"iana"},"application/vnd.veryant.thin":{"source":"iana"},"application/vnd.ves.encrypted":{"source":"iana"},"application/vnd.vidsoft.vidconference":{"source":"iana"},"application/vnd.visio":{"source":"iana","extensions":["vsd","vst","vss","vsw"]},"application/vnd.visionary":{"source":"iana","extensions":["vis"]},"application/vnd.vividence.scriptfile":{"source":"iana"},"application/vnd.vsf":{"source":"iana","extensions":["vsf"]},"application/vnd.wap.sic":{"source":"iana"},"application/vnd.wap.slc":{"source":"iana"},"application/vnd.wap.wbxml":{"source":"iana","charset":"UTF-8","extensions":["wbxml"]},"application/vnd.wap.wmlc":{"source":"iana","extensions":["wmlc"]},"application/vnd.wap.wmlscriptc":{"source":"iana","extensions":["wmlsc"]},"application/vnd.webturbo":{"source":"iana","extensions":["wtb"]},"application/vnd.wfa.p2p":{"source":"iana"},"application/vnd.wfa.wsc":{"source":"iana"},"application/vnd.windows.devicepairing":{"source":"iana"},"application/vnd.wmc":{"source":"iana"},"application/vnd.wmf.bootstrap":{"source":"iana"},"application/vnd.wolfram.mathematica":{"source":"iana"},"application/vnd.wolfram.mathematica.package":{"source":"iana"},"application/vnd.wolfram.player":{"source":"iana","extensions":["nbp"]},"application/vnd.wordperfect":{"source":"iana","extensions":["wpd"]},"application/vnd.wqd":{"source":"iana","extensions":["wqd"]},"application/vnd.wrq-hp3000-labelled":{"source":"iana"},"application/vnd.wt.stf":{"source":"iana","extensions":["stf"]},"application/vnd.wv.csp+wbxml":{"source":"iana"},"application/vnd.wv.csp+xml":{"source":"iana","compressible":true},"application/vnd.wv.ssp+xml":{"source":"iana","compressible":true},"application/vnd.xacml+json":{"source":"iana","compressible":true},"application/vnd.xara":{"source":"iana","extensions":["xar"]},"application/vnd.xfdl":{"source":"iana","extensions":["xfdl"]},"application/vnd.xfdl.webform":{"source":"iana"},"application/vnd.xmi+xml":{"source":"iana","compressible":true},"application/vnd.xmpie.cpkg":{"source":"iana"},"application/vnd.xmpie.dpkg":{"source":"iana"},"application/vnd.xmpie.plan":{"source":"iana"},"application/vnd.xmpie.ppkg":{"source":"iana"},"application/vnd.xmpie.xlim":{"source":"iana"},"application/vnd.yamaha.hv-dic":{"source":"iana","extensions":["hvd"]},"application/vnd.yamaha.hv-script":{"source":"iana","extensions":["hvs"]},"application/vnd.yamaha.hv-voice":{"source":"iana","extensions":["hvp"]},"application/vnd.yamaha.openscoreformat":{"source":"iana","extensions":["osf"]},"application/vnd.yamaha.openscoreformat.osfpvg+xml":{"source":"iana","compressible":true,"extensions":["osfpvg"]},"application/vnd.yamaha.remote-setup":{"source":"iana"},"application/vnd.yamaha.smaf-audio":{"source":"iana","extensions":["saf"]},"application/vnd.yamaha.smaf-phrase":{"source":"iana","extensions":["spf"]},"application/vnd.yamaha.through-ngn":{"source":"iana"},"application/vnd.yamaha.tunnel-udpencap":{"source":"iana"},"application/vnd.yaoweme":{"source":"iana"},"application/vnd.yellowriver-custom-menu":{"source":"iana","extensions":["cmp"]},"application/vnd.youtube.yt":{"source":"iana"},"application/vnd.zul":{"source":"iana","extensions":["zir","zirz"]},"application/vnd.zzazz.deck+xml":{"source":"iana","compressible":true,"extensions":["zaz"]},"application/voicexml+xml":{"source":"iana","compressible":true,"extensions":["vxml"]},"application/voucher-cms+json":{"source":"iana","compressible":true},"application/vq-rtcpxr":{"source":"iana"},"application/wasm":{"compressible":true,"extensions":["wasm"]},"application/watcherinfo+xml":{"source":"iana","compressible":true},"application/webpush-options+json":{"source":"iana","compressible":true},"application/whoispp-query":{"source":"iana"},"application/whoispp-response":{"source":"iana"},"application/widget":{"source":"iana","extensions":["wgt"]},"application/winhlp":{"source":"apache","extensions":["hlp"]},"application/wita":{"source":"iana"},"application/wordperfect5.1":{"source":"iana"},"application/wsdl+xml":{"source":"iana","compressible":true,"extensions":["wsdl"]},"application/wspolicy+xml":{"source":"iana","compressible":true,"extensions":["wspolicy"]},"application/x-7z-compressed":{"source":"apache","compressible":false,"extensions":["7z"]},"application/x-abiword":{"source":"apache","extensions":["abw"]},"application/x-ace-compressed":{"source":"apache","extensions":["ace"]},"application/x-amf":{"source":"apache"},"application/x-apple-diskimage":{"source":"apache","extensions":["dmg"]},"application/x-arj":{"compressible":false,"extensions":["arj"]},"application/x-authorware-bin":{"source":"apache","extensions":["aab","x32","u32","vox"]},"application/x-authorware-map":{"source":"apache","extensions":["aam"]},"application/x-authorware-seg":{"source":"apache","extensions":["aas"]},"application/x-bcpio":{"source":"apache","extensions":["bcpio"]},"application/x-bdoc":{"compressible":false,"extensions":["bdoc"]},"application/x-bittorrent":{"source":"apache","extensions":["torrent"]},"application/x-blorb":{"source":"apache","extensions":["blb","blorb"]},"application/x-bzip":{"source":"apache","compressible":false,"extensions":["bz"]},"application/x-bzip2":{"source":"apache","compressible":false,"extensions":["bz2","boz"]},"application/x-cbr":{"source":"apache","extensions":["cbr","cba","cbt","cbz","cb7"]},"application/x-cdlink":{"source":"apache","extensions":["vcd"]},"application/x-cfs-compressed":{"source":"apache","extensions":["cfs"]},"application/x-chat":{"source":"apache","extensions":["chat"]},"application/x-chess-pgn":{"source":"apache","extensions":["pgn"]},"application/x-chrome-extension":{"extensions":["crx"]},"application/x-cocoa":{"source":"nginx","extensions":["cco"]},"application/x-compress":{"source":"apache"},"application/x-conference":{"source":"apache","extensions":["nsc"]},"application/x-cpio":{"source":"apache","extensions":["cpio"]},"application/x-csh":{"source":"apache","extensions":["csh"]},"application/x-deb":{"compressible":false},"application/x-debian-package":{"source":"apache","extensions":["deb","udeb"]},"application/x-dgc-compressed":{"source":"apache","extensions":["dgc"]},"application/x-director":{"source":"apache","extensions":["dir","dcr","dxr","cst","cct","cxt","w3d","fgd","swa"]},"application/x-doom":{"source":"apache","extensions":["wad"]},"application/x-dtbncx+xml":{"source":"apache","compressible":true,"extensions":["ncx"]},"application/x-dtbook+xml":{"source":"apache","compressible":true,"extensions":["dtb"]},"application/x-dtbresource+xml":{"source":"apache","compressible":true,"extensions":["res"]},"application/x-dvi":{"source":"apache","compressible":false,"extensions":["dvi"]},"application/x-envoy":{"source":"apache","extensions":["evy"]},"application/x-eva":{"source":"apache","extensions":["eva"]},"application/x-font-bdf":{"source":"apache","extensions":["bdf"]},"application/x-font-dos":{"source":"apache"},"application/x-font-framemaker":{"source":"apache"},"application/x-font-ghostscript":{"source":"apache","extensions":["gsf"]},"application/x-font-libgrx":{"source":"apache"},"application/x-font-linux-psf":{"source":"apache","extensions":["psf"]},"application/x-font-pcf":{"source":"apache","extensions":["pcf"]},"application/x-font-snf":{"source":"apache","extensions":["snf"]},"application/x-font-speedo":{"source":"apache"},"application/x-font-sunos-news":{"source":"apache"},"application/x-font-type1":{"source":"apache","extensions":["pfa","pfb","pfm","afm"]},"application/x-font-vfont":{"source":"apache"},"application/x-freearc":{"source":"apache","extensions":["arc"]},"application/x-futuresplash":{"source":"apache","extensions":["spl"]},"application/x-gca-compressed":{"source":"apache","extensions":["gca"]},"application/x-glulx":{"source":"apache","extensions":["ulx"]},"application/x-gnumeric":{"source":"apache","extensions":["gnumeric"]},"application/x-gramps-xml":{"source":"apache","extensions":["gramps"]},"application/x-gtar":{"source":"apache","extensions":["gtar"]},"application/x-gzip":{"source":"apache"},"application/x-hdf":{"source":"apache","extensions":["hdf"]},"application/x-httpd-php":{"compressible":true,"extensions":["php"]},"application/x-install-instructions":{"source":"apache","extensions":["install"]},"application/x-iso9660-image":{"source":"apache","extensions":["iso"]},"application/x-java-archive-diff":{"source":"nginx","extensions":["jardiff"]},"application/x-java-jnlp-file":{"source":"apache","compressible":false,"extensions":["jnlp"]},"application/x-javascript":{"compressible":true},"application/x-keepass2":{"extensions":["kdbx"]},"application/x-latex":{"source":"apache","compressible":false,"extensions":["latex"]},"application/x-lua-bytecode":{"extensions":["luac"]},"application/x-lzh-compressed":{"source":"apache","extensions":["lzh","lha"]},"application/x-makeself":{"source":"nginx","extensions":["run"]},"application/x-mie":{"source":"apache","extensions":["mie"]},"application/x-mobipocket-ebook":{"source":"apache","extensions":["prc","mobi"]},"application/x-mpegurl":{"compressible":false},"application/x-ms-application":{"source":"apache","extensions":["application"]},"application/x-ms-shortcut":{"source":"apache","extensions":["lnk"]},"application/x-ms-wmd":{"source":"apache","extensions":["wmd"]},"application/x-ms-wmz":{"source":"apache","extensions":["wmz"]},"application/x-ms-xbap":{"source":"apache","extensions":["xbap"]},"application/x-msaccess":{"source":"apache","extensions":["mdb"]},"application/x-msbinder":{"source":"apache","extensions":["obd"]},"application/x-mscardfile":{"source":"apache","extensions":["crd"]},"application/x-msclip":{"source":"apache","extensions":["clp"]},"application/x-msdos-program":{"extensions":["exe"]},"application/x-msdownload":{"source":"apache","extensions":["exe","dll","com","bat","msi"]},"application/x-msmediaview":{"source":"apache","extensions":["mvb","m13","m14"]},"application/x-msmetafile":{"source":"apache","extensions":["wmf","wmz","emf","emz"]},"application/x-msmoney":{"source":"apache","extensions":["mny"]},"application/x-mspublisher":{"source":"apache","extensions":["pub"]},"application/x-msschedule":{"source":"apache","extensions":["scd"]},"application/x-msterminal":{"source":"apache","extensions":["trm"]},"application/x-mswrite":{"source":"apache","extensions":["wri"]},"application/x-netcdf":{"source":"apache","extensions":["nc","cdf"]},"application/x-ns-proxy-autoconfig":{"compressible":true,"extensions":["pac"]},"application/x-nzb":{"source":"apache","extensions":["nzb"]},"application/x-perl":{"source":"nginx","extensions":["pl","pm"]},"application/x-pilot":{"source":"nginx","extensions":["prc","pdb"]},"application/x-pkcs12":{"source":"apache","compressible":false,"extensions":["p12","pfx"]},"application/x-pkcs7-certificates":{"source":"apache","extensions":["p7b","spc"]},"application/x-pkcs7-certreqresp":{"source":"apache","extensions":["p7r"]},"application/x-pki-message":{"source":"iana"},"application/x-rar-compressed":{"source":"apache","compressible":false,"extensions":["rar"]},"application/x-redhat-package-manager":{"source":"nginx","extensions":["rpm"]},"application/x-research-info-systems":{"source":"apache","extensions":["ris"]},"application/x-sea":{"source":"nginx","extensions":["sea"]},"application/x-sh":{"source":"apache","compressible":true,"extensions":["sh"]},"application/x-shar":{"source":"apache","extensions":["shar"]},"application/x-shockwave-flash":{"source":"apache","compressible":false,"extensions":["swf"]},"application/x-silverlight-app":{"source":"apache","extensions":["xap"]},"application/x-sql":{"source":"apache","extensions":["sql"]},"application/x-stuffit":{"source":"apache","compressible":false,"extensions":["sit"]},"application/x-stuffitx":{"source":"apache","extensions":["sitx"]},"application/x-subrip":{"source":"apache","extensions":["srt"]},"application/x-sv4cpio":{"source":"apache","extensions":["sv4cpio"]},"application/x-sv4crc":{"source":"apache","extensions":["sv4crc"]},"application/x-t3vm-image":{"source":"apache","extensions":["t3"]},"application/x-tads":{"source":"apache","extensions":["gam"]},"application/x-tar":{"source":"apache","compressible":true,"extensions":["tar"]},"application/x-tcl":{"source":"apache","extensions":["tcl","tk"]},"application/x-tex":{"source":"apache","extensions":["tex"]},"application/x-tex-tfm":{"source":"apache","extensions":["tfm"]},"application/x-texinfo":{"source":"apache","extensions":["texinfo","texi"]},"application/x-tgif":{"source":"apache","extensions":["obj"]},"application/x-ustar":{"source":"apache","extensions":["ustar"]},"application/x-virtualbox-hdd":{"compressible":true,"extensions":["hdd"]},"application/x-virtualbox-ova":{"compressible":true,"extensions":["ova"]},"application/x-virtualbox-ovf":{"compressible":true,"extensions":["ovf"]},"application/x-virtualbox-vbox":{"compressible":true,"extensions":["vbox"]},"application/x-virtualbox-vbox-extpack":{"compressible":false,"extensions":["vbox-extpack"]},"application/x-virtualbox-vdi":{"compressible":true,"extensions":["vdi"]},"application/x-virtualbox-vhd":{"compressible":true,"extensions":["vhd"]},"application/x-virtualbox-vmdk":{"compressible":true,"extensions":["vmdk"]},"application/x-wais-source":{"source":"apache","extensions":["src"]},"application/x-web-app-manifest+json":{"compressible":true,"extensions":["webapp"]},"application/x-www-form-urlencoded":{"source":"iana","compressible":true},"application/x-x509-ca-cert":{"source":"iana","extensions":["der","crt","pem"]},"application/x-x509-ca-ra-cert":{"source":"iana"},"application/x-x509-next-ca-cert":{"source":"iana"},"application/x-xfig":{"source":"apache","extensions":["fig"]},"application/x-xliff+xml":{"source":"apache","compressible":true,"extensions":["xlf"]},"application/x-xpinstall":{"source":"apache","compressible":false,"extensions":["xpi"]},"application/x-xz":{"source":"apache","extensions":["xz"]},"application/x-zmachine":{"source":"apache","extensions":["z1","z2","z3","z4","z5","z6","z7","z8"]},"application/x400-bp":{"source":"iana"},"application/xacml+xml":{"source":"iana","compressible":true},"application/xaml+xml":{"source":"apache","compressible":true,"extensions":["xaml"]},"application/xcap-att+xml":{"source":"iana","compressible":true,"extensions":["xav"]},"application/xcap-caps+xml":{"source":"iana","compressible":true,"extensions":["xca"]},"application/xcap-diff+xml":{"source":"iana","compressible":true,"extensions":["xdf"]},"application/xcap-el+xml":{"source":"iana","compressible":true,"extensions":["xel"]},"application/xcap-error+xml":{"source":"iana","compressible":true,"extensions":["xer"]},"application/xcap-ns+xml":{"source":"iana","compressible":true,"extensions":["xns"]},"application/xcon-conference-info+xml":{"source":"iana","compressible":true},"application/xcon-conference-info-diff+xml":{"source":"iana","compressible":true},"application/xenc+xml":{"source":"iana","compressible":true,"extensions":["xenc"]},"application/xhtml+xml":{"source":"iana","compressible":true,"extensions":["xhtml","xht"]},"application/xhtml-voice+xml":{"source":"apache","compressible":true},"application/xliff+xml":{"source":"iana","compressible":true,"extensions":["xlf"]},"application/xml":{"source":"iana","compressible":true,"extensions":["xml","xsl","xsd","rng"]},"application/xml-dtd":{"source":"iana","compressible":true,"extensions":["dtd"]},"application/xml-external-parsed-entity":{"source":"iana"},"application/xml-patch+xml":{"source":"iana","compressible":true},"application/xmpp+xml":{"source":"iana","compressible":true},"application/xop+xml":{"source":"iana","compressible":true,"extensions":["xop"]},"application/xproc+xml":{"source":"apache","compressible":true,"extensions":["xpl"]},"application/xslt+xml":{"source":"iana","compressible":true,"extensions":["xslt"]},"application/xspf+xml":{"source":"apache","compressible":true,"extensions":["xspf"]},"application/xv+xml":{"source":"iana","compressible":true,"extensions":["mxml","xhvml","xvml","xvm"]},"application/yang":{"source":"iana","extensions":["yang"]},"application/yang-data+json":{"source":"iana","compressible":true},"application/yang-data+xml":{"source":"iana","compressible":true},"application/yang-patch+json":{"source":"iana","compressible":true},"application/yang-patch+xml":{"source":"iana","compressible":true},"application/yin+xml":{"source":"iana","compressible":true,"extensions":["yin"]},"application/zip":{"source":"iana","compressible":false,"extensions":["zip"]},"application/zlib":{"source":"iana"},"application/zstd":{"source":"iana"},"audio/1d-interleaved-parityfec":{"source":"iana"},"audio/32kadpcm":{"source":"iana"},"audio/3gpp":{"source":"iana","compressible":false,"extensions":["3gpp"]},"audio/3gpp2":{"source":"iana"},"audio/aac":{"source":"iana"},"audio/ac3":{"source":"iana"},"audio/adpcm":{"source":"apache","extensions":["adp"]},"audio/amr":{"source":"iana"},"audio/amr-wb":{"source":"iana"},"audio/amr-wb+":{"source":"iana"},"audio/aptx":{"source":"iana"},"audio/asc":{"source":"iana"},"audio/atrac-advanced-lossless":{"source":"iana"},"audio/atrac-x":{"source":"iana"},"audio/atrac3":{"source":"iana"},"audio/basic":{"source":"iana","compressible":false,"extensions":["au","snd"]},"audio/bv16":{"source":"iana"},"audio/bv32":{"source":"iana"},"audio/clearmode":{"source":"iana"},"audio/cn":{"source":"iana"},"audio/dat12":{"source":"iana"},"audio/dls":{"source":"iana"},"audio/dsr-es201108":{"source":"iana"},"audio/dsr-es202050":{"source":"iana"},"audio/dsr-es202211":{"source":"iana"},"audio/dsr-es202212":{"source":"iana"},"audio/dv":{"source":"iana"},"audio/dvi4":{"source":"iana"},"audio/eac3":{"source":"iana"},"audio/encaprtp":{"source":"iana"},"audio/evrc":{"source":"iana"},"audio/evrc-qcp":{"source":"iana"},"audio/evrc0":{"source":"iana"},"audio/evrc1":{"source":"iana"},"audio/evrcb":{"source":"iana"},"audio/evrcb0":{"source":"iana"},"audio/evrcb1":{"source":"iana"},"audio/evrcnw":{"source":"iana"},"audio/evrcnw0":{"source":"iana"},"audio/evrcnw1":{"source":"iana"},"audio/evrcwb":{"source":"iana"},"audio/evrcwb0":{"source":"iana"},"audio/evrcwb1":{"source":"iana"},"audio/evs":{"source":"iana"},"audio/flexfec":{"source":"iana"},"audio/fwdred":{"source":"iana"},"audio/g711-0":{"source":"iana"},"audio/g719":{"source":"iana"},"audio/g722":{"source":"iana"},"audio/g7221":{"source":"iana"},"audio/g723":{"source":"iana"},"audio/g726-16":{"source":"iana"},"audio/g726-24":{"source":"iana"},"audio/g726-32":{"source":"iana"},"audio/g726-40":{"source":"iana"},"audio/g728":{"source":"iana"},"audio/g729":{"source":"iana"},"audio/g7291":{"source":"iana"},"audio/g729d":{"source":"iana"},"audio/g729e":{"source":"iana"},"audio/gsm":{"source":"iana"},"audio/gsm-efr":{"source":"iana"},"audio/gsm-hr-08":{"source":"iana"},"audio/ilbc":{"source":"iana"},"audio/ip-mr_v2.5":{"source":"iana"},"audio/isac":{"source":"apache"},"audio/l16":{"source":"iana"},"audio/l20":{"source":"iana"},"audio/l24":{"source":"iana","compressible":false},"audio/l8":{"source":"iana"},"audio/lpc":{"source":"iana"},"audio/melp":{"source":"iana"},"audio/melp1200":{"source":"iana"},"audio/melp2400":{"source":"iana"},"audio/melp600":{"source":"iana"},"audio/mhas":{"source":"iana"},"audio/midi":{"source":"apache","extensions":["mid","midi","kar","rmi"]},"audio/mobile-xmf":{"source":"iana","extensions":["mxmf"]},"audio/mp3":{"compressible":false,"extensions":["mp3"]},"audio/mp4":{"source":"iana","compressible":false,"extensions":["m4a","mp4a"]},"audio/mp4a-latm":{"source":"iana"},"audio/mpa":{"source":"iana"},"audio/mpa-robust":{"source":"iana"},"audio/mpeg":{"source":"iana","compressible":false,"extensions":["mpga","mp2","mp2a","mp3","m2a","m3a"]},"audio/mpeg4-generic":{"source":"iana"},"audio/musepack":{"source":"apache"},"audio/ogg":{"source":"iana","compressible":false,"extensions":["oga","ogg","spx"]},"audio/opus":{"source":"iana"},"audio/parityfec":{"source":"iana"},"audio/pcma":{"source":"iana"},"audio/pcma-wb":{"source":"iana"},"audio/pcmu":{"source":"iana"},"audio/pcmu-wb":{"source":"iana"},"audio/prs.sid":{"source":"iana"},"audio/qcelp":{"source":"iana"},"audio/raptorfec":{"source":"iana"},"audio/red":{"source":"iana"},"audio/rtp-enc-aescm128":{"source":"iana"},"audio/rtp-midi":{"source":"iana"},"audio/rtploopback":{"source":"iana"},"audio/rtx":{"source":"iana"},"audio/s3m":{"source":"apache","extensions":["s3m"]},"audio/silk":{"source":"apache","extensions":["sil"]},"audio/smv":{"source":"iana"},"audio/smv-qcp":{"source":"iana"},"audio/smv0":{"source":"iana"},"audio/sp-midi":{"source":"iana"},"audio/speex":{"source":"iana"},"audio/t140c":{"source":"iana"},"audio/t38":{"source":"iana"},"audio/telephone-event":{"source":"iana"},"audio/tetra_acelp":{"source":"iana"},"audio/tetra_acelp_bb":{"source":"iana"},"audio/tone":{"source":"iana"},"audio/uemclip":{"source":"iana"},"audio/ulpfec":{"source":"iana"},"audio/usac":{"source":"iana"},"audio/vdvi":{"source":"iana"},"audio/vmr-wb":{"source":"iana"},"audio/vnd.3gpp.iufp":{"source":"iana"},"audio/vnd.4sb":{"source":"iana"},"audio/vnd.audiokoz":{"source":"iana"},"audio/vnd.celp":{"source":"iana"},"audio/vnd.cisco.nse":{"source":"iana"},"audio/vnd.cmles.radio-events":{"source":"iana"},"audio/vnd.cns.anp1":{"source":"iana"},"audio/vnd.cns.inf1":{"source":"iana"},"audio/vnd.dece.audio":{"source":"iana","extensions":["uva","uvva"]},"audio/vnd.digital-winds":{"source":"iana","extensions":["eol"]},"audio/vnd.dlna.adts":{"source":"iana"},"audio/vnd.dolby.heaac.1":{"source":"iana"},"audio/vnd.dolby.heaac.2":{"source":"iana"},"audio/vnd.dolby.mlp":{"source":"iana"},"audio/vnd.dolby.mps":{"source":"iana"},"audio/vnd.dolby.pl2":{"source":"iana"},"audio/vnd.dolby.pl2x":{"source":"iana"},"audio/vnd.dolby.pl2z":{"source":"iana"},"audio/vnd.dolby.pulse.1":{"source":"iana"},"audio/vnd.dra":{"source":"iana","extensions":["dra"]},"audio/vnd.dts":{"source":"iana","extensions":["dts"]},"audio/vnd.dts.hd":{"source":"iana","extensions":["dtshd"]},"audio/vnd.dts.uhd":{"source":"iana"},"audio/vnd.dvb.file":{"source":"iana"},"audio/vnd.everad.plj":{"source":"iana"},"audio/vnd.hns.audio":{"source":"iana"},"audio/vnd.lucent.voice":{"source":"iana","extensions":["lvp"]},"audio/vnd.ms-playready.media.pya":{"source":"iana","extensions":["pya"]},"audio/vnd.nokia.mobile-xmf":{"source":"iana"},"audio/vnd.nortel.vbk":{"source":"iana"},"audio/vnd.nuera.ecelp4800":{"source":"iana","extensions":["ecelp4800"]},"audio/vnd.nuera.ecelp7470":{"source":"iana","extensions":["ecelp7470"]},"audio/vnd.nuera.ecelp9600":{"source":"iana","extensions":["ecelp9600"]},"audio/vnd.octel.sbc":{"source":"iana"},"audio/vnd.presonus.multitrack":{"source":"iana"},"audio/vnd.qcelp":{"source":"iana"},"audio/vnd.rhetorex.32kadpcm":{"source":"iana"},"audio/vnd.rip":{"source":"iana","extensions":["rip"]},"audio/vnd.rn-realaudio":{"compressible":false},"audio/vnd.sealedmedia.softseal.mpeg":{"source":"iana"},"audio/vnd.vmx.cvsd":{"source":"iana"},"audio/vnd.wave":{"compressible":false},"audio/vorbis":{"source":"iana","compressible":false},"audio/vorbis-config":{"source":"iana"},"audio/wav":{"compressible":false,"extensions":["wav"]},"audio/wave":{"compressible":false,"extensions":["wav"]},"audio/webm":{"source":"apache","compressible":false,"extensions":["weba"]},"audio/x-aac":{"source":"apache","compressible":false,"extensions":["aac"]},"audio/x-aiff":{"source":"apache","extensions":["aif","aiff","aifc"]},"audio/x-caf":{"source":"apache","compressible":false,"extensions":["caf"]},"audio/x-flac":{"source":"apache","extensions":["flac"]},"audio/x-m4a":{"source":"nginx","extensions":["m4a"]},"audio/x-matroska":{"source":"apache","extensions":["mka"]},"audio/x-mpegurl":{"source":"apache","extensions":["m3u"]},"audio/x-ms-wax":{"source":"apache","extensions":["wax"]},"audio/x-ms-wma":{"source":"apache","extensions":["wma"]},"audio/x-pn-realaudio":{"source":"apache","extensions":["ram","ra"]},"audio/x-pn-realaudio-plugin":{"source":"apache","extensions":["rmp"]},"audio/x-realaudio":{"source":"nginx","extensions":["ra"]},"audio/x-tta":{"source":"apache"},"audio/x-wav":{"source":"apache","extensions":["wav"]},"audio/xm":{"source":"apache","extensions":["xm"]},"chemical/x-cdx":{"source":"apache","extensions":["cdx"]},"chemical/x-cif":{"source":"apache","extensions":["cif"]},"chemical/x-cmdf":{"source":"apache","extensions":["cmdf"]},"chemical/x-cml":{"source":"apache","extensions":["cml"]},"chemical/x-csml":{"source":"apache","extensions":["csml"]},"chemical/x-pdb":{"source":"apache"},"chemical/x-xyz":{"source":"apache","extensions":["xyz"]},"font/collection":{"source":"iana","extensions":["ttc"]},"font/otf":{"source":"iana","compressible":true,"extensions":["otf"]},"font/sfnt":{"source":"iana"},"font/ttf":{"source":"iana","compressible":true,"extensions":["ttf"]},"font/woff":{"source":"iana","extensions":["woff"]},"font/woff2":{"source":"iana","extensions":["woff2"]},"image/aces":{"source":"iana","extensions":["exr"]},"image/apng":{"compressible":false,"extensions":["apng"]},"image/avci":{"source":"iana"},"image/avcs":{"source":"iana"},"image/bmp":{"source":"iana","compressible":true,"extensions":["bmp"]},"image/cgm":{"source":"iana","extensions":["cgm"]},"image/dicom-rle":{"source":"iana","extensions":["drle"]},"image/emf":{"source":"iana","extensions":["emf"]},"image/fits":{"source":"iana","extensions":["fits"]},"image/g3fax":{"source":"iana","extensions":["g3"]},"image/gif":{"source":"iana","compressible":false,"extensions":["gif"]},"image/heic":{"source":"iana","extensions":["heic"]},"image/heic-sequence":{"source":"iana","extensions":["heics"]},"image/heif":{"source":"iana","extensions":["heif"]},"image/heif-sequence":{"source":"iana","extensions":["heifs"]},"image/hej2k":{"source":"iana","extensions":["hej2"]},"image/hsj2":{"source":"iana","extensions":["hsj2"]},"image/ief":{"source":"iana","extensions":["ief"]},"image/jls":{"source":"iana","extensions":["jls"]},"image/jp2":{"source":"iana","compressible":false,"extensions":["jp2","jpg2"]},"image/jpeg":{"source":"iana","compressible":false,"extensions":["jpeg","jpg","jpe"]},"image/jph":{"source":"iana","extensions":["jph"]},"image/jphc":{"source":"iana","extensions":["jhc"]},"image/jpm":{"source":"iana","compressible":false,"extensions":["jpm"]},"image/jpx":{"source":"iana","compressible":false,"extensions":["jpx","jpf"]},"image/jxr":{"source":"iana","extensions":["jxr"]},"image/jxra":{"source":"iana","extensions":["jxra"]},"image/jxrs":{"source":"iana","extensions":["jxrs"]},"image/jxs":{"source":"iana","extensions":["jxs"]},"image/jxsc":{"source":"iana","extensions":["jxsc"]},"image/jxsi":{"source":"iana","extensions":["jxsi"]},"image/jxss":{"source":"iana","extensions":["jxss"]},"image/ktx":{"source":"iana","extensions":["ktx"]},"image/naplps":{"source":"iana"},"image/pjpeg":{"compressible":false},"image/png":{"source":"iana","compressible":false,"extensions":["png"]},"image/prs.btif":{"source":"iana","extensions":["btif"]},"image/prs.pti":{"source":"iana","extensions":["pti"]},"image/pwg-raster":{"source":"iana"},"image/sgi":{"source":"apache","extensions":["sgi"]},"image/svg+xml":{"source":"iana","compressible":true,"extensions":["svg","svgz"]},"image/t38":{"source":"iana","extensions":["t38"]},"image/tiff":{"source":"iana","compressible":false,"extensions":["tif","tiff"]},"image/tiff-fx":{"source":"iana","extensions":["tfx"]},"image/vnd.adobe.photoshop":{"source":"iana","compressible":true,"extensions":["psd"]},"image/vnd.airzip.accelerator.azv":{"source":"iana","extensions":["azv"]},"image/vnd.cns.inf2":{"source":"iana"},"image/vnd.dece.graphic":{"source":"iana","extensions":["uvi","uvvi","uvg","uvvg"]},"image/vnd.djvu":{"source":"iana","extensions":["djvu","djv"]},"image/vnd.dvb.subtitle":{"source":"iana","extensions":["sub"]},"image/vnd.dwg":{"source":"iana","extensions":["dwg"]},"image/vnd.dxf":{"source":"iana","extensions":["dxf"]},"image/vnd.fastbidsheet":{"source":"iana","extensions":["fbs"]},"image/vnd.fpx":{"source":"iana","extensions":["fpx"]},"image/vnd.fst":{"source":"iana","extensions":["fst"]},"image/vnd.fujixerox.edmics-mmr":{"source":"iana","extensions":["mmr"]},"image/vnd.fujixerox.edmics-rlc":{"source":"iana","extensions":["rlc"]},"image/vnd.globalgraphics.pgb":{"source":"iana"},"image/vnd.microsoft.icon":{"source":"iana","extensions":["ico"]},"image/vnd.mix":{"source":"iana"},"image/vnd.mozilla.apng":{"source":"iana"},"image/vnd.ms-dds":{"extensions":["dds"]},"image/vnd.ms-modi":{"source":"iana","extensions":["mdi"]},"image/vnd.ms-photo":{"source":"apache","extensions":["wdp"]},"image/vnd.net-fpx":{"source":"iana","extensions":["npx"]},"image/vnd.radiance":{"source":"iana"},"image/vnd.sealed.png":{"source":"iana"},"image/vnd.sealedmedia.softseal.gif":{"source":"iana"},"image/vnd.sealedmedia.softseal.jpg":{"source":"iana"},"image/vnd.svf":{"source":"iana"},"image/vnd.tencent.tap":{"source":"iana","extensions":["tap"]},"image/vnd.valve.source.texture":{"source":"iana","extensions":["vtf"]},"image/vnd.wap.wbmp":{"source":"iana","extensions":["wbmp"]},"image/vnd.xiff":{"source":"iana","extensions":["xif"]},"image/vnd.zbrush.pcx":{"source":"iana","extensions":["pcx"]},"image/webp":{"source":"apache","extensions":["webp"]},"image/wmf":{"source":"iana","extensions":["wmf"]},"image/x-3ds":{"source":"apache","extensions":["3ds"]},"image/x-cmu-raster":{"source":"apache","extensions":["ras"]},"image/x-cmx":{"source":"apache","extensions":["cmx"]},"image/x-freehand":{"source":"apache","extensions":["fh","fhc","fh4","fh5","fh7"]},"image/x-icon":{"source":"apache","compressible":true,"extensions":["ico"]},"image/x-jng":{"source":"nginx","extensions":["jng"]},"image/x-mrsid-image":{"source":"apache","extensions":["sid"]},"image/x-ms-bmp":{"source":"nginx","compressible":true,"extensions":["bmp"]},"image/x-pcx":{"source":"apache","extensions":["pcx"]},"image/x-pict":{"source":"apache","extensions":["pic","pct"]},"image/x-portable-anymap":{"source":"apache","extensions":["pnm"]},"image/x-portable-bitmap":{"source":"apache","extensions":["pbm"]},"image/x-portable-graymap":{"source":"apache","extensions":["pgm"]},"image/x-portable-pixmap":{"source":"apache","extensions":["ppm"]},"image/x-rgb":{"source":"apache","extensions":["rgb"]},"image/x-tga":{"source":"apache","extensions":["tga"]},"image/x-xbitmap":{"source":"apache","extensions":["xbm"]},"image/x-xcf":{"compressible":false},"image/x-xpixmap":{"source":"apache","extensions":["xpm"]},"image/x-xwindowdump":{"source":"apache","extensions":["xwd"]},"message/cpim":{"source":"iana"},"message/delivery-status":{"source":"iana"},"message/disposition-notification":{"source":"iana","extensions":["disposition-notification"]},"message/external-body":{"source":"iana"},"message/feedback-report":{"source":"iana"},"message/global":{"source":"iana","extensions":["u8msg"]},"message/global-delivery-status":{"source":"iana","extensions":["u8dsn"]},"message/global-disposition-notification":{"source":"iana","extensions":["u8mdn"]},"message/global-headers":{"source":"iana","extensions":["u8hdr"]},"message/http":{"source":"iana","compressible":false},"message/imdn+xml":{"source":"iana","compressible":true},"message/news":{"source":"iana"},"message/partial":{"source":"iana","compressible":false},"message/rfc822":{"source":"iana","compressible":true,"extensions":["eml","mime"]},"message/s-http":{"source":"iana"},"message/sip":{"source":"iana"},"message/sipfrag":{"source":"iana"},"message/tracking-status":{"source":"iana"},"message/vnd.si.simp":{"source":"iana"},"message/vnd.wfa.wsc":{"source":"iana","extensions":["wsc"]},"model/3mf":{"source":"iana","extensions":["3mf"]},"model/gltf+json":{"source":"iana","compressible":true,"extensions":["gltf"]},"model/gltf-binary":{"source":"iana","compressible":true,"extensions":["glb"]},"model/iges":{"source":"iana","compressible":false,"extensions":["igs","iges"]},"model/mesh":{"source":"iana","compressible":false,"extensions":["msh","mesh","silo"]},"model/mtl":{"source":"iana","extensions":["mtl"]},"model/obj":{"source":"iana","extensions":["obj"]},"model/stl":{"source":"iana","extensions":["stl"]},"model/vnd.collada+xml":{"source":"iana","compressible":true,"extensions":["dae"]},"model/vnd.dwf":{"source":"iana","extensions":["dwf"]},"model/vnd.flatland.3dml":{"source":"iana"},"model/vnd.gdl":{"source":"iana","extensions":["gdl"]},"model/vnd.gs-gdl":{"source":"apache"},"model/vnd.gs.gdl":{"source":"iana"},"model/vnd.gtw":{"source":"iana","extensions":["gtw"]},"model/vnd.moml+xml":{"source":"iana","compressible":true},"model/vnd.mts":{"source":"iana","extensions":["mts"]},"model/vnd.opengex":{"source":"iana","extensions":["ogex"]},"model/vnd.parasolid.transmit.binary":{"source":"iana","extensions":["x_b"]},"model/vnd.parasolid.transmit.text":{"source":"iana","extensions":["x_t"]},"model/vnd.rosette.annotated-data-model":{"source":"iana"},"model/vnd.usdz+zip":{"source":"iana","compressible":false,"extensions":["usdz"]},"model/vnd.valve.source.compiled-map":{"source":"iana","extensions":["bsp"]},"model/vnd.vtu":{"source":"iana","extensions":["vtu"]},"model/vrml":{"source":"iana","compressible":false,"extensions":["wrl","vrml"]},"model/x3d+binary":{"source":"apache","compressible":false,"extensions":["x3db","x3dbz"]},"model/x3d+fastinfoset":{"source":"iana","extensions":["x3db"]},"model/x3d+vrml":{"source":"apache","compressible":false,"extensions":["x3dv","x3dvz"]},"model/x3d+xml":{"source":"iana","compressible":true,"extensions":["x3d","x3dz"]},"model/x3d-vrml":{"source":"iana","extensions":["x3dv"]},"multipart/alternative":{"source":"iana","compressible":false},"multipart/appledouble":{"source":"iana"},"multipart/byteranges":{"source":"iana"},"multipart/digest":{"source":"iana"},"multipart/encrypted":{"source":"iana","compressible":false},"multipart/form-data":{"source":"iana","compressible":false},"multipart/header-set":{"source":"iana"},"multipart/mixed":{"source":"iana"},"multipart/multilingual":{"source":"iana"},"multipart/parallel":{"source":"iana"},"multipart/related":{"source":"iana","compressible":false},"multipart/report":{"source":"iana"},"multipart/signed":{"source":"iana","compressible":false},"multipart/vnd.bint.med-plus":{"source":"iana"},"multipart/voice-message":{"source":"iana"},"multipart/x-mixed-replace":{"source":"iana"},"text/1d-interleaved-parityfec":{"source":"iana"},"text/cache-manifest":{"source":"iana","compressible":true,"extensions":["appcache","manifest"]},"text/calendar":{"source":"iana","extensions":["ics","ifb"]},"text/calender":{"compressible":true},"text/cmd":{"compressible":true},"text/coffeescript":{"extensions":["coffee","litcoffee"]},"text/css":{"source":"iana","charset":"UTF-8","compressible":true,"extensions":["css"]},"text/csv":{"source":"iana","compressible":true,"extensions":["csv"]},"text/csv-schema":{"source":"iana"},"text/directory":{"source":"iana"},"text/dns":{"source":"iana"},"text/ecmascript":{"source":"iana"},"text/encaprtp":{"source":"iana"},"text/enriched":{"source":"iana"},"text/flexfec":{"source":"iana"},"text/fwdred":{"source":"iana"},"text/grammar-ref-list":{"source":"iana"},"text/html":{"source":"iana","compressible":true,"extensions":["html","htm","shtml"]},"text/jade":{"extensions":["jade"]},"text/javascript":{"source":"iana","compressible":true},"text/jcr-cnd":{"source":"iana"},"text/jsx":{"compressible":true,"extensions":["jsx"]},"text/less":{"compressible":true,"extensions":["less"]},"text/markdown":{"source":"iana","compressible":true,"extensions":["markdown","md"]},"text/mathml":{"source":"nginx","extensions":["mml"]},"text/mdx":{"compressible":true,"extensions":["mdx"]},"text/mizar":{"source":"iana"},"text/n3":{"source":"iana","charset":"UTF-8","compressible":true,"extensions":["n3"]},"text/parameters":{"source":"iana","charset":"UTF-8"},"text/parityfec":{"source":"iana"},"text/plain":{"source":"iana","compressible":true,"extensions":["txt","text","conf","def","list","log","in","ini"]},"text/provenance-notation":{"source":"iana","charset":"UTF-8"},"text/prs.fallenstein.rst":{"source":"iana"},"text/prs.lines.tag":{"source":"iana","extensions":["dsc"]},"text/prs.prop.logic":{"source":"iana"},"text/raptorfec":{"source":"iana"},"text/red":{"source":"iana"},"text/rfc822-headers":{"source":"iana"},"text/richtext":{"source":"iana","compressible":true,"extensions":["rtx"]},"text/rtf":{"source":"iana","compressible":true,"extensions":["rtf"]},"text/rtp-enc-aescm128":{"source":"iana"},"text/rtploopback":{"source":"iana"},"text/rtx":{"source":"iana"},"text/sgml":{"source":"iana","extensions":["sgml","sgm"]},"text/shex":{"extensions":["shex"]},"text/slim":{"extensions":["slim","slm"]},"text/strings":{"source":"iana"},"text/stylus":{"extensions":["stylus","styl"]},"text/t140":{"source":"iana"},"text/tab-separated-values":{"source":"iana","compressible":true,"extensions":["tsv"]},"text/troff":{"source":"iana","extensions":["t","tr","roff","man","me","ms"]},"text/turtle":{"source":"iana","charset":"UTF-8","extensions":["ttl"]},"text/ulpfec":{"source":"iana"},"text/uri-list":{"source":"iana","compressible":true,"extensions":["uri","uris","urls"]},"text/vcard":{"source":"iana","compressible":true,"extensions":["vcard"]},"text/vnd.a":{"source":"iana"},"text/vnd.abc":{"source":"iana"},"text/vnd.ascii-art":{"source":"iana"},"text/vnd.curl":{"source":"iana","extensions":["curl"]},"text/vnd.curl.dcurl":{"source":"apache","extensions":["dcurl"]},"text/vnd.curl.mcurl":{"source":"apache","extensions":["mcurl"]},"text/vnd.curl.scurl":{"source":"apache","extensions":["scurl"]},"text/vnd.debian.copyright":{"source":"iana","charset":"UTF-8"},"text/vnd.dmclientscript":{"source":"iana"},"text/vnd.dvb.subtitle":{"source":"iana","extensions":["sub"]},"text/vnd.esmertec.theme-descriptor":{"source":"iana","charset":"UTF-8"},"text/vnd.ficlab.flt":{"source":"iana"},"text/vnd.fly":{"source":"iana","extensions":["fly"]},"text/vnd.fmi.flexstor":{"source":"iana","extensions":["flx"]},"text/vnd.gml":{"source":"iana"},"text/vnd.graphviz":{"source":"iana","extensions":["gv"]},"text/vnd.hgl":{"source":"iana"},"text/vnd.in3d.3dml":{"source":"iana","extensions":["3dml"]},"text/vnd.in3d.spot":{"source":"iana","extensions":["spot"]},"text/vnd.iptc.newsml":{"source":"iana"},"text/vnd.iptc.nitf":{"source":"iana"},"text/vnd.latex-z":{"source":"iana"},"text/vnd.motorola.reflex":{"source":"iana"},"text/vnd.ms-mediapackage":{"source":"iana"},"text/vnd.net2phone.commcenter.command":{"source":"iana"},"text/vnd.radisys.msml-basic-layout":{"source":"iana"},"text/vnd.senx.warpscript":{"source":"iana"},"text/vnd.si.uricatalogue":{"source":"iana"},"text/vnd.sosi":{"source":"iana"},"text/vnd.sun.j2me.app-descriptor":{"source":"iana","charset":"UTF-8","extensions":["jad"]},"text/vnd.trolltech.linguist":{"source":"iana","charset":"UTF-8"},"text/vnd.wap.si":{"source":"iana"},"text/vnd.wap.sl":{"source":"iana"},"text/vnd.wap.wml":{"source":"iana","extensions":["wml"]},"text/vnd.wap.wmlscript":{"source":"iana","extensions":["wmls"]},"text/vtt":{"source":"iana","charset":"UTF-8","compressible":true,"extensions":["vtt"]},"text/x-asm":{"source":"apache","extensions":["s","asm"]},"text/x-c":{"source":"apache","extensions":["c","cc","cxx","cpp","h","hh","dic"]},"text/x-component":{"source":"nginx","extensions":["htc"]},"text/x-fortran":{"source":"apache","extensions":["f","for","f77","f90"]},"text/x-gwt-rpc":{"compressible":true},"text/x-handlebars-template":{"extensions":["hbs"]},"text/x-java-source":{"source":"apache","extensions":["java"]},"text/x-jquery-tmpl":{"compressible":true},"text/x-lua":{"extensions":["lua"]},"text/x-markdown":{"compressible":true,"extensions":["mkd"]},"text/x-nfo":{"source":"apache","extensions":["nfo"]},"text/x-opml":{"source":"apache","extensions":["opml"]},"text/x-org":{"compressible":true,"extensions":["org"]},"text/x-pascal":{"source":"apache","extensions":["p","pas"]},"text/x-processing":{"compressible":true,"extensions":["pde"]},"text/x-sass":{"extensions":["sass"]},"text/x-scss":{"extensions":["scss"]},"text/x-setext":{"source":"apache","extensions":["etx"]},"text/x-sfv":{"source":"apache","extensions":["sfv"]},"text/x-suse-ymp":{"compressible":true,"extensions":["ymp"]},"text/x-uuencode":{"source":"apache","extensions":["uu"]},"text/x-vcalendar":{"source":"apache","extensions":["vcs"]},"text/x-vcard":{"source":"apache","extensions":["vcf"]},"text/xml":{"source":"iana","compressible":true,"extensions":["xml"]},"text/xml-external-parsed-entity":{"source":"iana"},"text/yaml":{"extensions":["yaml","yml"]},"video/1d-interleaved-parityfec":{"source":"iana"},"video/3gpp":{"source":"iana","extensions":["3gp","3gpp"]},"video/3gpp-tt":{"source":"iana"},"video/3gpp2":{"source":"iana","extensions":["3g2"]},"video/bmpeg":{"source":"iana"},"video/bt656":{"source":"iana"},"video/celb":{"source":"iana"},"video/dv":{"source":"iana"},"video/encaprtp":{"source":"iana"},"video/flexfec":{"source":"iana"},"video/h261":{"source":"iana","extensions":["h261"]},"video/h263":{"source":"iana","extensions":["h263"]},"video/h263-1998":{"source":"iana"},"video/h263-2000":{"source":"iana"},"video/h264":{"source":"iana","extensions":["h264"]},"video/h264-rcdo":{"source":"iana"},"video/h264-svc":{"source":"iana"},"video/h265":{"source":"iana"},"video/iso.segment":{"source":"iana"},"video/jpeg":{"source":"iana","extensions":["jpgv"]},"video/jpeg2000":{"source":"iana"},"video/jpm":{"source":"apache","extensions":["jpm","jpgm"]},"video/mj2":{"source":"iana","extensions":["mj2","mjp2"]},"video/mp1s":{"source":"iana"},"video/mp2p":{"source":"iana"},"video/mp2t":{"source":"iana","extensions":["ts"]},"video/mp4":{"source":"iana","compressible":false,"extensions":["mp4","mp4v","mpg4"]},"video/mp4v-es":{"source":"iana"},"video/mpeg":{"source":"iana","compressible":false,"extensions":["mpeg","mpg","mpe","m1v","m2v"]},"video/mpeg4-generic":{"source":"iana"},"video/mpv":{"source":"iana"},"video/nv":{"source":"iana"},"video/ogg":{"source":"iana","compressible":false,"extensions":["ogv"]},"video/parityfec":{"source":"iana"},"video/pointer":{"source":"iana"},"video/quicktime":{"source":"iana","compressible":false,"extensions":["qt","mov"]},"video/raptorfec":{"source":"iana"},"video/raw":{"source":"iana"},"video/rtp-enc-aescm128":{"source":"iana"},"video/rtploopback":{"source":"iana"},"video/rtx":{"source":"iana"},"video/smpte291":{"source":"iana"},"video/smpte292m":{"source":"iana"},"video/ulpfec":{"source":"iana"},"video/vc1":{"source":"iana"},"video/vc2":{"source":"iana"},"video/vnd.cctv":{"source":"iana"},"video/vnd.dece.hd":{"source":"iana","extensions":["uvh","uvvh"]},"video/vnd.dece.mobile":{"source":"iana","extensions":["uvm","uvvm"]},"video/vnd.dece.mp4":{"source":"iana"},"video/vnd.dece.pd":{"source":"iana","extensions":["uvp","uvvp"]},"video/vnd.dece.sd":{"source":"iana","extensions":["uvs","uvvs"]},"video/vnd.dece.video":{"source":"iana","extensions":["uvv","uvvv"]},"video/vnd.directv.mpeg":{"source":"iana"},"video/vnd.directv.mpeg-tts":{"source":"iana"},"video/vnd.dlna.mpeg-tts":{"source":"iana"},"video/vnd.dvb.file":{"source":"iana","extensions":["dvb"]},"video/vnd.fvt":{"source":"iana","extensions":["fvt"]},"video/vnd.hns.video":{"source":"iana"},"video/vnd.iptvforum.1dparityfec-1010":{"source":"iana"},"video/vnd.iptvforum.1dparityfec-2005":{"source":"iana"},"video/vnd.iptvforum.2dparityfec-1010":{"source":"iana"},"video/vnd.iptvforum.2dparityfec-2005":{"source":"iana"},"video/vnd.iptvforum.ttsavc":{"source":"iana"},"video/vnd.iptvforum.ttsmpeg2":{"source":"iana"},"video/vnd.motorola.video":{"source":"iana"},"video/vnd.motorola.videop":{"source":"iana"},"video/vnd.mpegurl":{"source":"iana","extensions":["mxu","m4u"]},"video/vnd.ms-playready.media.pyv":{"source":"iana","extensions":["pyv"]},"video/vnd.nokia.interleaved-multimedia":{"source":"iana"},"video/vnd.nokia.mp4vr":{"source":"iana"},"video/vnd.nokia.videovoip":{"source":"iana"},"video/vnd.objectvideo":{"source":"iana"},"video/vnd.radgamettools.bink":{"source":"iana"},"video/vnd.radgamettools.smacker":{"source":"iana"},"video/vnd.sealed.mpeg1":{"source":"iana"},"video/vnd.sealed.mpeg4":{"source":"iana"},"video/vnd.sealed.swf":{"source":"iana"},"video/vnd.sealedmedia.softseal.mov":{"source":"iana"},"video/vnd.uvvu.mp4":{"source":"iana","extensions":["uvu","uvvu"]},"video/vnd.vivo":{"source":"iana","extensions":["viv"]},"video/vnd.youtube.yt":{"source":"iana"},"video/vp8":{"source":"iana"},"video/webm":{"source":"apache","compressible":false,"extensions":["webm"]},"video/x-f4v":{"source":"apache","extensions":["f4v"]},"video/x-fli":{"source":"apache","extensions":["fli"]},"video/x-flv":{"source":"apache","compressible":false,"extensions":["flv"]},"video/x-m4v":{"source":"apache","extensions":["m4v"]},"video/x-matroska":{"source":"apache","compressible":false,"extensions":["mkv","mk3d","mks"]},"video/x-mng":{"source":"apache","extensions":["mng"]},"video/x-ms-asf":{"source":"apache","extensions":["asf","asx"]},"video/x-ms-vob":{"source":"apache","extensions":["vob"]},"video/x-ms-wm":{"source":"apache","extensions":["wm"]},"video/x-ms-wmv":{"source":"apache","compressible":false,"extensions":["wmv"]},"video/x-ms-wmx":{"source":"apache","extensions":["wmx"]},"video/x-ms-wvx":{"source":"apache","extensions":["wvx"]},"video/x-msvideo":{"source":"apache","extensions":["avi"]},"video/x-sgi-movie":{"source":"apache","extensions":["movie"]},"video/x-smv":{"source":"apache","extensions":["smv"]},"x-conference/x-cooltalk":{"source":"apache","extensions":["ice"]},"x-shader/x-fragment":{"compressible":true},"x-shader/x-vertex":{"compressible":true}};
+module.exports = {"application/1d-interleaved-parityfec":{"source":"iana"},"application/3gpdash-qoe-report+xml":{"source":"iana","charset":"UTF-8","compressible":true},"application/3gpp-ims+xml":{"source":"iana","compressible":true},"application/a2l":{"source":"iana"},"application/activemessage":{"source":"iana"},"application/activity+json":{"source":"iana","compressible":true},"application/alto-costmap+json":{"source":"iana","compressible":true},"application/alto-costmapfilter+json":{"source":"iana","compressible":true},"application/alto-directory+json":{"source":"iana","compressible":true},"application/alto-endpointcost+json":{"source":"iana","compressible":true},"application/alto-endpointcostparams+json":{"source":"iana","compressible":true},"application/alto-endpointprop+json":{"source":"iana","compressible":true},"application/alto-endpointpropparams+json":{"source":"iana","compressible":true},"application/alto-error+json":{"source":"iana","compressible":true},"application/alto-networkmap+json":{"source":"iana","compressible":true},"application/alto-networkmapfilter+json":{"source":"iana","compressible":true},"application/alto-updatestreamcontrol+json":{"source":"iana","compressible":true},"application/alto-updatestreamparams+json":{"source":"iana","compressible":true},"application/aml":{"source":"iana"},"application/andrew-inset":{"source":"iana","extensions":["ez"]},"application/applefile":{"source":"iana"},"application/applixware":{"source":"apache","extensions":["aw"]},"application/atf":{"source":"iana"},"application/atfx":{"source":"iana"},"application/atom+xml":{"source":"iana","compressible":true,"extensions":["atom"]},"application/atomcat+xml":{"source":"iana","compressible":true,"extensions":["atomcat"]},"application/atomdeleted+xml":{"source":"iana","compressible":true,"extensions":["atomdeleted"]},"application/atomicmail":{"source":"iana"},"application/atomsvc+xml":{"source":"iana","compressible":true,"extensions":["atomsvc"]},"application/atsc-dwd+xml":{"source":"iana","compressible":true,"extensions":["dwd"]},"application/atsc-dynamic-event-message":{"source":"iana"},"application/atsc-held+xml":{"source":"iana","compressible":true,"extensions":["held"]},"application/atsc-rdt+json":{"source":"iana","compressible":true},"application/atsc-rsat+xml":{"source":"iana","compressible":true,"extensions":["rsat"]},"application/atxml":{"source":"iana"},"application/auth-policy+xml":{"source":"iana","compressible":true},"application/bacnet-xdd+zip":{"source":"iana","compressible":false},"application/batch-smtp":{"source":"iana"},"application/bdoc":{"compressible":false,"extensions":["bdoc"]},"application/beep+xml":{"source":"iana","charset":"UTF-8","compressible":true},"application/calendar+json":{"source":"iana","compressible":true},"application/calendar+xml":{"source":"iana","compressible":true,"extensions":["xcs"]},"application/call-completion":{"source":"iana"},"application/cals-1840":{"source":"iana"},"application/captive+json":{"source":"iana","compressible":true},"application/cbor":{"source":"iana"},"application/cbor-seq":{"source":"iana"},"application/cccex":{"source":"iana"},"application/ccmp+xml":{"source":"iana","compressible":true},"application/ccxml+xml":{"source":"iana","compressible":true,"extensions":["ccxml"]},"application/cdfx+xml":{"source":"iana","compressible":true,"extensions":["cdfx"]},"application/cdmi-capability":{"source":"iana","extensions":["cdmia"]},"application/cdmi-container":{"source":"iana","extensions":["cdmic"]},"application/cdmi-domain":{"source":"iana","extensions":["cdmid"]},"application/cdmi-object":{"source":"iana","extensions":["cdmio"]},"application/cdmi-queue":{"source":"iana","extensions":["cdmiq"]},"application/cdni":{"source":"iana"},"application/cea":{"source":"iana"},"application/cea-2018+xml":{"source":"iana","compressible":true},"application/cellml+xml":{"source":"iana","compressible":true},"application/cfw":{"source":"iana"},"application/clue+xml":{"source":"iana","compressible":true},"application/clue_info+xml":{"source":"iana","compressible":true},"application/cms":{"source":"iana"},"application/cnrp+xml":{"source":"iana","compressible":true},"application/coap-group+json":{"source":"iana","compressible":true},"application/coap-payload":{"source":"iana"},"application/commonground":{"source":"iana"},"application/conference-info+xml":{"source":"iana","compressible":true},"application/cose":{"source":"iana"},"application/cose-key":{"source":"iana"},"application/cose-key-set":{"source":"iana"},"application/cpl+xml":{"source":"iana","compressible":true},"application/csrattrs":{"source":"iana"},"application/csta+xml":{"source":"iana","compressible":true},"application/cstadata+xml":{"source":"iana","compressible":true},"application/csvm+json":{"source":"iana","compressible":true},"application/cu-seeme":{"source":"apache","extensions":["cu"]},"application/cwt":{"source":"iana"},"application/cybercash":{"source":"iana"},"application/dart":{"compressible":true},"application/dash+xml":{"source":"iana","compressible":true,"extensions":["mpd"]},"application/dashdelta":{"source":"iana"},"application/davmount+xml":{"source":"iana","compressible":true,"extensions":["davmount"]},"application/dca-rft":{"source":"iana"},"application/dcd":{"source":"iana"},"application/dec-dx":{"source":"iana"},"application/dialog-info+xml":{"source":"iana","compressible":true},"application/dicom":{"source":"iana"},"application/dicom+json":{"source":"iana","compressible":true},"application/dicom+xml":{"source":"iana","compressible":true},"application/dii":{"source":"iana"},"application/dit":{"source":"iana"},"application/dns":{"source":"iana"},"application/dns+json":{"source":"iana","compressible":true},"application/dns-message":{"source":"iana"},"application/docbook+xml":{"source":"apache","compressible":true,"extensions":["dbk"]},"application/dots+cbor":{"source":"iana"},"application/dskpp+xml":{"source":"iana","compressible":true},"application/dssc+der":{"source":"iana","extensions":["dssc"]},"application/dssc+xml":{"source":"iana","compressible":true,"extensions":["xdssc"]},"application/dvcs":{"source":"iana"},"application/ecmascript":{"source":"iana","compressible":true,"extensions":["ecma","es"]},"application/edi-consent":{"source":"iana"},"application/edi-x12":{"source":"iana","compressible":false},"application/edifact":{"source":"iana","compressible":false},"application/efi":{"source":"iana"},"application/emergencycalldata.cap+xml":{"source":"iana","charset":"UTF-8","compressible":true},"application/emergencycalldata.comment+xml":{"source":"iana","compressible":true},"application/emergencycalldata.control+xml":{"source":"iana","compressible":true},"application/emergencycalldata.deviceinfo+xml":{"source":"iana","compressible":true},"application/emergencycalldata.ecall.msd":{"source":"iana"},"application/emergencycalldata.providerinfo+xml":{"source":"iana","compressible":true},"application/emergencycalldata.serviceinfo+xml":{"source":"iana","compressible":true},"application/emergencycalldata.subscriberinfo+xml":{"source":"iana","compressible":true},"application/emergencycalldata.veds+xml":{"source":"iana","compressible":true},"application/emma+xml":{"source":"iana","compressible":true,"extensions":["emma"]},"application/emotionml+xml":{"source":"iana","compressible":true,"extensions":["emotionml"]},"application/encaprtp":{"source":"iana"},"application/epp+xml":{"source":"iana","compressible":true},"application/epub+zip":{"source":"iana","compressible":false,"extensions":["epub"]},"application/eshop":{"source":"iana"},"application/exi":{"source":"iana","extensions":["exi"]},"application/expect-ct-report+json":{"source":"iana","compressible":true},"application/fastinfoset":{"source":"iana"},"application/fastsoap":{"source":"iana"},"application/fdt+xml":{"source":"iana","compressible":true,"extensions":["fdt"]},"application/fhir+json":{"source":"iana","charset":"UTF-8","compressible":true},"application/fhir+xml":{"source":"iana","charset":"UTF-8","compressible":true},"application/fido.trusted-apps+json":{"compressible":true},"application/fits":{"source":"iana"},"application/flexfec":{"source":"iana"},"application/font-sfnt":{"source":"iana"},"application/font-tdpfr":{"source":"iana","extensions":["pfr"]},"application/font-woff":{"source":"iana","compressible":false},"application/framework-attributes+xml":{"source":"iana","compressible":true},"application/geo+json":{"source":"iana","compressible":true,"extensions":["geojson"]},"application/geo+json-seq":{"source":"iana"},"application/geopackage+sqlite3":{"source":"iana"},"application/geoxacml+xml":{"source":"iana","compressible":true},"application/gltf-buffer":{"source":"iana"},"application/gml+xml":{"source":"iana","compressible":true,"extensions":["gml"]},"application/gpx+xml":{"source":"apache","compressible":true,"extensions":["gpx"]},"application/gxf":{"source":"apache","extensions":["gxf"]},"application/gzip":{"source":"iana","compressible":false,"extensions":["gz"]},"application/h224":{"source":"iana"},"application/held+xml":{"source":"iana","compressible":true},"application/hjson":{"extensions":["hjson"]},"application/http":{"source":"iana"},"application/hyperstudio":{"source":"iana","extensions":["stk"]},"application/ibe-key-request+xml":{"source":"iana","compressible":true},"application/ibe-pkg-reply+xml":{"source":"iana","compressible":true},"application/ibe-pp-data":{"source":"iana"},"application/iges":{"source":"iana"},"application/im-iscomposing+xml":{"source":"iana","charset":"UTF-8","compressible":true},"application/index":{"source":"iana"},"application/index.cmd":{"source":"iana"},"application/index.obj":{"source":"iana"},"application/index.response":{"source":"iana"},"application/index.vnd":{"source":"iana"},"application/inkml+xml":{"source":"iana","compressible":true,"extensions":["ink","inkml"]},"application/iotp":{"source":"iana"},"application/ipfix":{"source":"iana","extensions":["ipfix"]},"application/ipp":{"source":"iana"},"application/isup":{"source":"iana"},"application/its+xml":{"source":"iana","compressible":true,"extensions":["its"]},"application/java-archive":{"source":"apache","compressible":false,"extensions":["jar","war","ear"]},"application/java-serialized-object":{"source":"apache","compressible":false,"extensions":["ser"]},"application/java-vm":{"source":"apache","compressible":false,"extensions":["class"]},"application/javascript":{"source":"iana","charset":"UTF-8","compressible":true,"extensions":["js","mjs"]},"application/jf2feed+json":{"source":"iana","compressible":true},"application/jose":{"source":"iana"},"application/jose+json":{"source":"iana","compressible":true},"application/jrd+json":{"source":"iana","compressible":true},"application/json":{"source":"iana","charset":"UTF-8","compressible":true,"extensions":["json","map"]},"application/json-patch+json":{"source":"iana","compressible":true},"application/json-seq":{"source":"iana"},"application/json5":{"extensions":["json5"]},"application/jsonml+json":{"source":"apache","compressible":true,"extensions":["jsonml"]},"application/jwk+json":{"source":"iana","compressible":true},"application/jwk-set+json":{"source":"iana","compressible":true},"application/jwt":{"source":"iana"},"application/kpml-request+xml":{"source":"iana","compressible":true},"application/kpml-response+xml":{"source":"iana","compressible":true},"application/ld+json":{"source":"iana","compressible":true,"extensions":["jsonld"]},"application/lgr+xml":{"source":"iana","compressible":true,"extensions":["lgr"]},"application/link-format":{"source":"iana"},"application/load-control+xml":{"source":"iana","compressible":true},"application/lost+xml":{"source":"iana","compressible":true,"extensions":["lostxml"]},"application/lostsync+xml":{"source":"iana","compressible":true},"application/lpf+zip":{"source":"iana","compressible":false},"application/lxf":{"source":"iana"},"application/mac-binhex40":{"source":"iana","extensions":["hqx"]},"application/mac-compactpro":{"source":"apache","extensions":["cpt"]},"application/macwriteii":{"source":"iana"},"application/mads+xml":{"source":"iana","compressible":true,"extensions":["mads"]},"application/manifest+json":{"charset":"UTF-8","compressible":true,"extensions":["webmanifest"]},"application/marc":{"source":"iana","extensions":["mrc"]},"application/marcxml+xml":{"source":"iana","compressible":true,"extensions":["mrcx"]},"application/mathematica":{"source":"iana","extensions":["ma","nb","mb"]},"application/mathml+xml":{"source":"iana","compressible":true,"extensions":["mathml"]},"application/mathml-content+xml":{"source":"iana","compressible":true},"application/mathml-presentation+xml":{"source":"iana","compressible":true},"application/mbms-associated-procedure-description+xml":{"source":"iana","compressible":true},"application/mbms-deregister+xml":{"source":"iana","compressible":true},"application/mbms-envelope+xml":{"source":"iana","compressible":true},"application/mbms-msk+xml":{"source":"iana","compressible":true},"application/mbms-msk-response+xml":{"source":"iana","compressible":true},"application/mbms-protection-description+xml":{"source":"iana","compressible":true},"application/mbms-reception-report+xml":{"source":"iana","compressible":true},"application/mbms-register+xml":{"source":"iana","compressible":true},"application/mbms-register-response+xml":{"source":"iana","compressible":true},"application/mbms-schedule+xml":{"source":"iana","compressible":true},"application/mbms-user-service-description+xml":{"source":"iana","compressible":true},"application/mbox":{"source":"iana","extensions":["mbox"]},"application/media-policy-dataset+xml":{"source":"iana","compressible":true},"application/media_control+xml":{"source":"iana","compressible":true},"application/mediaservercontrol+xml":{"source":"iana","compressible":true,"extensions":["mscml"]},"application/merge-patch+json":{"source":"iana","compressible":true},"application/metalink+xml":{"source":"apache","compressible":true,"extensions":["metalink"]},"application/metalink4+xml":{"source":"iana","compressible":true,"extensions":["meta4"]},"application/mets+xml":{"source":"iana","compressible":true,"extensions":["mets"]},"application/mf4":{"source":"iana"},"application/mikey":{"source":"iana"},"application/mipc":{"source":"iana"},"application/mmt-aei+xml":{"source":"iana","compressible":true,"extensions":["maei"]},"application/mmt-usd+xml":{"source":"iana","compressible":true,"extensions":["musd"]},"application/mods+xml":{"source":"iana","compressible":true,"extensions":["mods"]},"application/moss-keys":{"source":"iana"},"application/moss-signature":{"source":"iana"},"application/mosskey-data":{"source":"iana"},"application/mosskey-request":{"source":"iana"},"application/mp21":{"source":"iana","extensions":["m21","mp21"]},"application/mp4":{"source":"iana","extensions":["mp4s","m4p"]},"application/mpeg4-generic":{"source":"iana"},"application/mpeg4-iod":{"source":"iana"},"application/mpeg4-iod-xmt":{"source":"iana"},"application/mrb-consumer+xml":{"source":"iana","compressible":true,"extensions":["xdf"]},"application/mrb-publish+xml":{"source":"iana","compressible":true,"extensions":["xdf"]},"application/msc-ivr+xml":{"source":"iana","charset":"UTF-8","compressible":true},"application/msc-mixer+xml":{"source":"iana","charset":"UTF-8","compressible":true},"application/msword":{"source":"iana","compressible":false,"extensions":["doc","dot"]},"application/mud+json":{"source":"iana","compressible":true},"application/multipart-core":{"source":"iana"},"application/mxf":{"source":"iana","extensions":["mxf"]},"application/n-quads":{"source":"iana","extensions":["nq"]},"application/n-triples":{"source":"iana","extensions":["nt"]},"application/nasdata":{"source":"iana"},"application/news-checkgroups":{"source":"iana","charset":"US-ASCII"},"application/news-groupinfo":{"source":"iana","charset":"US-ASCII"},"application/news-transmission":{"source":"iana"},"application/nlsml+xml":{"source":"iana","compressible":true},"application/node":{"source":"iana","extensions":["cjs"]},"application/nss":{"source":"iana"},"application/ocsp-request":{"source":"iana"},"application/ocsp-response":{"source":"iana"},"application/octet-stream":{"source":"iana","compressible":false,"extensions":["bin","dms","lrf","mar","so","dist","distz","pkg","bpk","dump","elc","deploy","exe","dll","deb","dmg","iso","img","msi","msp","msm","buffer"]},"application/oda":{"source":"iana","extensions":["oda"]},"application/odm+xml":{"source":"iana","compressible":true},"application/odx":{"source":"iana"},"application/oebps-package+xml":{"source":"iana","compressible":true,"extensions":["opf"]},"application/ogg":{"source":"iana","compressible":false,"extensions":["ogx"]},"application/omdoc+xml":{"source":"apache","compressible":true,"extensions":["omdoc"]},"application/onenote":{"source":"apache","extensions":["onetoc","onetoc2","onetmp","onepkg"]},"application/opc-nodeset+xml":{"source":"iana","compressible":true},"application/oscore":{"source":"iana"},"application/oxps":{"source":"iana","extensions":["oxps"]},"application/p2p-overlay+xml":{"source":"iana","compressible":true,"extensions":["relo"]},"application/parityfec":{"source":"iana"},"application/passport":{"source":"iana"},"application/patch-ops-error+xml":{"source":"iana","compressible":true,"extensions":["xer"]},"application/pdf":{"source":"iana","compressible":false,"extensions":["pdf"]},"application/pdx":{"source":"iana"},"application/pem-certificate-chain":{"source":"iana"},"application/pgp-encrypted":{"source":"iana","compressible":false,"extensions":["pgp"]},"application/pgp-keys":{"source":"iana"},"application/pgp-signature":{"source":"iana","extensions":["asc","sig"]},"application/pics-rules":{"source":"apache","extensions":["prf"]},"application/pidf+xml":{"source":"iana","charset":"UTF-8","compressible":true},"application/pidf-diff+xml":{"source":"iana","charset":"UTF-8","compressible":true},"application/pkcs10":{"source":"iana","extensions":["p10"]},"application/pkcs12":{"source":"iana"},"application/pkcs7-mime":{"source":"iana","extensions":["p7m","p7c"]},"application/pkcs7-signature":{"source":"iana","extensions":["p7s"]},"application/pkcs8":{"source":"iana","extensions":["p8"]},"application/pkcs8-encrypted":{"source":"iana"},"application/pkix-attr-cert":{"source":"iana","extensions":["ac"]},"application/pkix-cert":{"source":"iana","extensions":["cer"]},"application/pkix-crl":{"source":"iana","extensions":["crl"]},"application/pkix-pkipath":{"source":"iana","extensions":["pkipath"]},"application/pkixcmp":{"source":"iana","extensions":["pki"]},"application/pls+xml":{"source":"iana","compressible":true,"extensions":["pls"]},"application/poc-settings+xml":{"source":"iana","charset":"UTF-8","compressible":true},"application/postscript":{"source":"iana","compressible":true,"extensions":["ai","eps","ps"]},"application/ppsp-tracker+json":{"source":"iana","compressible":true},"application/problem+json":{"source":"iana","compressible":true},"application/problem+xml":{"source":"iana","compressible":true},"application/provenance+xml":{"source":"iana","compressible":true,"extensions":["provx"]},"application/prs.alvestrand.titrax-sheet":{"source":"iana"},"application/prs.cww":{"source":"iana","extensions":["cww"]},"application/prs.hpub+zip":{"source":"iana","compressible":false},"application/prs.nprend":{"source":"iana"},"application/prs.plucker":{"source":"iana"},"application/prs.rdf-xml-crypt":{"source":"iana"},"application/prs.xsf+xml":{"source":"iana","compressible":true},"application/pskc+xml":{"source":"iana","compressible":true,"extensions":["pskcxml"]},"application/pvd+json":{"source":"iana","compressible":true},"application/qsig":{"source":"iana"},"application/raml+yaml":{"compressible":true,"extensions":["raml"]},"application/raptorfec":{"source":"iana"},"application/rdap+json":{"source":"iana","compressible":true},"application/rdf+xml":{"source":"iana","compressible":true,"extensions":["rdf","owl"]},"application/reginfo+xml":{"source":"iana","compressible":true,"extensions":["rif"]},"application/relax-ng-compact-syntax":{"source":"iana","extensions":["rnc"]},"application/remote-printing":{"source":"iana"},"application/reputon+json":{"source":"iana","compressible":true},"application/resource-lists+xml":{"source":"iana","compressible":true,"extensions":["rl"]},"application/resource-lists-diff+xml":{"source":"iana","compressible":true,"extensions":["rld"]},"application/rfc+xml":{"source":"iana","compressible":true},"application/riscos":{"source":"iana"},"application/rlmi+xml":{"source":"iana","compressible":true},"application/rls-services+xml":{"source":"iana","compressible":true,"extensions":["rs"]},"application/route-apd+xml":{"source":"iana","compressible":true,"extensions":["rapd"]},"application/route-s-tsid+xml":{"source":"iana","compressible":true,"extensions":["sls"]},"application/route-usd+xml":{"source":"iana","compressible":true,"extensions":["rusd"]},"application/rpki-ghostbusters":{"source":"iana","extensions":["gbr"]},"application/rpki-manifest":{"source":"iana","extensions":["mft"]},"application/rpki-publication":{"source":"iana"},"application/rpki-roa":{"source":"iana","extensions":["roa"]},"application/rpki-updown":{"source":"iana"},"application/rsd+xml":{"source":"apache","compressible":true,"extensions":["rsd"]},"application/rss+xml":{"source":"apache","compressible":true,"extensions":["rss"]},"application/rtf":{"source":"iana","compressible":true,"extensions":["rtf"]},"application/rtploopback":{"source":"iana"},"application/rtx":{"source":"iana"},"application/samlassertion+xml":{"source":"iana","compressible":true},"application/samlmetadata+xml":{"source":"iana","compressible":true},"application/sarif+json":{"source":"iana","compressible":true},"application/sbe":{"source":"iana"},"application/sbml+xml":{"source":"iana","compressible":true,"extensions":["sbml"]},"application/scaip+xml":{"source":"iana","compressible":true},"application/scim+json":{"source":"iana","compressible":true},"application/scvp-cv-request":{"source":"iana","extensions":["scq"]},"application/scvp-cv-response":{"source":"iana","extensions":["scs"]},"application/scvp-vp-request":{"source":"iana","extensions":["spq"]},"application/scvp-vp-response":{"source":"iana","extensions":["spp"]},"application/sdp":{"source":"iana","extensions":["sdp"]},"application/secevent+jwt":{"source":"iana"},"application/senml+cbor":{"source":"iana"},"application/senml+json":{"source":"iana","compressible":true},"application/senml+xml":{"source":"iana","compressible":true,"extensions":["senmlx"]},"application/senml-etch+cbor":{"source":"iana"},"application/senml-etch+json":{"source":"iana","compressible":true},"application/senml-exi":{"source":"iana"},"application/sensml+cbor":{"source":"iana"},"application/sensml+json":{"source":"iana","compressible":true},"application/sensml+xml":{"source":"iana","compressible":true,"extensions":["sensmlx"]},"application/sensml-exi":{"source":"iana"},"application/sep+xml":{"source":"iana","compressible":true},"application/sep-exi":{"source":"iana"},"application/session-info":{"source":"iana"},"application/set-payment":{"source":"iana"},"application/set-payment-initiation":{"source":"iana","extensions":["setpay"]},"application/set-registration":{"source":"iana"},"application/set-registration-initiation":{"source":"iana","extensions":["setreg"]},"application/sgml":{"source":"iana"},"application/sgml-open-catalog":{"source":"iana"},"application/shf+xml":{"source":"iana","compressible":true,"extensions":["shf"]},"application/sieve":{"source":"iana","extensions":["siv","sieve"]},"application/simple-filter+xml":{"source":"iana","compressible":true},"application/simple-message-summary":{"source":"iana"},"application/simplesymbolcontainer":{"source":"iana"},"application/sipc":{"source":"iana"},"application/slate":{"source":"iana"},"application/smil":{"source":"iana"},"application/smil+xml":{"source":"iana","compressible":true,"extensions":["smi","smil"]},"application/smpte336m":{"source":"iana"},"application/soap+fastinfoset":{"source":"iana"},"application/soap+xml":{"source":"iana","compressible":true},"application/sparql-query":{"source":"iana","extensions":["rq"]},"application/sparql-results+xml":{"source":"iana","compressible":true,"extensions":["srx"]},"application/spirits-event+xml":{"source":"iana","compressible":true},"application/sql":{"source":"iana"},"application/srgs":{"source":"iana","extensions":["gram"]},"application/srgs+xml":{"source":"iana","compressible":true,"extensions":["grxml"]},"application/sru+xml":{"source":"iana","compressible":true,"extensions":["sru"]},"application/ssdl+xml":{"source":"apache","compressible":true,"extensions":["ssdl"]},"application/ssml+xml":{"source":"iana","compressible":true,"extensions":["ssml"]},"application/stix+json":{"source":"iana","compressible":true},"application/swid+xml":{"source":"iana","compressible":true,"extensions":["swidtag"]},"application/tamp-apex-update":{"source":"iana"},"application/tamp-apex-update-confirm":{"source":"iana"},"application/tamp-community-update":{"source":"iana"},"application/tamp-community-update-confirm":{"source":"iana"},"application/tamp-error":{"source":"iana"},"application/tamp-sequence-adjust":{"source":"iana"},"application/tamp-sequence-adjust-confirm":{"source":"iana"},"application/tamp-status-query":{"source":"iana"},"application/tamp-status-response":{"source":"iana"},"application/tamp-update":{"source":"iana"},"application/tamp-update-confirm":{"source":"iana"},"application/tar":{"compressible":true},"application/taxii+json":{"source":"iana","compressible":true},"application/td+json":{"source":"iana","compressible":true},"application/tei+xml":{"source":"iana","compressible":true,"extensions":["tei","teicorpus"]},"application/tetra_isi":{"source":"iana"},"application/thraud+xml":{"source":"iana","compressible":true,"extensions":["tfi"]},"application/timestamp-query":{"source":"iana"},"application/timestamp-reply":{"source":"iana"},"application/timestamped-data":{"source":"iana","extensions":["tsd"]},"application/tlsrpt+gzip":{"source":"iana"},"application/tlsrpt+json":{"source":"iana","compressible":true},"application/tnauthlist":{"source":"iana"},"application/toml":{"compressible":true,"extensions":["toml"]},"application/trickle-ice-sdpfrag":{"source":"iana"},"application/trig":{"source":"iana"},"application/ttml+xml":{"source":"iana","compressible":true,"extensions":["ttml"]},"application/tve-trigger":{"source":"iana"},"application/tzif":{"source":"iana"},"application/tzif-leap":{"source":"iana"},"application/ubjson":{"compressible":false,"extensions":["ubj"]},"application/ulpfec":{"source":"iana"},"application/urc-grpsheet+xml":{"source":"iana","compressible":true},"application/urc-ressheet+xml":{"source":"iana","compressible":true,"extensions":["rsheet"]},"application/urc-targetdesc+xml":{"source":"iana","compressible":true,"extensions":["td"]},"application/urc-uisocketdesc+xml":{"source":"iana","compressible":true},"application/vcard+json":{"source":"iana","compressible":true},"application/vcard+xml":{"source":"iana","compressible":true},"application/vemmi":{"source":"iana"},"application/vividence.scriptfile":{"source":"apache"},"application/vnd.1000minds.decision-model+xml":{"source":"iana","compressible":true,"extensions":["1km"]},"application/vnd.3gpp-prose+xml":{"source":"iana","compressible":true},"application/vnd.3gpp-prose-pc3ch+xml":{"source":"iana","compressible":true},"application/vnd.3gpp-v2x-local-service-information":{"source":"iana"},"application/vnd.3gpp.access-transfer-events+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.bsf+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.gmop+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mc-signalling-ear":{"source":"iana"},"application/vnd.3gpp.mcdata-affiliation-command+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcdata-info+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcdata-payload":{"source":"iana"},"application/vnd.3gpp.mcdata-service-config+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcdata-signalling":{"source":"iana"},"application/vnd.3gpp.mcdata-ue-config+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcdata-user-profile+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcptt-affiliation-command+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcptt-floor-request+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcptt-info+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcptt-location-info+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcptt-mbms-usage-info+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcptt-service-config+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcptt-signed+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcptt-ue-config+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcptt-ue-init-config+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcptt-user-profile+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcvideo-affiliation-command+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcvideo-affiliation-info+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcvideo-info+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcvideo-location-info+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcvideo-mbms-usage-info+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcvideo-service-config+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcvideo-transmission-request+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcvideo-ue-config+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mcvideo-user-profile+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.mid-call+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.pic-bw-large":{"source":"iana","extensions":["plb"]},"application/vnd.3gpp.pic-bw-small":{"source":"iana","extensions":["psb"]},"application/vnd.3gpp.pic-bw-var":{"source":"iana","extensions":["pvb"]},"application/vnd.3gpp.sms":{"source":"iana"},"application/vnd.3gpp.sms+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.srvcc-ext+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.srvcc-info+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.state-and-event-info+xml":{"source":"iana","compressible":true},"application/vnd.3gpp.ussd+xml":{"source":"iana","compressible":true},"application/vnd.3gpp2.bcmcsinfo+xml":{"source":"iana","compressible":true},"application/vnd.3gpp2.sms":{"source":"iana"},"application/vnd.3gpp2.tcap":{"source":"iana","extensions":["tcap"]},"application/vnd.3lightssoftware.imagescal":{"source":"iana"},"application/vnd.3m.post-it-notes":{"source":"iana","extensions":["pwn"]},"application/vnd.accpac.simply.aso":{"source":"iana","extensions":["aso"]},"application/vnd.accpac.simply.imp":{"source":"iana","extensions":["imp"]},"application/vnd.acucobol":{"source":"iana","extensions":["acu"]},"application/vnd.acucorp":{"source":"iana","extensions":["atc","acutc"]},"application/vnd.adobe.air-application-installer-package+zip":{"source":"apache","compressible":false,"extensions":["air"]},"application/vnd.adobe.flash.movie":{"source":"iana"},"application/vnd.adobe.formscentral.fcdt":{"source":"iana","extensions":["fcdt"]},"application/vnd.adobe.fxp":{"source":"iana","extensions":["fxp","fxpl"]},"application/vnd.adobe.partial-upload":{"source":"iana"},"application/vnd.adobe.xdp+xml":{"source":"iana","compressible":true,"extensions":["xdp"]},"application/vnd.adobe.xfdf":{"source":"iana","extensions":["xfdf"]},"application/vnd.aether.imp":{"source":"iana"},"application/vnd.afpc.afplinedata":{"source":"iana"},"application/vnd.afpc.afplinedata-pagedef":{"source":"iana"},"application/vnd.afpc.foca-charset":{"source":"iana"},"application/vnd.afpc.foca-codedfont":{"source":"iana"},"application/vnd.afpc.foca-codepage":{"source":"iana"},"application/vnd.afpc.modca":{"source":"iana"},"application/vnd.afpc.modca-formdef":{"source":"iana"},"application/vnd.afpc.modca-mediummap":{"source":"iana"},"application/vnd.afpc.modca-objectcontainer":{"source":"iana"},"application/vnd.afpc.modca-overlay":{"source":"iana"},"application/vnd.afpc.modca-pagesegment":{"source":"iana"},"application/vnd.ah-barcode":{"source":"iana"},"application/vnd.ahead.space":{"source":"iana","extensions":["ahead"]},"application/vnd.airzip.filesecure.azf":{"source":"iana","extensions":["azf"]},"application/vnd.airzip.filesecure.azs":{"source":"iana","extensions":["azs"]},"application/vnd.amadeus+json":{"source":"iana","compressible":true},"application/vnd.amazon.ebook":{"source":"apache","extensions":["azw"]},"application/vnd.amazon.mobi8-ebook":{"source":"iana"},"application/vnd.americandynamics.acc":{"source":"iana","extensions":["acc"]},"application/vnd.amiga.ami":{"source":"iana","extensions":["ami"]},"application/vnd.amundsen.maze+xml":{"source":"iana","compressible":true},"application/vnd.android.ota":{"source":"iana"},"application/vnd.android.package-archive":{"source":"apache","compressible":false,"extensions":["apk"]},"application/vnd.anki":{"source":"iana"},"application/vnd.anser-web-certificate-issue-initiation":{"source":"iana","extensions":["cii"]},"application/vnd.anser-web-funds-transfer-initiation":{"source":"apache","extensions":["fti"]},"application/vnd.antix.game-component":{"source":"iana","extensions":["atx"]},"application/vnd.apache.thrift.binary":{"source":"iana"},"application/vnd.apache.thrift.compact":{"source":"iana"},"application/vnd.apache.thrift.json":{"source":"iana"},"application/vnd.api+json":{"source":"iana","compressible":true},"application/vnd.aplextor.warrp+json":{"source":"iana","compressible":true},"application/vnd.apothekende.reservation+json":{"source":"iana","compressible":true},"application/vnd.apple.installer+xml":{"source":"iana","compressible":true,"extensions":["mpkg"]},"application/vnd.apple.keynote":{"source":"iana","extensions":["key"]},"application/vnd.apple.mpegurl":{"source":"iana","extensions":["m3u8"]},"application/vnd.apple.numbers":{"source":"iana","extensions":["numbers"]},"application/vnd.apple.pages":{"source":"iana","extensions":["pages"]},"application/vnd.apple.pkpass":{"compressible":false,"extensions":["pkpass"]},"application/vnd.arastra.swi":{"source":"iana"},"application/vnd.aristanetworks.swi":{"source":"iana","extensions":["swi"]},"application/vnd.artisan+json":{"source":"iana","compressible":true},"application/vnd.artsquare":{"source":"iana"},"application/vnd.astraea-software.iota":{"source":"iana","extensions":["iota"]},"application/vnd.audiograph":{"source":"iana","extensions":["aep"]},"application/vnd.autopackage":{"source":"iana"},"application/vnd.avalon+json":{"source":"iana","compressible":true},"application/vnd.avistar+xml":{"source":"iana","compressible":true},"application/vnd.balsamiq.bmml+xml":{"source":"iana","compressible":true,"extensions":["bmml"]},"application/vnd.balsamiq.bmpr":{"source":"iana"},"application/vnd.banana-accounting":{"source":"iana"},"application/vnd.bbf.usp.error":{"source":"iana"},"application/vnd.bbf.usp.msg":{"source":"iana"},"application/vnd.bbf.usp.msg+json":{"source":"iana","compressible":true},"application/vnd.bekitzur-stech+json":{"source":"iana","compressible":true},"application/vnd.bint.med-content":{"source":"iana"},"application/vnd.biopax.rdf+xml":{"source":"iana","compressible":true},"application/vnd.blink-idb-value-wrapper":{"source":"iana"},"application/vnd.blueice.multipass":{"source":"iana","extensions":["mpm"]},"application/vnd.bluetooth.ep.oob":{"source":"iana"},"application/vnd.bluetooth.le.oob":{"source":"iana"},"application/vnd.bmi":{"source":"iana","extensions":["bmi"]},"application/vnd.bpf":{"source":"iana"},"application/vnd.bpf3":{"source":"iana"},"application/vnd.businessobjects":{"source":"iana","extensions":["rep"]},"application/vnd.byu.uapi+json":{"source":"iana","compressible":true},"application/vnd.cab-jscript":{"source":"iana"},"application/vnd.canon-cpdl":{"source":"iana"},"application/vnd.canon-lips":{"source":"iana"},"application/vnd.capasystems-pg+json":{"source":"iana","compressible":true},"application/vnd.cendio.thinlinc.clientconf":{"source":"iana"},"application/vnd.century-systems.tcp_stream":{"source":"iana"},"application/vnd.chemdraw+xml":{"source":"iana","compressible":true,"extensions":["cdxml"]},"application/vnd.chess-pgn":{"source":"iana"},"application/vnd.chipnuts.karaoke-mmd":{"source":"iana","extensions":["mmd"]},"application/vnd.ciedi":{"source":"iana"},"application/vnd.cinderella":{"source":"iana","extensions":["cdy"]},"application/vnd.cirpack.isdn-ext":{"source":"iana"},"application/vnd.citationstyles.style+xml":{"source":"iana","compressible":true,"extensions":["csl"]},"application/vnd.claymore":{"source":"iana","extensions":["cla"]},"application/vnd.cloanto.rp9":{"source":"iana","extensions":["rp9"]},"application/vnd.clonk.c4group":{"source":"iana","extensions":["c4g","c4d","c4f","c4p","c4u"]},"application/vnd.cluetrust.cartomobile-config":{"source":"iana","extensions":["c11amc"]},"application/vnd.cluetrust.cartomobile-config-pkg":{"source":"iana","extensions":["c11amz"]},"application/vnd.coffeescript":{"source":"iana"},"application/vnd.collabio.xodocuments.document":{"source":"iana"},"application/vnd.collabio.xodocuments.document-template":{"source":"iana"},"application/vnd.collabio.xodocuments.presentation":{"source":"iana"},"application/vnd.collabio.xodocuments.presentation-template":{"source":"iana"},"application/vnd.collabio.xodocuments.spreadsheet":{"source":"iana"},"application/vnd.collabio.xodocuments.spreadsheet-template":{"source":"iana"},"application/vnd.collection+json":{"source":"iana","compressible":true},"application/vnd.collection.doc+json":{"source":"iana","compressible":true},"application/vnd.collection.next+json":{"source":"iana","compressible":true},"application/vnd.comicbook+zip":{"source":"iana","compressible":false},"application/vnd.comicbook-rar":{"source":"iana"},"application/vnd.commerce-battelle":{"source":"iana"},"application/vnd.commonspace":{"source":"iana","extensions":["csp"]},"application/vnd.contact.cmsg":{"source":"iana","extensions":["cdbcmsg"]},"application/vnd.coreos.ignition+json":{"source":"iana","compressible":true},"application/vnd.cosmocaller":{"source":"iana","extensions":["cmc"]},"application/vnd.crick.clicker":{"source":"iana","extensions":["clkx"]},"application/vnd.crick.clicker.keyboard":{"source":"iana","extensions":["clkk"]},"application/vnd.crick.clicker.palette":{"source":"iana","extensions":["clkp"]},"application/vnd.crick.clicker.template":{"source":"iana","extensions":["clkt"]},"application/vnd.crick.clicker.wordbank":{"source":"iana","extensions":["clkw"]},"application/vnd.criticaltools.wbs+xml":{"source":"iana","compressible":true,"extensions":["wbs"]},"application/vnd.cryptii.pipe+json":{"source":"iana","compressible":true},"application/vnd.crypto-shade-file":{"source":"iana"},"application/vnd.ctc-posml":{"source":"iana","extensions":["pml"]},"application/vnd.ctct.ws+xml":{"source":"iana","compressible":true},"application/vnd.cups-pdf":{"source":"iana"},"application/vnd.cups-postscript":{"source":"iana"},"application/vnd.cups-ppd":{"source":"iana","extensions":["ppd"]},"application/vnd.cups-raster":{"source":"iana"},"application/vnd.cups-raw":{"source":"iana"},"application/vnd.curl":{"source":"iana"},"application/vnd.curl.car":{"source":"apache","extensions":["car"]},"application/vnd.curl.pcurl":{"source":"apache","extensions":["pcurl"]},"application/vnd.cyan.dean.root+xml":{"source":"iana","compressible":true},"application/vnd.cybank":{"source":"iana"},"application/vnd.d2l.coursepackage1p0+zip":{"source":"iana","compressible":false},"application/vnd.d3m-dataset":{"source":"iana"},"application/vnd.d3m-problem":{"source":"iana"},"application/vnd.dart":{"source":"iana","compressible":true,"extensions":["dart"]},"application/vnd.data-vision.rdz":{"source":"iana","extensions":["rdz"]},"application/vnd.datapackage+json":{"source":"iana","compressible":true},"application/vnd.dataresource+json":{"source":"iana","compressible":true},"application/vnd.dbf":{"source":"iana","extensions":["dbf"]},"application/vnd.debian.binary-package":{"source":"iana"},"application/vnd.dece.data":{"source":"iana","extensions":["uvf","uvvf","uvd","uvvd"]},"application/vnd.dece.ttml+xml":{"source":"iana","compressible":true,"extensions":["uvt","uvvt"]},"application/vnd.dece.unspecified":{"source":"iana","extensions":["uvx","uvvx"]},"application/vnd.dece.zip":{"source":"iana","extensions":["uvz","uvvz"]},"application/vnd.denovo.fcselayout-link":{"source":"iana","extensions":["fe_launch"]},"application/vnd.desmume.movie":{"source":"iana"},"application/vnd.dir-bi.plate-dl-nosuffix":{"source":"iana"},"application/vnd.dm.delegation+xml":{"source":"iana","compressible":true},"application/vnd.dna":{"source":"iana","extensions":["dna"]},"application/vnd.document+json":{"source":"iana","compressible":true},"application/vnd.dolby.mlp":{"source":"apache","extensions":["mlp"]},"application/vnd.dolby.mobile.1":{"source":"iana"},"application/vnd.dolby.mobile.2":{"source":"iana"},"application/vnd.doremir.scorecloud-binary-document":{"source":"iana"},"application/vnd.dpgraph":{"source":"iana","extensions":["dpg"]},"application/vnd.dreamfactory":{"source":"iana","extensions":["dfac"]},"application/vnd.drive+json":{"source":"iana","compressible":true},"application/vnd.ds-keypoint":{"source":"apache","extensions":["kpxx"]},"application/vnd.dtg.local":{"source":"iana"},"application/vnd.dtg.local.flash":{"source":"iana"},"application/vnd.dtg.local.html":{"source":"iana"},"application/vnd.dvb.ait":{"source":"iana","extensions":["ait"]},"application/vnd.dvb.dvbisl+xml":{"source":"iana","compressible":true},"application/vnd.dvb.dvbj":{"source":"iana"},"application/vnd.dvb.esgcontainer":{"source":"iana"},"application/vnd.dvb.ipdcdftnotifaccess":{"source":"iana"},"application/vnd.dvb.ipdcesgaccess":{"source":"iana"},"application/vnd.dvb.ipdcesgaccess2":{"source":"iana"},"application/vnd.dvb.ipdcesgpdd":{"source":"iana"},"application/vnd.dvb.ipdcroaming":{"source":"iana"},"application/vnd.dvb.iptv.alfec-base":{"source":"iana"},"application/vnd.dvb.iptv.alfec-enhancement":{"source":"iana"},"application/vnd.dvb.notif-aggregate-root+xml":{"source":"iana","compressible":true},"application/vnd.dvb.notif-container+xml":{"source":"iana","compressible":true},"application/vnd.dvb.notif-generic+xml":{"source":"iana","compressible":true},"application/vnd.dvb.notif-ia-msglist+xml":{"source":"iana","compressible":true},"application/vnd.dvb.notif-ia-registration-request+xml":{"source":"iana","compressible":true},"application/vnd.dvb.notif-ia-registration-response+xml":{"source":"iana","compressible":true},"application/vnd.dvb.notif-init+xml":{"source":"iana","compressible":true},"application/vnd.dvb.pfr":{"source":"iana"},"application/vnd.dvb.service":{"source":"iana","extensions":["svc"]},"application/vnd.dxr":{"source":"iana"},"application/vnd.dynageo":{"source":"iana","extensions":["geo"]},"application/vnd.dzr":{"source":"iana"},"application/vnd.easykaraoke.cdgdownload":{"source":"iana"},"application/vnd.ecdis-update":{"source":"iana"},"application/vnd.ecip.rlp":{"source":"iana"},"application/vnd.ecowin.chart":{"source":"iana","extensions":["mag"]},"application/vnd.ecowin.filerequest":{"source":"iana"},"application/vnd.ecowin.fileupdate":{"source":"iana"},"application/vnd.ecowin.series":{"source":"iana"},"application/vnd.ecowin.seriesrequest":{"source":"iana"},"application/vnd.ecowin.seriesupdate":{"source":"iana"},"application/vnd.efi.img":{"source":"iana"},"application/vnd.efi.iso":{"source":"iana"},"application/vnd.emclient.accessrequest+xml":{"source":"iana","compressible":true},"application/vnd.enliven":{"source":"iana","extensions":["nml"]},"application/vnd.enphase.envoy":{"source":"iana"},"application/vnd.eprints.data+xml":{"source":"iana","compressible":true},"application/vnd.epson.esf":{"source":"iana","extensions":["esf"]},"application/vnd.epson.msf":{"source":"iana","extensions":["msf"]},"application/vnd.epson.quickanime":{"source":"iana","extensions":["qam"]},"application/vnd.epson.salt":{"source":"iana","extensions":["slt"]},"application/vnd.epson.ssf":{"source":"iana","extensions":["ssf"]},"application/vnd.ericsson.quickcall":{"source":"iana"},"application/vnd.espass-espass+zip":{"source":"iana","compressible":false},"application/vnd.eszigno3+xml":{"source":"iana","compressible":true,"extensions":["es3","et3"]},"application/vnd.etsi.aoc+xml":{"source":"iana","compressible":true},"application/vnd.etsi.asic-e+zip":{"source":"iana","compressible":false},"application/vnd.etsi.asic-s+zip":{"source":"iana","compressible":false},"application/vnd.etsi.cug+xml":{"source":"iana","compressible":true},"application/vnd.etsi.iptvcommand+xml":{"source":"iana","compressible":true},"application/vnd.etsi.iptvdiscovery+xml":{"source":"iana","compressible":true},"application/vnd.etsi.iptvprofile+xml":{"source":"iana","compressible":true},"application/vnd.etsi.iptvsad-bc+xml":{"source":"iana","compressible":true},"application/vnd.etsi.iptvsad-cod+xml":{"source":"iana","compressible":true},"application/vnd.etsi.iptvsad-npvr+xml":{"source":"iana","compressible":true},"application/vnd.etsi.iptvservice+xml":{"source":"iana","compressible":true},"application/vnd.etsi.iptvsync+xml":{"source":"iana","compressible":true},"application/vnd.etsi.iptvueprofile+xml":{"source":"iana","compressible":true},"application/vnd.etsi.mcid+xml":{"source":"iana","compressible":true},"application/vnd.etsi.mheg5":{"source":"iana"},"application/vnd.etsi.overload-control-policy-dataset+xml":{"source":"iana","compressible":true},"application/vnd.etsi.pstn+xml":{"source":"iana","compressible":true},"application/vnd.etsi.sci+xml":{"source":"iana","compressible":true},"application/vnd.etsi.simservs+xml":{"source":"iana","compressible":true},"application/vnd.etsi.timestamp-token":{"source":"iana"},"application/vnd.etsi.tsl+xml":{"source":"iana","compressible":true},"application/vnd.etsi.tsl.der":{"source":"iana"},"application/vnd.eudora.data":{"source":"iana"},"application/vnd.evolv.ecig.profile":{"source":"iana"},"application/vnd.evolv.ecig.settings":{"source":"iana"},"application/vnd.evolv.ecig.theme":{"source":"iana"},"application/vnd.exstream-empower+zip":{"source":"iana","compressible":false},"application/vnd.exstream-package":{"source":"iana"},"application/vnd.ezpix-album":{"source":"iana","extensions":["ez2"]},"application/vnd.ezpix-package":{"source":"iana","extensions":["ez3"]},"application/vnd.f-secure.mobile":{"source":"iana"},"application/vnd.fastcopy-disk-image":{"source":"iana"},"application/vnd.fdf":{"source":"iana","extensions":["fdf"]},"application/vnd.fdsn.mseed":{"source":"iana","extensions":["mseed"]},"application/vnd.fdsn.seed":{"source":"iana","extensions":["seed","dataless"]},"application/vnd.ffsns":{"source":"iana"},"application/vnd.ficlab.flb+zip":{"source":"iana","compressible":false},"application/vnd.filmit.zfc":{"source":"iana"},"application/vnd.fints":{"source":"iana"},"application/vnd.firemonkeys.cloudcell":{"source":"iana"},"application/vnd.flographit":{"source":"iana","extensions":["gph"]},"application/vnd.fluxtime.clip":{"source":"iana","extensions":["ftc"]},"application/vnd.font-fontforge-sfd":{"source":"iana"},"application/vnd.framemaker":{"source":"iana","extensions":["fm","frame","maker","book"]},"application/vnd.frogans.fnc":{"source":"iana","extensions":["fnc"]},"application/vnd.frogans.ltf":{"source":"iana","extensions":["ltf"]},"application/vnd.fsc.weblaunch":{"source":"iana","extensions":["fsc"]},"application/vnd.fujitsu.oasys":{"source":"iana","extensions":["oas"]},"application/vnd.fujitsu.oasys2":{"source":"iana","extensions":["oa2"]},"application/vnd.fujitsu.oasys3":{"source":"iana","extensions":["oa3"]},"application/vnd.fujitsu.oasysgp":{"source":"iana","extensions":["fg5"]},"application/vnd.fujitsu.oasysprs":{"source":"iana","extensions":["bh2"]},"application/vnd.fujixerox.art-ex":{"source":"iana"},"application/vnd.fujixerox.art4":{"source":"iana"},"application/vnd.fujixerox.ddd":{"source":"iana","extensions":["ddd"]},"application/vnd.fujixerox.docuworks":{"source":"iana","extensions":["xdw"]},"application/vnd.fujixerox.docuworks.binder":{"source":"iana","extensions":["xbd"]},"application/vnd.fujixerox.docuworks.container":{"source":"iana"},"application/vnd.fujixerox.hbpl":{"source":"iana"},"application/vnd.fut-misnet":{"source":"iana"},"application/vnd.futoin+cbor":{"source":"iana"},"application/vnd.futoin+json":{"source":"iana","compressible":true},"application/vnd.fuzzysheet":{"source":"iana","extensions":["fzs"]},"application/vnd.genomatix.tuxedo":{"source":"iana","extensions":["txd"]},"application/vnd.gentics.grd+json":{"source":"iana","compressible":true},"application/vnd.geo+json":{"source":"iana","compressible":true},"application/vnd.geocube+xml":{"source":"iana","compressible":true},"application/vnd.geogebra.file":{"source":"iana","extensions":["ggb"]},"application/vnd.geogebra.tool":{"source":"iana","extensions":["ggt"]},"application/vnd.geometry-explorer":{"source":"iana","extensions":["gex","gre"]},"application/vnd.geonext":{"source":"iana","extensions":["gxt"]},"application/vnd.geoplan":{"source":"iana","extensions":["g2w"]},"application/vnd.geospace":{"source":"iana","extensions":["g3w"]},"application/vnd.gerber":{"source":"iana"},"application/vnd.globalplatform.card-content-mgt":{"source":"iana"},"application/vnd.globalplatform.card-content-mgt-response":{"source":"iana"},"application/vnd.gmx":{"source":"iana","extensions":["gmx"]},"application/vnd.google-apps.document":{"compressible":false,"extensions":["gdoc"]},"application/vnd.google-apps.presentation":{"compressible":false,"extensions":["gslides"]},"application/vnd.google-apps.spreadsheet":{"compressible":false,"extensions":["gsheet"]},"application/vnd.google-earth.kml+xml":{"source":"iana","compressible":true,"extensions":["kml"]},"application/vnd.google-earth.kmz":{"source":"iana","compressible":false,"extensions":["kmz"]},"application/vnd.gov.sk.e-form+xml":{"source":"iana","compressible":true},"application/vnd.gov.sk.e-form+zip":{"source":"iana","compressible":false},"application/vnd.gov.sk.xmldatacontainer+xml":{"source":"iana","compressible":true},"application/vnd.grafeq":{"source":"iana","extensions":["gqf","gqs"]},"application/vnd.gridmp":{"source":"iana"},"application/vnd.groove-account":{"source":"iana","extensions":["gac"]},"application/vnd.groove-help":{"source":"iana","extensions":["ghf"]},"application/vnd.groove-identity-message":{"source":"iana","extensions":["gim"]},"application/vnd.groove-injector":{"source":"iana","extensions":["grv"]},"application/vnd.groove-tool-message":{"source":"iana","extensions":["gtm"]},"application/vnd.groove-tool-template":{"source":"iana","extensions":["tpl"]},"application/vnd.groove-vcard":{"source":"iana","extensions":["vcg"]},"application/vnd.hal+json":{"source":"iana","compressible":true},"application/vnd.hal+xml":{"source":"iana","compressible":true,"extensions":["hal"]},"application/vnd.handheld-entertainment+xml":{"source":"iana","compressible":true,"extensions":["zmm"]},"application/vnd.hbci":{"source":"iana","extensions":["hbci"]},"application/vnd.hc+json":{"source":"iana","compressible":true},"application/vnd.hcl-bireports":{"source":"iana"},"application/vnd.hdt":{"source":"iana"},"application/vnd.heroku+json":{"source":"iana","compressible":true},"application/vnd.hhe.lesson-player":{"source":"iana","extensions":["les"]},"application/vnd.hp-hpgl":{"source":"iana","extensions":["hpgl"]},"application/vnd.hp-hpid":{"source":"iana","extensions":["hpid"]},"application/vnd.hp-hps":{"source":"iana","extensions":["hps"]},"application/vnd.hp-jlyt":{"source":"iana","extensions":["jlt"]},"application/vnd.hp-pcl":{"source":"iana","extensions":["pcl"]},"application/vnd.hp-pclxl":{"source":"iana","extensions":["pclxl"]},"application/vnd.httphone":{"source":"iana"},"application/vnd.hydrostatix.sof-data":{"source":"iana","extensions":["sfd-hdstx"]},"application/vnd.hyper+json":{"source":"iana","compressible":true},"application/vnd.hyper-item+json":{"source":"iana","compressible":true},"application/vnd.hyperdrive+json":{"source":"iana","compressible":true},"application/vnd.hzn-3d-crossword":{"source":"iana"},"application/vnd.ibm.afplinedata":{"source":"iana"},"application/vnd.ibm.electronic-media":{"source":"iana"},"application/vnd.ibm.minipay":{"source":"iana","extensions":["mpy"]},"application/vnd.ibm.modcap":{"source":"iana","extensions":["afp","listafp","list3820"]},"application/vnd.ibm.rights-management":{"source":"iana","extensions":["irm"]},"application/vnd.ibm.secure-container":{"source":"iana","extensions":["sc"]},"application/vnd.iccprofile":{"source":"iana","extensions":["icc","icm"]},"application/vnd.ieee.1905":{"source":"iana"},"application/vnd.igloader":{"source":"iana","extensions":["igl"]},"application/vnd.imagemeter.folder+zip":{"source":"iana","compressible":false},"application/vnd.imagemeter.image+zip":{"source":"iana","compressible":false},"application/vnd.immervision-ivp":{"source":"iana","extensions":["ivp"]},"application/vnd.immervision-ivu":{"source":"iana","extensions":["ivu"]},"application/vnd.ims.imsccv1p1":{"source":"iana"},"application/vnd.ims.imsccv1p2":{"source":"iana"},"application/vnd.ims.imsccv1p3":{"source":"iana"},"application/vnd.ims.lis.v2.result+json":{"source":"iana","compressible":true},"application/vnd.ims.lti.v2.toolconsumerprofile+json":{"source":"iana","compressible":true},"application/vnd.ims.lti.v2.toolproxy+json":{"source":"iana","compressible":true},"application/vnd.ims.lti.v2.toolproxy.id+json":{"source":"iana","compressible":true},"application/vnd.ims.lti.v2.toolsettings+json":{"source":"iana","compressible":true},"application/vnd.ims.lti.v2.toolsettings.simple+json":{"source":"iana","compressible":true},"application/vnd.informedcontrol.rms+xml":{"source":"iana","compressible":true},"application/vnd.informix-visionary":{"source":"iana"},"application/vnd.infotech.project":{"source":"iana"},"application/vnd.infotech.project+xml":{"source":"iana","compressible":true},"application/vnd.innopath.wamp.notification":{"source":"iana"},"application/vnd.insors.igm":{"source":"iana","extensions":["igm"]},"application/vnd.intercon.formnet":{"source":"iana","extensions":["xpw","xpx"]},"application/vnd.intergeo":{"source":"iana","extensions":["i2g"]},"application/vnd.intertrust.digibox":{"source":"iana"},"application/vnd.intertrust.nncp":{"source":"iana"},"application/vnd.intu.qbo":{"source":"iana","extensions":["qbo"]},"application/vnd.intu.qfx":{"source":"iana","extensions":["qfx"]},"application/vnd.iptc.g2.catalogitem+xml":{"source":"iana","compressible":true},"application/vnd.iptc.g2.conceptitem+xml":{"source":"iana","compressible":true},"application/vnd.iptc.g2.knowledgeitem+xml":{"source":"iana","compressible":true},"application/vnd.iptc.g2.newsitem+xml":{"source":"iana","compressible":true},"application/vnd.iptc.g2.newsmessage+xml":{"source":"iana","compressible":true},"application/vnd.iptc.g2.packageitem+xml":{"source":"iana","compressible":true},"application/vnd.iptc.g2.planningitem+xml":{"source":"iana","compressible":true},"application/vnd.ipunplugged.rcprofile":{"source":"iana","extensions":["rcprofile"]},"application/vnd.irepository.package+xml":{"source":"iana","compressible":true,"extensions":["irp"]},"application/vnd.is-xpr":{"source":"iana","extensions":["xpr"]},"application/vnd.isac.fcs":{"source":"iana","extensions":["fcs"]},"application/vnd.iso11783-10+zip":{"source":"iana","compressible":false},"application/vnd.jam":{"source":"iana","extensions":["jam"]},"application/vnd.japannet-directory-service":{"source":"iana"},"application/vnd.japannet-jpnstore-wakeup":{"source":"iana"},"application/vnd.japannet-payment-wakeup":{"source":"iana"},"application/vnd.japannet-registration":{"source":"iana"},"application/vnd.japannet-registration-wakeup":{"source":"iana"},"application/vnd.japannet-setstore-wakeup":{"source":"iana"},"application/vnd.japannet-verification":{"source":"iana"},"application/vnd.japannet-verification-wakeup":{"source":"iana"},"application/vnd.jcp.javame.midlet-rms":{"source":"iana","extensions":["rms"]},"application/vnd.jisp":{"source":"iana","extensions":["jisp"]},"application/vnd.joost.joda-archive":{"source":"iana","extensions":["joda"]},"application/vnd.jsk.isdn-ngn":{"source":"iana"},"application/vnd.kahootz":{"source":"iana","extensions":["ktz","ktr"]},"application/vnd.kde.karbon":{"source":"iana","extensions":["karbon"]},"application/vnd.kde.kchart":{"source":"iana","extensions":["chrt"]},"application/vnd.kde.kformula":{"source":"iana","extensions":["kfo"]},"application/vnd.kde.kivio":{"source":"iana","extensions":["flw"]},"application/vnd.kde.kontour":{"source":"iana","extensions":["kon"]},"application/vnd.kde.kpresenter":{"source":"iana","extensions":["kpr","kpt"]},"application/vnd.kde.kspread":{"source":"iana","extensions":["ksp"]},"application/vnd.kde.kword":{"source":"iana","extensions":["kwd","kwt"]},"application/vnd.kenameaapp":{"source":"iana","extensions":["htke"]},"application/vnd.kidspiration":{"source":"iana","extensions":["kia"]},"application/vnd.kinar":{"source":"iana","extensions":["kne","knp"]},"application/vnd.koan":{"source":"iana","extensions":["skp","skd","skt","skm"]},"application/vnd.kodak-descriptor":{"source":"iana","extensions":["sse"]},"application/vnd.las":{"source":"iana"},"application/vnd.las.las+json":{"source":"iana","compressible":true},"application/vnd.las.las+xml":{"source":"iana","compressible":true,"extensions":["lasxml"]},"application/vnd.laszip":{"source":"iana"},"application/vnd.leap+json":{"source":"iana","compressible":true},"application/vnd.liberty-request+xml":{"source":"iana","compressible":true},"application/vnd.llamagraphics.life-balance.desktop":{"source":"iana","extensions":["lbd"]},"application/vnd.llamagraphics.life-balance.exchange+xml":{"source":"iana","compressible":true,"extensions":["lbe"]},"application/vnd.logipipe.circuit+zip":{"source":"iana","compressible":false},"application/vnd.loom":{"source":"iana"},"application/vnd.lotus-1-2-3":{"source":"iana","extensions":["123"]},"application/vnd.lotus-approach":{"source":"iana","extensions":["apr"]},"application/vnd.lotus-freelance":{"source":"iana","extensions":["pre"]},"application/vnd.lotus-notes":{"source":"iana","extensions":["nsf"]},"application/vnd.lotus-organizer":{"source":"iana","extensions":["org"]},"application/vnd.lotus-screencam":{"source":"iana","extensions":["scm"]},"application/vnd.lotus-wordpro":{"source":"iana","extensions":["lwp"]},"application/vnd.macports.portpkg":{"source":"iana","extensions":["portpkg"]},"application/vnd.mapbox-vector-tile":{"source":"iana"},"application/vnd.marlin.drm.actiontoken+xml":{"source":"iana","compressible":true},"application/vnd.marlin.drm.conftoken+xml":{"source":"iana","compressible":true},"application/vnd.marlin.drm.license+xml":{"source":"iana","compressible":true},"application/vnd.marlin.drm.mdcf":{"source":"iana"},"application/vnd.mason+json":{"source":"iana","compressible":true},"application/vnd.maxmind.maxmind-db":{"source":"iana"},"application/vnd.mcd":{"source":"iana","extensions":["mcd"]},"application/vnd.medcalcdata":{"source":"iana","extensions":["mc1"]},"application/vnd.mediastation.cdkey":{"source":"iana","extensions":["cdkey"]},"application/vnd.meridian-slingshot":{"source":"iana"},"application/vnd.mfer":{"source":"iana","extensions":["mwf"]},"application/vnd.mfmp":{"source":"iana","extensions":["mfm"]},"application/vnd.micro+json":{"source":"iana","compressible":true},"application/vnd.micrografx.flo":{"source":"iana","extensions":["flo"]},"application/vnd.micrografx.igx":{"source":"iana","extensions":["igx"]},"application/vnd.microsoft.portable-executable":{"source":"iana"},"application/vnd.microsoft.windows.thumbnail-cache":{"source":"iana"},"application/vnd.miele+json":{"source":"iana","compressible":true},"application/vnd.mif":{"source":"iana","extensions":["mif"]},"application/vnd.minisoft-hp3000-save":{"source":"iana"},"application/vnd.mitsubishi.misty-guard.trustweb":{"source":"iana"},"application/vnd.mobius.daf":{"source":"iana","extensions":["daf"]},"application/vnd.mobius.dis":{"source":"iana","extensions":["dis"]},"application/vnd.mobius.mbk":{"source":"iana","extensions":["mbk"]},"application/vnd.mobius.mqy":{"source":"iana","extensions":["mqy"]},"application/vnd.mobius.msl":{"source":"iana","extensions":["msl"]},"application/vnd.mobius.plc":{"source":"iana","extensions":["plc"]},"application/vnd.mobius.txf":{"source":"iana","extensions":["txf"]},"application/vnd.mophun.application":{"source":"iana","extensions":["mpn"]},"application/vnd.mophun.certificate":{"source":"iana","extensions":["mpc"]},"application/vnd.motorola.flexsuite":{"source":"iana"},"application/vnd.motorola.flexsuite.adsi":{"source":"iana"},"application/vnd.motorola.flexsuite.fis":{"source":"iana"},"application/vnd.motorola.flexsuite.gotap":{"source":"iana"},"application/vnd.motorola.flexsuite.kmr":{"source":"iana"},"application/vnd.motorola.flexsuite.ttc":{"source":"iana"},"application/vnd.motorola.flexsuite.wem":{"source":"iana"},"application/vnd.motorola.iprm":{"source":"iana"},"application/vnd.mozilla.xul+xml":{"source":"iana","compressible":true,"extensions":["xul"]},"application/vnd.ms-3mfdocument":{"source":"iana"},"application/vnd.ms-artgalry":{"source":"iana","extensions":["cil"]},"application/vnd.ms-asf":{"source":"iana"},"application/vnd.ms-cab-compressed":{"source":"iana","extensions":["cab"]},"application/vnd.ms-color.iccprofile":{"source":"apache"},"application/vnd.ms-excel":{"source":"iana","compressible":false,"extensions":["xls","xlm","xla","xlc","xlt","xlw"]},"application/vnd.ms-excel.addin.macroenabled.12":{"source":"iana","extensions":["xlam"]},"application/vnd.ms-excel.sheet.binary.macroenabled.12":{"source":"iana","extensions":["xlsb"]},"application/vnd.ms-excel.sheet.macroenabled.12":{"source":"iana","extensions":["xlsm"]},"application/vnd.ms-excel.template.macroenabled.12":{"source":"iana","extensions":["xltm"]},"application/vnd.ms-fontobject":{"source":"iana","compressible":true,"extensions":["eot"]},"application/vnd.ms-htmlhelp":{"source":"iana","extensions":["chm"]},"application/vnd.ms-ims":{"source":"iana","extensions":["ims"]},"application/vnd.ms-lrm":{"source":"iana","extensions":["lrm"]},"application/vnd.ms-office.activex+xml":{"source":"iana","compressible":true},"application/vnd.ms-officetheme":{"source":"iana","extensions":["thmx"]},"application/vnd.ms-opentype":{"source":"apache","compressible":true},"application/vnd.ms-outlook":{"compressible":false,"extensions":["msg"]},"application/vnd.ms-package.obfuscated-opentype":{"source":"apache"},"application/vnd.ms-pki.seccat":{"source":"apache","extensions":["cat"]},"application/vnd.ms-pki.stl":{"source":"apache","extensions":["stl"]},"application/vnd.ms-playready.initiator+xml":{"source":"iana","compressible":true},"application/vnd.ms-powerpoint":{"source":"iana","compressible":false,"extensions":["ppt","pps","pot"]},"application/vnd.ms-powerpoint.addin.macroenabled.12":{"source":"iana","extensions":["ppam"]},"application/vnd.ms-powerpoint.presentation.macroenabled.12":{"source":"iana","extensions":["pptm"]},"application/vnd.ms-powerpoint.slide.macroenabled.12":{"source":"iana","extensions":["sldm"]},"application/vnd.ms-powerpoint.slideshow.macroenabled.12":{"source":"iana","extensions":["ppsm"]},"application/vnd.ms-powerpoint.template.macroenabled.12":{"source":"iana","extensions":["potm"]},"application/vnd.ms-printdevicecapabilities+xml":{"source":"iana","compressible":true},"application/vnd.ms-printing.printticket+xml":{"source":"apache","compressible":true},"application/vnd.ms-printschematicket+xml":{"source":"iana","compressible":true},"application/vnd.ms-project":{"source":"iana","extensions":["mpp","mpt"]},"application/vnd.ms-tnef":{"source":"iana"},"application/vnd.ms-windows.devicepairing":{"source":"iana"},"application/vnd.ms-windows.nwprinting.oob":{"source":"iana"},"application/vnd.ms-windows.printerpairing":{"source":"iana"},"application/vnd.ms-windows.wsd.oob":{"source":"iana"},"application/vnd.ms-wmdrm.lic-chlg-req":{"source":"iana"},"application/vnd.ms-wmdrm.lic-resp":{"source":"iana"},"application/vnd.ms-wmdrm.meter-chlg-req":{"source":"iana"},"application/vnd.ms-wmdrm.meter-resp":{"source":"iana"},"application/vnd.ms-word.document.macroenabled.12":{"source":"iana","extensions":["docm"]},"application/vnd.ms-word.template.macroenabled.12":{"source":"iana","extensions":["dotm"]},"application/vnd.ms-works":{"source":"iana","extensions":["wps","wks","wcm","wdb"]},"application/vnd.ms-wpl":{"source":"iana","extensions":["wpl"]},"application/vnd.ms-xpsdocument":{"source":"iana","compressible":false,"extensions":["xps"]},"application/vnd.msa-disk-image":{"source":"iana"},"application/vnd.mseq":{"source":"iana","extensions":["mseq"]},"application/vnd.msign":{"source":"iana"},"application/vnd.multiad.creator":{"source":"iana"},"application/vnd.multiad.creator.cif":{"source":"iana"},"application/vnd.music-niff":{"source":"iana"},"application/vnd.musician":{"source":"iana","extensions":["mus"]},"application/vnd.muvee.style":{"source":"iana","extensions":["msty"]},"application/vnd.mynfc":{"source":"iana","extensions":["taglet"]},"application/vnd.ncd.control":{"source":"iana"},"application/vnd.ncd.reference":{"source":"iana"},"application/vnd.nearst.inv+json":{"source":"iana","compressible":true},"application/vnd.nervana":{"source":"iana"},"application/vnd.netfpx":{"source":"iana"},"application/vnd.neurolanguage.nlu":{"source":"iana","extensions":["nlu"]},"application/vnd.nimn":{"source":"iana"},"application/vnd.nintendo.nitro.rom":{"source":"iana"},"application/vnd.nintendo.snes.rom":{"source":"iana"},"application/vnd.nitf":{"source":"iana","extensions":["ntf","nitf"]},"application/vnd.noblenet-directory":{"source":"iana","extensions":["nnd"]},"application/vnd.noblenet-sealer":{"source":"iana","extensions":["nns"]},"application/vnd.noblenet-web":{"source":"iana","extensions":["nnw"]},"application/vnd.nokia.catalogs":{"source":"iana"},"application/vnd.nokia.conml+wbxml":{"source":"iana"},"application/vnd.nokia.conml+xml":{"source":"iana","compressible":true},"application/vnd.nokia.iptv.config+xml":{"source":"iana","compressible":true},"application/vnd.nokia.isds-radio-presets":{"source":"iana"},"application/vnd.nokia.landmark+wbxml":{"source":"iana"},"application/vnd.nokia.landmark+xml":{"source":"iana","compressible":true},"application/vnd.nokia.landmarkcollection+xml":{"source":"iana","compressible":true},"application/vnd.nokia.n-gage.ac+xml":{"source":"iana","compressible":true,"extensions":["ac"]},"application/vnd.nokia.n-gage.data":{"source":"iana","extensions":["ngdat"]},"application/vnd.nokia.n-gage.symbian.install":{"source":"iana","extensions":["n-gage"]},"application/vnd.nokia.ncd":{"source":"iana"},"application/vnd.nokia.pcd+wbxml":{"source":"iana"},"application/vnd.nokia.pcd+xml":{"source":"iana","compressible":true},"application/vnd.nokia.radio-preset":{"source":"iana","extensions":["rpst"]},"application/vnd.nokia.radio-presets":{"source":"iana","extensions":["rpss"]},"application/vnd.novadigm.edm":{"source":"iana","extensions":["edm"]},"application/vnd.novadigm.edx":{"source":"iana","extensions":["edx"]},"application/vnd.novadigm.ext":{"source":"iana","extensions":["ext"]},"application/vnd.ntt-local.content-share":{"source":"iana"},"application/vnd.ntt-local.file-transfer":{"source":"iana"},"application/vnd.ntt-local.ogw_remote-access":{"source":"iana"},"application/vnd.ntt-local.sip-ta_remote":{"source":"iana"},"application/vnd.ntt-local.sip-ta_tcp_stream":{"source":"iana"},"application/vnd.oasis.opendocument.chart":{"source":"iana","extensions":["odc"]},"application/vnd.oasis.opendocument.chart-template":{"source":"iana","extensions":["otc"]},"application/vnd.oasis.opendocument.database":{"source":"iana","extensions":["odb"]},"application/vnd.oasis.opendocument.formula":{"source":"iana","extensions":["odf"]},"application/vnd.oasis.opendocument.formula-template":{"source":"iana","extensions":["odft"]},"application/vnd.oasis.opendocument.graphics":{"source":"iana","compressible":false,"extensions":["odg"]},"application/vnd.oasis.opendocument.graphics-template":{"source":"iana","extensions":["otg"]},"application/vnd.oasis.opendocument.image":{"source":"iana","extensions":["odi"]},"application/vnd.oasis.opendocument.image-template":{"source":"iana","extensions":["oti"]},"application/vnd.oasis.opendocument.presentation":{"source":"iana","compressible":false,"extensions":["odp"]},"application/vnd.oasis.opendocument.presentation-template":{"source":"iana","extensions":["otp"]},"application/vnd.oasis.opendocument.spreadsheet":{"source":"iana","compressible":false,"extensions":["ods"]},"application/vnd.oasis.opendocument.spreadsheet-template":{"source":"iana","extensions":["ots"]},"application/vnd.oasis.opendocument.text":{"source":"iana","compressible":false,"extensions":["odt"]},"application/vnd.oasis.opendocument.text-master":{"source":"iana","extensions":["odm"]},"application/vnd.oasis.opendocument.text-template":{"source":"iana","extensions":["ott"]},"application/vnd.oasis.opendocument.text-web":{"source":"iana","extensions":["oth"]},"application/vnd.obn":{"source":"iana"},"application/vnd.ocf+cbor":{"source":"iana"},"application/vnd.oci.image.manifest.v1+json":{"source":"iana","compressible":true},"application/vnd.oftn.l10n+json":{"source":"iana","compressible":true},"application/vnd.oipf.contentaccessdownload+xml":{"source":"iana","compressible":true},"application/vnd.oipf.contentaccessstreaming+xml":{"source":"iana","compressible":true},"application/vnd.oipf.cspg-hexbinary":{"source":"iana"},"application/vnd.oipf.dae.svg+xml":{"source":"iana","compressible":true},"application/vnd.oipf.dae.xhtml+xml":{"source":"iana","compressible":true},"application/vnd.oipf.mippvcontrolmessage+xml":{"source":"iana","compressible":true},"application/vnd.oipf.pae.gem":{"source":"iana"},"application/vnd.oipf.spdiscovery+xml":{"source":"iana","compressible":true},"application/vnd.oipf.spdlist+xml":{"source":"iana","compressible":true},"application/vnd.oipf.ueprofile+xml":{"source":"iana","compressible":true},"application/vnd.oipf.userprofile+xml":{"source":"iana","compressible":true},"application/vnd.olpc-sugar":{"source":"iana","extensions":["xo"]},"application/vnd.oma-scws-config":{"source":"iana"},"application/vnd.oma-scws-http-request":{"source":"iana"},"application/vnd.oma-scws-http-response":{"source":"iana"},"application/vnd.oma.bcast.associated-procedure-parameter+xml":{"source":"iana","compressible":true},"application/vnd.oma.bcast.drm-trigger+xml":{"source":"iana","compressible":true},"application/vnd.oma.bcast.imd+xml":{"source":"iana","compressible":true},"application/vnd.oma.bcast.ltkm":{"source":"iana"},"application/vnd.oma.bcast.notification+xml":{"source":"iana","compressible":true},"application/vnd.oma.bcast.provisioningtrigger":{"source":"iana"},"application/vnd.oma.bcast.sgboot":{"source":"iana"},"application/vnd.oma.bcast.sgdd+xml":{"source":"iana","compressible":true},"application/vnd.oma.bcast.sgdu":{"source":"iana"},"application/vnd.oma.bcast.simple-symbol-container":{"source":"iana"},"application/vnd.oma.bcast.smartcard-trigger+xml":{"source":"iana","compressible":true},"application/vnd.oma.bcast.sprov+xml":{"source":"iana","compressible":true},"application/vnd.oma.bcast.stkm":{"source":"iana"},"application/vnd.oma.cab-address-book+xml":{"source":"iana","compressible":true},"application/vnd.oma.cab-feature-handler+xml":{"source":"iana","compressible":true},"application/vnd.oma.cab-pcc+xml":{"source":"iana","compressible":true},"application/vnd.oma.cab-subs-invite+xml":{"source":"iana","compressible":true},"application/vnd.oma.cab-user-prefs+xml":{"source":"iana","compressible":true},"application/vnd.oma.dcd":{"source":"iana"},"application/vnd.oma.dcdc":{"source":"iana"},"application/vnd.oma.dd2+xml":{"source":"iana","compressible":true,"extensions":["dd2"]},"application/vnd.oma.drm.risd+xml":{"source":"iana","compressible":true},"application/vnd.oma.group-usage-list+xml":{"source":"iana","compressible":true},"application/vnd.oma.lwm2m+cbor":{"source":"iana"},"application/vnd.oma.lwm2m+json":{"source":"iana","compressible":true},"application/vnd.oma.lwm2m+tlv":{"source":"iana"},"application/vnd.oma.pal+xml":{"source":"iana","compressible":true},"application/vnd.oma.poc.detailed-progress-report+xml":{"source":"iana","compressible":true},"application/vnd.oma.poc.final-report+xml":{"source":"iana","compressible":true},"application/vnd.oma.poc.groups+xml":{"source":"iana","compressible":true},"application/vnd.oma.poc.invocation-descriptor+xml":{"source":"iana","compressible":true},"application/vnd.oma.poc.optimized-progress-report+xml":{"source":"iana","compressible":true},"application/vnd.oma.push":{"source":"iana"},"application/vnd.oma.scidm.messages+xml":{"source":"iana","compressible":true},"application/vnd.oma.xcap-directory+xml":{"source":"iana","compressible":true},"application/vnd.omads-email+xml":{"source":"iana","charset":"UTF-8","compressible":true},"application/vnd.omads-file+xml":{"source":"iana","charset":"UTF-8","compressible":true},"application/vnd.omads-folder+xml":{"source":"iana","charset":"UTF-8","compressible":true},"application/vnd.omaloc-supl-init":{"source":"iana"},"application/vnd.onepager":{"source":"iana"},"application/vnd.onepagertamp":{"source":"iana"},"application/vnd.onepagertamx":{"source":"iana"},"application/vnd.onepagertat":{"source":"iana"},"application/vnd.onepagertatp":{"source":"iana"},"application/vnd.onepagertatx":{"source":"iana"},"application/vnd.openblox.game+xml":{"source":"iana","compressible":true,"extensions":["obgx"]},"application/vnd.openblox.game-binary":{"source":"iana"},"application/vnd.openeye.oeb":{"source":"iana"},"application/vnd.openofficeorg.extension":{"source":"apache","extensions":["oxt"]},"application/vnd.openstreetmap.data+xml":{"source":"iana","compressible":true,"extensions":["osm"]},"application/vnd.openxmlformats-officedocument.custom-properties+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.customxmlproperties+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.drawing+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.drawingml.chart+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.drawingml.chartshapes+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.drawingml.diagramcolors+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.drawingml.diagramdata+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.drawingml.diagramlayout+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.drawingml.diagramstyle+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.extended-properties+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.presentationml.commentauthors+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.presentationml.comments+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.presentationml.handoutmaster+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.presentationml.notesmaster+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.presentationml.notesslide+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.presentationml.presentation":{"source":"iana","compressible":false,"extensions":["pptx"]},"application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.presentationml.presprops+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.presentationml.slide":{"source":"iana","extensions":["sldx"]},"application/vnd.openxmlformats-officedocument.presentationml.slide+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.presentationml.slidelayout+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.presentationml.slidemaster+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.presentationml.slideshow":{"source":"iana","extensions":["ppsx"]},"application/vnd.openxmlformats-officedocument.presentationml.slideshow.main+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.presentationml.slideupdateinfo+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.presentationml.tablestyles+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.presentationml.tags+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.presentationml.template":{"source":"iana","extensions":["potx"]},"application/vnd.openxmlformats-officedocument.presentationml.template.main+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.presentationml.viewprops+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.calcchain+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.chartsheet+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.comments+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.connections+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.dialogsheet+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.externallink+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.pivotcachedefinition+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.pivotcacherecords+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.pivottable+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.querytable+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.revisionheaders+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.revisionlog+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.sharedstrings+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":{"source":"iana","compressible":false,"extensions":["xlsx"]},"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.sheetmetadata+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.tablesinglecells+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.template":{"source":"iana","extensions":["xltx"]},"application/vnd.openxmlformats-officedocument.spreadsheetml.template.main+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.usernames+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.volatiledependencies+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.theme+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.themeoverride+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.vmldrawing":{"source":"iana"},"application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.wordprocessingml.document":{"source":"iana","compressible":false,"extensions":["docx"]},"application/vnd.openxmlformats-officedocument.wordprocessingml.document.glossary+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.wordprocessingml.fonttable+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.wordprocessingml.template":{"source":"iana","extensions":["dotx"]},"application/vnd.openxmlformats-officedocument.wordprocessingml.template.main+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-officedocument.wordprocessingml.websettings+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-package.core-properties+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-package.digital-signature-xmlsignature+xml":{"source":"iana","compressible":true},"application/vnd.openxmlformats-package.relationships+xml":{"source":"iana","compressible":true},"application/vnd.oracle.resource+json":{"source":"iana","compressible":true},"application/vnd.orange.indata":{"source":"iana"},"application/vnd.osa.netdeploy":{"source":"iana"},"application/vnd.osgeo.mapguide.package":{"source":"iana","extensions":["mgp"]},"application/vnd.osgi.bundle":{"source":"iana"},"application/vnd.osgi.dp":{"source":"iana","extensions":["dp"]},"application/vnd.osgi.subsystem":{"source":"iana","extensions":["esa"]},"application/vnd.otps.ct-kip+xml":{"source":"iana","compressible":true},"application/vnd.oxli.countgraph":{"source":"iana"},"application/vnd.pagerduty+json":{"source":"iana","compressible":true},"application/vnd.palm":{"source":"iana","extensions":["pdb","pqa","oprc"]},"application/vnd.panoply":{"source":"iana"},"application/vnd.paos.xml":{"source":"iana"},"application/vnd.patentdive":{"source":"iana"},"application/vnd.patientecommsdoc":{"source":"iana"},"application/vnd.pawaafile":{"source":"iana","extensions":["paw"]},"application/vnd.pcos":{"source":"iana"},"application/vnd.pg.format":{"source":"iana","extensions":["str"]},"application/vnd.pg.osasli":{"source":"iana","extensions":["ei6"]},"application/vnd.piaccess.application-licence":{"source":"iana"},"application/vnd.picsel":{"source":"iana","extensions":["efif"]},"application/vnd.pmi.widget":{"source":"iana","extensions":["wg"]},"application/vnd.poc.group-advertisement+xml":{"source":"iana","compressible":true},"application/vnd.pocketlearn":{"source":"iana","extensions":["plf"]},"application/vnd.powerbuilder6":{"source":"iana","extensions":["pbd"]},"application/vnd.powerbuilder6-s":{"source":"iana"},"application/vnd.powerbuilder7":{"source":"iana"},"application/vnd.powerbuilder7-s":{"source":"iana"},"application/vnd.powerbuilder75":{"source":"iana"},"application/vnd.powerbuilder75-s":{"source":"iana"},"application/vnd.preminet":{"source":"iana"},"application/vnd.previewsystems.box":{"source":"iana","extensions":["box"]},"application/vnd.proteus.magazine":{"source":"iana","extensions":["mgz"]},"application/vnd.psfs":{"source":"iana"},"application/vnd.publishare-delta-tree":{"source":"iana","extensions":["qps"]},"application/vnd.pvi.ptid1":{"source":"iana","extensions":["ptid"]},"application/vnd.pwg-multiplexed":{"source":"iana"},"application/vnd.pwg-xhtml-print+xml":{"source":"iana","compressible":true},"application/vnd.qualcomm.brew-app-res":{"source":"iana"},"application/vnd.quarantainenet":{"source":"iana"},"application/vnd.quark.quarkxpress":{"source":"iana","extensions":["qxd","qxt","qwd","qwt","qxl","qxb"]},"application/vnd.quobject-quoxdocument":{"source":"iana"},"application/vnd.radisys.moml+xml":{"source":"iana","compressible":true},"application/vnd.radisys.msml+xml":{"source":"iana","compressible":true},"application/vnd.radisys.msml-audit+xml":{"source":"iana","compressible":true},"application/vnd.radisys.msml-audit-conf+xml":{"source":"iana","compressible":true},"application/vnd.radisys.msml-audit-conn+xml":{"source":"iana","compressible":true},"application/vnd.radisys.msml-audit-dialog+xml":{"source":"iana","compressible":true},"application/vnd.radisys.msml-audit-stream+xml":{"source":"iana","compressible":true},"application/vnd.radisys.msml-conf+xml":{"source":"iana","compressible":true},"application/vnd.radisys.msml-dialog+xml":{"source":"iana","compressible":true},"application/vnd.radisys.msml-dialog-base+xml":{"source":"iana","compressible":true},"application/vnd.radisys.msml-dialog-fax-detect+xml":{"source":"iana","compressible":true},"application/vnd.radisys.msml-dialog-fax-sendrecv+xml":{"source":"iana","compressible":true},"application/vnd.radisys.msml-dialog-group+xml":{"source":"iana","compressible":true},"application/vnd.radisys.msml-dialog-speech+xml":{"source":"iana","compressible":true},"application/vnd.radisys.msml-dialog-transform+xml":{"source":"iana","compressible":true},"application/vnd.rainstor.data":{"source":"iana"},"application/vnd.rapid":{"source":"iana"},"application/vnd.rar":{"source":"iana","extensions":["rar"]},"application/vnd.realvnc.bed":{"source":"iana","extensions":["bed"]},"application/vnd.recordare.musicxml":{"source":"iana","extensions":["mxl"]},"application/vnd.recordare.musicxml+xml":{"source":"iana","compressible":true,"extensions":["musicxml"]},"application/vnd.renlearn.rlprint":{"source":"iana"},"application/vnd.restful+json":{"source":"iana","compressible":true},"application/vnd.rig.cryptonote":{"source":"iana","extensions":["cryptonote"]},"application/vnd.rim.cod":{"source":"apache","extensions":["cod"]},"application/vnd.rn-realmedia":{"source":"apache","extensions":["rm"]},"application/vnd.rn-realmedia-vbr":{"source":"apache","extensions":["rmvb"]},"application/vnd.route66.link66+xml":{"source":"iana","compressible":true,"extensions":["link66"]},"application/vnd.rs-274x":{"source":"iana"},"application/vnd.ruckus.download":{"source":"iana"},"application/vnd.s3sms":{"source":"iana"},"application/vnd.sailingtracker.track":{"source":"iana","extensions":["st"]},"application/vnd.sar":{"source":"iana"},"application/vnd.sbm.cid":{"source":"iana"},"application/vnd.sbm.mid2":{"source":"iana"},"application/vnd.scribus":{"source":"iana"},"application/vnd.sealed.3df":{"source":"iana"},"application/vnd.sealed.csf":{"source":"iana"},"application/vnd.sealed.doc":{"source":"iana"},"application/vnd.sealed.eml":{"source":"iana"},"application/vnd.sealed.mht":{"source":"iana"},"application/vnd.sealed.net":{"source":"iana"},"application/vnd.sealed.ppt":{"source":"iana"},"application/vnd.sealed.tiff":{"source":"iana"},"application/vnd.sealed.xls":{"source":"iana"},"application/vnd.sealedmedia.softseal.html":{"source":"iana"},"application/vnd.sealedmedia.softseal.pdf":{"source":"iana"},"application/vnd.seemail":{"source":"iana","extensions":["see"]},"application/vnd.sema":{"source":"iana","extensions":["sema"]},"application/vnd.semd":{"source":"iana","extensions":["semd"]},"application/vnd.semf":{"source":"iana","extensions":["semf"]},"application/vnd.shade-save-file":{"source":"iana"},"application/vnd.shana.informed.formdata":{"source":"iana","extensions":["ifm"]},"application/vnd.shana.informed.formtemplate":{"source":"iana","extensions":["itp"]},"application/vnd.shana.informed.interchange":{"source":"iana","extensions":["iif"]},"application/vnd.shana.informed.package":{"source":"iana","extensions":["ipk"]},"application/vnd.shootproof+json":{"source":"iana","compressible":true},"application/vnd.shopkick+json":{"source":"iana","compressible":true},"application/vnd.shp":{"source":"iana"},"application/vnd.shx":{"source":"iana"},"application/vnd.sigrok.session":{"source":"iana"},"application/vnd.simtech-mindmapper":{"source":"iana","extensions":["twd","twds"]},"application/vnd.siren+json":{"source":"iana","compressible":true},"application/vnd.smaf":{"source":"iana","extensions":["mmf"]},"application/vnd.smart.notebook":{"source":"iana"},"application/vnd.smart.teacher":{"source":"iana","extensions":["teacher"]},"application/vnd.snesdev-page-table":{"source":"iana"},"application/vnd.software602.filler.form+xml":{"source":"iana","compressible":true,"extensions":["fo"]},"application/vnd.software602.filler.form-xml-zip":{"source":"iana"},"application/vnd.solent.sdkm+xml":{"source":"iana","compressible":true,"extensions":["sdkm","sdkd"]},"application/vnd.spotfire.dxp":{"source":"iana","extensions":["dxp"]},"application/vnd.spotfire.sfs":{"source":"iana","extensions":["sfs"]},"application/vnd.sqlite3":{"source":"iana"},"application/vnd.sss-cod":{"source":"iana"},"application/vnd.sss-dtf":{"source":"iana"},"application/vnd.sss-ntf":{"source":"iana"},"application/vnd.stardivision.calc":{"source":"apache","extensions":["sdc"]},"application/vnd.stardivision.draw":{"source":"apache","extensions":["sda"]},"application/vnd.stardivision.impress":{"source":"apache","extensions":["sdd"]},"application/vnd.stardivision.math":{"source":"apache","extensions":["smf"]},"application/vnd.stardivision.writer":{"source":"apache","extensions":["sdw","vor"]},"application/vnd.stardivision.writer-global":{"source":"apache","extensions":["sgl"]},"application/vnd.stepmania.package":{"source":"iana","extensions":["smzip"]},"application/vnd.stepmania.stepchart":{"source":"iana","extensions":["sm"]},"application/vnd.street-stream":{"source":"iana"},"application/vnd.sun.wadl+xml":{"source":"iana","compressible":true,"extensions":["wadl"]},"application/vnd.sun.xml.calc":{"source":"apache","extensions":["sxc"]},"application/vnd.sun.xml.calc.template":{"source":"apache","extensions":["stc"]},"application/vnd.sun.xml.draw":{"source":"apache","extensions":["sxd"]},"application/vnd.sun.xml.draw.template":{"source":"apache","extensions":["std"]},"application/vnd.sun.xml.impress":{"source":"apache","extensions":["sxi"]},"application/vnd.sun.xml.impress.template":{"source":"apache","extensions":["sti"]},"application/vnd.sun.xml.math":{"source":"apache","extensions":["sxm"]},"application/vnd.sun.xml.writer":{"source":"apache","extensions":["sxw"]},"application/vnd.sun.xml.writer.global":{"source":"apache","extensions":["sxg"]},"application/vnd.sun.xml.writer.template":{"source":"apache","extensions":["stw"]},"application/vnd.sus-calendar":{"source":"iana","extensions":["sus","susp"]},"application/vnd.svd":{"source":"iana","extensions":["svd"]},"application/vnd.swiftview-ics":{"source":"iana"},"application/vnd.sycle+xml":{"source":"iana","compressible":true},"application/vnd.symbian.install":{"source":"apache","extensions":["sis","sisx"]},"application/vnd.syncml+xml":{"source":"iana","charset":"UTF-8","compressible":true,"extensions":["xsm"]},"application/vnd.syncml.dm+wbxml":{"source":"iana","charset":"UTF-8","extensions":["bdm"]},"application/vnd.syncml.dm+xml":{"source":"iana","charset":"UTF-8","compressible":true,"extensions":["xdm"]},"application/vnd.syncml.dm.notification":{"source":"iana"},"application/vnd.syncml.dmddf+wbxml":{"source":"iana"},"application/vnd.syncml.dmddf+xml":{"source":"iana","charset":"UTF-8","compressible":true,"extensions":["ddf"]},"application/vnd.syncml.dmtnds+wbxml":{"source":"iana"},"application/vnd.syncml.dmtnds+xml":{"source":"iana","charset":"UTF-8","compressible":true},"application/vnd.syncml.ds.notification":{"source":"iana"},"application/vnd.tableschema+json":{"source":"iana","compressible":true},"application/vnd.tao.intent-module-archive":{"source":"iana","extensions":["tao"]},"application/vnd.tcpdump.pcap":{"source":"iana","extensions":["pcap","cap","dmp"]},"application/vnd.think-cell.ppttc+json":{"source":"iana","compressible":true},"application/vnd.tmd.mediaflex.api+xml":{"source":"iana","compressible":true},"application/vnd.tml":{"source":"iana"},"application/vnd.tmobile-livetv":{"source":"iana","extensions":["tmo"]},"application/vnd.tri.onesource":{"source":"iana"},"application/vnd.trid.tpt":{"source":"iana","extensions":["tpt"]},"application/vnd.triscape.mxs":{"source":"iana","extensions":["mxs"]},"application/vnd.trueapp":{"source":"iana","extensions":["tra"]},"application/vnd.truedoc":{"source":"iana"},"application/vnd.ubisoft.webplayer":{"source":"iana"},"application/vnd.ufdl":{"source":"iana","extensions":["ufd","ufdl"]},"application/vnd.uiq.theme":{"source":"iana","extensions":["utz"]},"application/vnd.umajin":{"source":"iana","extensions":["umj"]},"application/vnd.unity":{"source":"iana","extensions":["unityweb"]},"application/vnd.uoml+xml":{"source":"iana","compressible":true,"extensions":["uoml"]},"application/vnd.uplanet.alert":{"source":"iana"},"application/vnd.uplanet.alert-wbxml":{"source":"iana"},"application/vnd.uplanet.bearer-choice":{"source":"iana"},"application/vnd.uplanet.bearer-choice-wbxml":{"source":"iana"},"application/vnd.uplanet.cacheop":{"source":"iana"},"application/vnd.uplanet.cacheop-wbxml":{"source":"iana"},"application/vnd.uplanet.channel":{"source":"iana"},"application/vnd.uplanet.channel-wbxml":{"source":"iana"},"application/vnd.uplanet.list":{"source":"iana"},"application/vnd.uplanet.list-wbxml":{"source":"iana"},"application/vnd.uplanet.listcmd":{"source":"iana"},"application/vnd.uplanet.listcmd-wbxml":{"source":"iana"},"application/vnd.uplanet.signal":{"source":"iana"},"application/vnd.uri-map":{"source":"iana"},"application/vnd.valve.source.material":{"source":"iana"},"application/vnd.vcx":{"source":"iana","extensions":["vcx"]},"application/vnd.vd-study":{"source":"iana"},"application/vnd.vectorworks":{"source":"iana"},"application/vnd.vel+json":{"source":"iana","compressible":true},"application/vnd.verimatrix.vcas":{"source":"iana"},"application/vnd.veryant.thin":{"source":"iana"},"application/vnd.ves.encrypted":{"source":"iana"},"application/vnd.vidsoft.vidconference":{"source":"iana"},"application/vnd.visio":{"source":"iana","extensions":["vsd","vst","vss","vsw"]},"application/vnd.visionary":{"source":"iana","extensions":["vis"]},"application/vnd.vividence.scriptfile":{"source":"iana"},"application/vnd.vsf":{"source":"iana","extensions":["vsf"]},"application/vnd.wap.sic":{"source":"iana"},"application/vnd.wap.slc":{"source":"iana"},"application/vnd.wap.wbxml":{"source":"iana","charset":"UTF-8","extensions":["wbxml"]},"application/vnd.wap.wmlc":{"source":"iana","extensions":["wmlc"]},"application/vnd.wap.wmlscriptc":{"source":"iana","extensions":["wmlsc"]},"application/vnd.webturbo":{"source":"iana","extensions":["wtb"]},"application/vnd.wfa.p2p":{"source":"iana"},"application/vnd.wfa.wsc":{"source":"iana"},"application/vnd.windows.devicepairing":{"source":"iana"},"application/vnd.wmc":{"source":"iana"},"application/vnd.wmf.bootstrap":{"source":"iana"},"application/vnd.wolfram.mathematica":{"source":"iana"},"application/vnd.wolfram.mathematica.package":{"source":"iana"},"application/vnd.wolfram.player":{"source":"iana","extensions":["nbp"]},"application/vnd.wordperfect":{"source":"iana","extensions":["wpd"]},"application/vnd.wqd":{"source":"iana","extensions":["wqd"]},"application/vnd.wrq-hp3000-labelled":{"source":"iana"},"application/vnd.wt.stf":{"source":"iana","extensions":["stf"]},"application/vnd.wv.csp+wbxml":{"source":"iana"},"application/vnd.wv.csp+xml":{"source":"iana","compressible":true},"application/vnd.wv.ssp+xml":{"source":"iana","compressible":true},"application/vnd.xacml+json":{"source":"iana","compressible":true},"application/vnd.xara":{"source":"iana","extensions":["xar"]},"application/vnd.xfdl":{"source":"iana","extensions":["xfdl"]},"application/vnd.xfdl.webform":{"source":"iana"},"application/vnd.xmi+xml":{"source":"iana","compressible":true},"application/vnd.xmpie.cpkg":{"source":"iana"},"application/vnd.xmpie.dpkg":{"source":"iana"},"application/vnd.xmpie.plan":{"source":"iana"},"application/vnd.xmpie.ppkg":{"source":"iana"},"application/vnd.xmpie.xlim":{"source":"iana"},"application/vnd.yamaha.hv-dic":{"source":"iana","extensions":["hvd"]},"application/vnd.yamaha.hv-script":{"source":"iana","extensions":["hvs"]},"application/vnd.yamaha.hv-voice":{"source":"iana","extensions":["hvp"]},"application/vnd.yamaha.openscoreformat":{"source":"iana","extensions":["osf"]},"application/vnd.yamaha.openscoreformat.osfpvg+xml":{"source":"iana","compressible":true,"extensions":["osfpvg"]},"application/vnd.yamaha.remote-setup":{"source":"iana"},"application/vnd.yamaha.smaf-audio":{"source":"iana","extensions":["saf"]},"application/vnd.yamaha.smaf-phrase":{"source":"iana","extensions":["spf"]},"application/vnd.yamaha.through-ngn":{"source":"iana"},"application/vnd.yamaha.tunnel-udpencap":{"source":"iana"},"application/vnd.yaoweme":{"source":"iana"},"application/vnd.yellowriver-custom-menu":{"source":"iana","extensions":["cmp"]},"application/vnd.youtube.yt":{"source":"iana"},"application/vnd.zul":{"source":"iana","extensions":["zir","zirz"]},"application/vnd.zzazz.deck+xml":{"source":"iana","compressible":true,"extensions":["zaz"]},"application/voicexml+xml":{"source":"iana","compressible":true,"extensions":["vxml"]},"application/voucher-cms+json":{"source":"iana","compressible":true},"application/vq-rtcpxr":{"source":"iana"},"application/wasm":{"compressible":true,"extensions":["wasm"]},"application/watcherinfo+xml":{"source":"iana","compressible":true},"application/webpush-options+json":{"source":"iana","compressible":true},"application/whoispp-query":{"source":"iana"},"application/whoispp-response":{"source":"iana"},"application/widget":{"source":"iana","extensions":["wgt"]},"application/winhlp":{"source":"apache","extensions":["hlp"]},"application/wita":{"source":"iana"},"application/wordperfect5.1":{"source":"iana"},"application/wsdl+xml":{"source":"iana","compressible":true,"extensions":["wsdl"]},"application/wspolicy+xml":{"source":"iana","compressible":true,"extensions":["wspolicy"]},"application/x-7z-compressed":{"source":"apache","compressible":false,"extensions":["7z"]},"application/x-abiword":{"source":"apache","extensions":["abw"]},"application/x-ace-compressed":{"source":"apache","extensions":["ace"]},"application/x-amf":{"source":"apache"},"application/x-apple-diskimage":{"source":"apache","extensions":["dmg"]},"application/x-arj":{"compressible":false,"extensions":["arj"]},"application/x-authorware-bin":{"source":"apache","extensions":["aab","x32","u32","vox"]},"application/x-authorware-map":{"source":"apache","extensions":["aam"]},"application/x-authorware-seg":{"source":"apache","extensions":["aas"]},"application/x-bcpio":{"source":"apache","extensions":["bcpio"]},"application/x-bdoc":{"compressible":false,"extensions":["bdoc"]},"application/x-bittorrent":{"source":"apache","extensions":["torrent"]},"application/x-blorb":{"source":"apache","extensions":["blb","blorb"]},"application/x-bzip":{"source":"apache","compressible":false,"extensions":["bz"]},"application/x-bzip2":{"source":"apache","compressible":false,"extensions":["bz2","boz"]},"application/x-cbr":{"source":"apache","extensions":["cbr","cba","cbt","cbz","cb7"]},"application/x-cdlink":{"source":"apache","extensions":["vcd"]},"application/x-cfs-compressed":{"source":"apache","extensions":["cfs"]},"application/x-chat":{"source":"apache","extensions":["chat"]},"application/x-chess-pgn":{"source":"apache","extensions":["pgn"]},"application/x-chrome-extension":{"extensions":["crx"]},"application/x-cocoa":{"source":"nginx","extensions":["cco"]},"application/x-compress":{"source":"apache"},"application/x-conference":{"source":"apache","extensions":["nsc"]},"application/x-cpio":{"source":"apache","extensions":["cpio"]},"application/x-csh":{"source":"apache","extensions":["csh"]},"application/x-deb":{"compressible":false},"application/x-debian-package":{"source":"apache","extensions":["deb","udeb"]},"application/x-dgc-compressed":{"source":"apache","extensions":["dgc"]},"application/x-director":{"source":"apache","extensions":["dir","dcr","dxr","cst","cct","cxt","w3d","fgd","swa"]},"application/x-doom":{"source":"apache","extensions":["wad"]},"application/x-dtbncx+xml":{"source":"apache","compressible":true,"extensions":["ncx"]},"application/x-dtbook+xml":{"source":"apache","compressible":true,"extensions":["dtb"]},"application/x-dtbresource+xml":{"source":"apache","compressible":true,"extensions":["res"]},"application/x-dvi":{"source":"apache","compressible":false,"extensions":["dvi"]},"application/x-envoy":{"source":"apache","extensions":["evy"]},"application/x-eva":{"source":"apache","extensions":["eva"]},"application/x-font-bdf":{"source":"apache","extensions":["bdf"]},"application/x-font-dos":{"source":"apache"},"application/x-font-framemaker":{"source":"apache"},"application/x-font-ghostscript":{"source":"apache","extensions":["gsf"]},"application/x-font-libgrx":{"source":"apache"},"application/x-font-linux-psf":{"source":"apache","extensions":["psf"]},"application/x-font-pcf":{"source":"apache","extensions":["pcf"]},"application/x-font-snf":{"source":"apache","extensions":["snf"]},"application/x-font-speedo":{"source":"apache"},"application/x-font-sunos-news":{"source":"apache"},"application/x-font-type1":{"source":"apache","extensions":["pfa","pfb","pfm","afm"]},"application/x-font-vfont":{"source":"apache"},"application/x-freearc":{"source":"apache","extensions":["arc"]},"application/x-futuresplash":{"source":"apache","extensions":["spl"]},"application/x-gca-compressed":{"source":"apache","extensions":["gca"]},"application/x-glulx":{"source":"apache","extensions":["ulx"]},"application/x-gnumeric":{"source":"apache","extensions":["gnumeric"]},"application/x-gramps-xml":{"source":"apache","extensions":["gramps"]},"application/x-gtar":{"source":"apache","extensions":["gtar"]},"application/x-gzip":{"source":"apache"},"application/x-hdf":{"source":"apache","extensions":["hdf"]},"application/x-httpd-php":{"compressible":true,"extensions":["php"]},"application/x-install-instructions":{"source":"apache","extensions":["install"]},"application/x-iso9660-image":{"source":"apache","extensions":["iso"]},"application/x-java-archive-diff":{"source":"nginx","extensions":["jardiff"]},"application/x-java-jnlp-file":{"source":"apache","compressible":false,"extensions":["jnlp"]},"application/x-javascript":{"compressible":true},"application/x-keepass2":{"extensions":["kdbx"]},"application/x-latex":{"source":"apache","compressible":false,"extensions":["latex"]},"application/x-lua-bytecode":{"extensions":["luac"]},"application/x-lzh-compressed":{"source":"apache","extensions":["lzh","lha"]},"application/x-makeself":{"source":"nginx","extensions":["run"]},"application/x-mie":{"source":"apache","extensions":["mie"]},"application/x-mobipocket-ebook":{"source":"apache","extensions":["prc","mobi"]},"application/x-mpegurl":{"compressible":false},"application/x-ms-application":{"source":"apache","extensions":["application"]},"application/x-ms-shortcut":{"source":"apache","extensions":["lnk"]},"application/x-ms-wmd":{"source":"apache","extensions":["wmd"]},"application/x-ms-wmz":{"source":"apache","extensions":["wmz"]},"application/x-ms-xbap":{"source":"apache","extensions":["xbap"]},"application/x-msaccess":{"source":"apache","extensions":["mdb"]},"application/x-msbinder":{"source":"apache","extensions":["obd"]},"application/x-mscardfile":{"source":"apache","extensions":["crd"]},"application/x-msclip":{"source":"apache","extensions":["clp"]},"application/x-msdos-program":{"extensions":["exe"]},"application/x-msdownload":{"source":"apache","extensions":["exe","dll","com","bat","msi"]},"application/x-msmediaview":{"source":"apache","extensions":["mvb","m13","m14"]},"application/x-msmetafile":{"source":"apache","extensions":["wmf","wmz","emf","emz"]},"application/x-msmoney":{"source":"apache","extensions":["mny"]},"application/x-mspublisher":{"source":"apache","extensions":["pub"]},"application/x-msschedule":{"source":"apache","extensions":["scd"]},"application/x-msterminal":{"source":"apache","extensions":["trm"]},"application/x-mswrite":{"source":"apache","extensions":["wri"]},"application/x-netcdf":{"source":"apache","extensions":["nc","cdf"]},"application/x-ns-proxy-autoconfig":{"compressible":true,"extensions":["pac"]},"application/x-nzb":{"source":"apache","extensions":["nzb"]},"application/x-perl":{"source":"nginx","extensions":["pl","pm"]},"application/x-pilot":{"source":"nginx","extensions":["prc","pdb"]},"application/x-pkcs12":{"source":"apache","compressible":false,"extensions":["p12","pfx"]},"application/x-pkcs7-certificates":{"source":"apache","extensions":["p7b","spc"]},"application/x-pkcs7-certreqresp":{"source":"apache","extensions":["p7r"]},"application/x-pki-message":{"source":"iana"},"application/x-rar-compressed":{"source":"apache","compressible":false,"extensions":["rar"]},"application/x-redhat-package-manager":{"source":"nginx","extensions":["rpm"]},"application/x-research-info-systems":{"source":"apache","extensions":["ris"]},"application/x-sea":{"source":"nginx","extensions":["sea"]},"application/x-sh":{"source":"apache","compressible":true,"extensions":["sh"]},"application/x-shar":{"source":"apache","extensions":["shar"]},"application/x-shockwave-flash":{"source":"apache","compressible":false,"extensions":["swf"]},"application/x-silverlight-app":{"source":"apache","extensions":["xap"]},"application/x-sql":{"source":"apache","extensions":["sql"]},"application/x-stuffit":{"source":"apache","compressible":false,"extensions":["sit"]},"application/x-stuffitx":{"source":"apache","extensions":["sitx"]},"application/x-subrip":{"source":"apache","extensions":["srt"]},"application/x-sv4cpio":{"source":"apache","extensions":["sv4cpio"]},"application/x-sv4crc":{"source":"apache","extensions":["sv4crc"]},"application/x-t3vm-image":{"source":"apache","extensions":["t3"]},"application/x-tads":{"source":"apache","extensions":["gam"]},"application/x-tar":{"source":"apache","compressible":true,"extensions":["tar"]},"application/x-tcl":{"source":"apache","extensions":["tcl","tk"]},"application/x-tex":{"source":"apache","extensions":["tex"]},"application/x-tex-tfm":{"source":"apache","extensions":["tfm"]},"application/x-texinfo":{"source":"apache","extensions":["texinfo","texi"]},"application/x-tgif":{"source":"apache","extensions":["obj"]},"application/x-ustar":{"source":"apache","extensions":["ustar"]},"application/x-virtualbox-hdd":{"compressible":true,"extensions":["hdd"]},"application/x-virtualbox-ova":{"compressible":true,"extensions":["ova"]},"application/x-virtualbox-ovf":{"compressible":true,"extensions":["ovf"]},"application/x-virtualbox-vbox":{"compressible":true,"extensions":["vbox"]},"application/x-virtualbox-vbox-extpack":{"compressible":false,"extensions":["vbox-extpack"]},"application/x-virtualbox-vdi":{"compressible":true,"extensions":["vdi"]},"application/x-virtualbox-vhd":{"compressible":true,"extensions":["vhd"]},"application/x-virtualbox-vmdk":{"compressible":true,"extensions":["vmdk"]},"application/x-wais-source":{"source":"apache","extensions":["src"]},"application/x-web-app-manifest+json":{"compressible":true,"extensions":["webapp"]},"application/x-www-form-urlencoded":{"source":"iana","compressible":true},"application/x-x509-ca-cert":{"source":"iana","extensions":["der","crt","pem"]},"application/x-x509-ca-ra-cert":{"source":"iana"},"application/x-x509-next-ca-cert":{"source":"iana"},"application/x-xfig":{"source":"apache","extensions":["fig"]},"application/x-xliff+xml":{"source":"apache","compressible":true,"extensions":["xlf"]},"application/x-xpinstall":{"source":"apache","compressible":false,"extensions":["xpi"]},"application/x-xz":{"source":"apache","extensions":["xz"]},"application/x-zmachine":{"source":"apache","extensions":["z1","z2","z3","z4","z5","z6","z7","z8"]},"application/x400-bp":{"source":"iana"},"application/xacml+xml":{"source":"iana","compressible":true},"application/xaml+xml":{"source":"apache","compressible":true,"extensions":["xaml"]},"application/xcap-att+xml":{"source":"iana","compressible":true,"extensions":["xav"]},"application/xcap-caps+xml":{"source":"iana","compressible":true,"extensions":["xca"]},"application/xcap-diff+xml":{"source":"iana","compressible":true,"extensions":["xdf"]},"application/xcap-el+xml":{"source":"iana","compressible":true,"extensions":["xel"]},"application/xcap-error+xml":{"source":"iana","compressible":true,"extensions":["xer"]},"application/xcap-ns+xml":{"source":"iana","compressible":true,"extensions":["xns"]},"application/xcon-conference-info+xml":{"source":"iana","compressible":true},"application/xcon-conference-info-diff+xml":{"source":"iana","compressible":true},"application/xenc+xml":{"source":"iana","compressible":true,"extensions":["xenc"]},"application/xhtml+xml":{"source":"iana","compressible":true,"extensions":["xhtml","xht"]},"application/xhtml-voice+xml":{"source":"apache","compressible":true},"application/xliff+xml":{"source":"iana","compressible":true,"extensions":["xlf"]},"application/xml":{"source":"iana","compressible":true,"extensions":["xml","xsl","xsd","rng"]},"application/xml-dtd":{"source":"iana","compressible":true,"extensions":["dtd"]},"application/xml-external-parsed-entity":{"source":"iana"},"application/xml-patch+xml":{"source":"iana","compressible":true},"application/xmpp+xml":{"source":"iana","compressible":true},"application/xop+xml":{"source":"iana","compressible":true,"extensions":["xop"]},"application/xproc+xml":{"source":"apache","compressible":true,"extensions":["xpl"]},"application/xslt+xml":{"source":"iana","compressible":true,"extensions":["xsl","xslt"]},"application/xspf+xml":{"source":"apache","compressible":true,"extensions":["xspf"]},"application/xv+xml":{"source":"iana","compressible":true,"extensions":["mxml","xhvml","xvml","xvm"]},"application/yang":{"source":"iana","extensions":["yang"]},"application/yang-data+json":{"source":"iana","compressible":true},"application/yang-data+xml":{"source":"iana","compressible":true},"application/yang-patch+json":{"source":"iana","compressible":true},"application/yang-patch+xml":{"source":"iana","compressible":true},"application/yin+xml":{"source":"iana","compressible":true,"extensions":["yin"]},"application/zip":{"source":"iana","compressible":false,"extensions":["zip"]},"application/zlib":{"source":"iana"},"application/zstd":{"source":"iana"},"audio/1d-interleaved-parityfec":{"source":"iana"},"audio/32kadpcm":{"source":"iana"},"audio/3gpp":{"source":"iana","compressible":false,"extensions":["3gpp"]},"audio/3gpp2":{"source":"iana"},"audio/aac":{"source":"iana"},"audio/ac3":{"source":"iana"},"audio/adpcm":{"source":"apache","extensions":["adp"]},"audio/amr":{"source":"iana"},"audio/amr-wb":{"source":"iana"},"audio/amr-wb+":{"source":"iana"},"audio/aptx":{"source":"iana"},"audio/asc":{"source":"iana"},"audio/atrac-advanced-lossless":{"source":"iana"},"audio/atrac-x":{"source":"iana"},"audio/atrac3":{"source":"iana"},"audio/basic":{"source":"iana","compressible":false,"extensions":["au","snd"]},"audio/bv16":{"source":"iana"},"audio/bv32":{"source":"iana"},"audio/clearmode":{"source":"iana"},"audio/cn":{"source":"iana"},"audio/dat12":{"source":"iana"},"audio/dls":{"source":"iana"},"audio/dsr-es201108":{"source":"iana"},"audio/dsr-es202050":{"source":"iana"},"audio/dsr-es202211":{"source":"iana"},"audio/dsr-es202212":{"source":"iana"},"audio/dv":{"source":"iana"},"audio/dvi4":{"source":"iana"},"audio/eac3":{"source":"iana"},"audio/encaprtp":{"source":"iana"},"audio/evrc":{"source":"iana"},"audio/evrc-qcp":{"source":"iana"},"audio/evrc0":{"source":"iana"},"audio/evrc1":{"source":"iana"},"audio/evrcb":{"source":"iana"},"audio/evrcb0":{"source":"iana"},"audio/evrcb1":{"source":"iana"},"audio/evrcnw":{"source":"iana"},"audio/evrcnw0":{"source":"iana"},"audio/evrcnw1":{"source":"iana"},"audio/evrcwb":{"source":"iana"},"audio/evrcwb0":{"source":"iana"},"audio/evrcwb1":{"source":"iana"},"audio/evs":{"source":"iana"},"audio/flexfec":{"source":"iana"},"audio/fwdred":{"source":"iana"},"audio/g711-0":{"source":"iana"},"audio/g719":{"source":"iana"},"audio/g722":{"source":"iana"},"audio/g7221":{"source":"iana"},"audio/g723":{"source":"iana"},"audio/g726-16":{"source":"iana"},"audio/g726-24":{"source":"iana"},"audio/g726-32":{"source":"iana"},"audio/g726-40":{"source":"iana"},"audio/g728":{"source":"iana"},"audio/g729":{"source":"iana"},"audio/g7291":{"source":"iana"},"audio/g729d":{"source":"iana"},"audio/g729e":{"source":"iana"},"audio/gsm":{"source":"iana"},"audio/gsm-efr":{"source":"iana"},"audio/gsm-hr-08":{"source":"iana"},"audio/ilbc":{"source":"iana"},"audio/ip-mr_v2.5":{"source":"iana"},"audio/isac":{"source":"apache"},"audio/l16":{"source":"iana"},"audio/l20":{"source":"iana"},"audio/l24":{"source":"iana","compressible":false},"audio/l8":{"source":"iana"},"audio/lpc":{"source":"iana"},"audio/melp":{"source":"iana"},"audio/melp1200":{"source":"iana"},"audio/melp2400":{"source":"iana"},"audio/melp600":{"source":"iana"},"audio/mhas":{"source":"iana"},"audio/midi":{"source":"apache","extensions":["mid","midi","kar","rmi"]},"audio/mobile-xmf":{"source":"iana","extensions":["mxmf"]},"audio/mp3":{"compressible":false,"extensions":["mp3"]},"audio/mp4":{"source":"iana","compressible":false,"extensions":["m4a","mp4a"]},"audio/mp4a-latm":{"source":"iana"},"audio/mpa":{"source":"iana"},"audio/mpa-robust":{"source":"iana"},"audio/mpeg":{"source":"iana","compressible":false,"extensions":["mpga","mp2","mp2a","mp3","m2a","m3a"]},"audio/mpeg4-generic":{"source":"iana"},"audio/musepack":{"source":"apache"},"audio/ogg":{"source":"iana","compressible":false,"extensions":["oga","ogg","spx"]},"audio/opus":{"source":"iana"},"audio/parityfec":{"source":"iana"},"audio/pcma":{"source":"iana"},"audio/pcma-wb":{"source":"iana"},"audio/pcmu":{"source":"iana"},"audio/pcmu-wb":{"source":"iana"},"audio/prs.sid":{"source":"iana"},"audio/qcelp":{"source":"iana"},"audio/raptorfec":{"source":"iana"},"audio/red":{"source":"iana"},"audio/rtp-enc-aescm128":{"source":"iana"},"audio/rtp-midi":{"source":"iana"},"audio/rtploopback":{"source":"iana"},"audio/rtx":{"source":"iana"},"audio/s3m":{"source":"apache","extensions":["s3m"]},"audio/silk":{"source":"apache","extensions":["sil"]},"audio/smv":{"source":"iana"},"audio/smv-qcp":{"source":"iana"},"audio/smv0":{"source":"iana"},"audio/sofa":{"source":"iana"},"audio/sp-midi":{"source":"iana"},"audio/speex":{"source":"iana"},"audio/t140c":{"source":"iana"},"audio/t38":{"source":"iana"},"audio/telephone-event":{"source":"iana"},"audio/tetra_acelp":{"source":"iana"},"audio/tetra_acelp_bb":{"source":"iana"},"audio/tone":{"source":"iana"},"audio/tsvcis":{"source":"iana"},"audio/uemclip":{"source":"iana"},"audio/ulpfec":{"source":"iana"},"audio/usac":{"source":"iana"},"audio/vdvi":{"source":"iana"},"audio/vmr-wb":{"source":"iana"},"audio/vnd.3gpp.iufp":{"source":"iana"},"audio/vnd.4sb":{"source":"iana"},"audio/vnd.audiokoz":{"source":"iana"},"audio/vnd.celp":{"source":"iana"},"audio/vnd.cisco.nse":{"source":"iana"},"audio/vnd.cmles.radio-events":{"source":"iana"},"audio/vnd.cns.anp1":{"source":"iana"},"audio/vnd.cns.inf1":{"source":"iana"},"audio/vnd.dece.audio":{"source":"iana","extensions":["uva","uvva"]},"audio/vnd.digital-winds":{"source":"iana","extensions":["eol"]},"audio/vnd.dlna.adts":{"source":"iana"},"audio/vnd.dolby.heaac.1":{"source":"iana"},"audio/vnd.dolby.heaac.2":{"source":"iana"},"audio/vnd.dolby.mlp":{"source":"iana"},"audio/vnd.dolby.mps":{"source":"iana"},"audio/vnd.dolby.pl2":{"source":"iana"},"audio/vnd.dolby.pl2x":{"source":"iana"},"audio/vnd.dolby.pl2z":{"source":"iana"},"audio/vnd.dolby.pulse.1":{"source":"iana"},"audio/vnd.dra":{"source":"iana","extensions":["dra"]},"audio/vnd.dts":{"source":"iana","extensions":["dts"]},"audio/vnd.dts.hd":{"source":"iana","extensions":["dtshd"]},"audio/vnd.dts.uhd":{"source":"iana"},"audio/vnd.dvb.file":{"source":"iana"},"audio/vnd.everad.plj":{"source":"iana"},"audio/vnd.hns.audio":{"source":"iana"},"audio/vnd.lucent.voice":{"source":"iana","extensions":["lvp"]},"audio/vnd.ms-playready.media.pya":{"source":"iana","extensions":["pya"]},"audio/vnd.nokia.mobile-xmf":{"source":"iana"},"audio/vnd.nortel.vbk":{"source":"iana"},"audio/vnd.nuera.ecelp4800":{"source":"iana","extensions":["ecelp4800"]},"audio/vnd.nuera.ecelp7470":{"source":"iana","extensions":["ecelp7470"]},"audio/vnd.nuera.ecelp9600":{"source":"iana","extensions":["ecelp9600"]},"audio/vnd.octel.sbc":{"source":"iana"},"audio/vnd.presonus.multitrack":{"source":"iana"},"audio/vnd.qcelp":{"source":"iana"},"audio/vnd.rhetorex.32kadpcm":{"source":"iana"},"audio/vnd.rip":{"source":"iana","extensions":["rip"]},"audio/vnd.rn-realaudio":{"compressible":false},"audio/vnd.sealedmedia.softseal.mpeg":{"source":"iana"},"audio/vnd.vmx.cvsd":{"source":"iana"},"audio/vnd.wave":{"compressible":false},"audio/vorbis":{"source":"iana","compressible":false},"audio/vorbis-config":{"source":"iana"},"audio/wav":{"compressible":false,"extensions":["wav"]},"audio/wave":{"compressible":false,"extensions":["wav"]},"audio/webm":{"source":"apache","compressible":false,"extensions":["weba"]},"audio/x-aac":{"source":"apache","compressible":false,"extensions":["aac"]},"audio/x-aiff":{"source":"apache","extensions":["aif","aiff","aifc"]},"audio/x-caf":{"source":"apache","compressible":false,"extensions":["caf"]},"audio/x-flac":{"source":"apache","extensions":["flac"]},"audio/x-m4a":{"source":"nginx","extensions":["m4a"]},"audio/x-matroska":{"source":"apache","extensions":["mka"]},"audio/x-mpegurl":{"source":"apache","extensions":["m3u"]},"audio/x-ms-wax":{"source":"apache","extensions":["wax"]},"audio/x-ms-wma":{"source":"apache","extensions":["wma"]},"audio/x-pn-realaudio":{"source":"apache","extensions":["ram","ra"]},"audio/x-pn-realaudio-plugin":{"source":"apache","extensions":["rmp"]},"audio/x-realaudio":{"source":"nginx","extensions":["ra"]},"audio/x-tta":{"source":"apache"},"audio/x-wav":{"source":"apache","extensions":["wav"]},"audio/xm":{"source":"apache","extensions":["xm"]},"chemical/x-cdx":{"source":"apache","extensions":["cdx"]},"chemical/x-cif":{"source":"apache","extensions":["cif"]},"chemical/x-cmdf":{"source":"apache","extensions":["cmdf"]},"chemical/x-cml":{"source":"apache","extensions":["cml"]},"chemical/x-csml":{"source":"apache","extensions":["csml"]},"chemical/x-pdb":{"source":"apache"},"chemical/x-xyz":{"source":"apache","extensions":["xyz"]},"font/collection":{"source":"iana","extensions":["ttc"]},"font/otf":{"source":"iana","compressible":true,"extensions":["otf"]},"font/sfnt":{"source":"iana"},"font/ttf":{"source":"iana","compressible":true,"extensions":["ttf"]},"font/woff":{"source":"iana","extensions":["woff"]},"font/woff2":{"source":"iana","extensions":["woff2"]},"image/aces":{"source":"iana","extensions":["exr"]},"image/apng":{"compressible":false,"extensions":["apng"]},"image/avci":{"source":"iana"},"image/avcs":{"source":"iana"},"image/avif":{"compressible":false,"extensions":["avif"]},"image/bmp":{"source":"iana","compressible":true,"extensions":["bmp"]},"image/cgm":{"source":"iana","extensions":["cgm"]},"image/dicom-rle":{"source":"iana","extensions":["drle"]},"image/emf":{"source":"iana","extensions":["emf"]},"image/fits":{"source":"iana","extensions":["fits"]},"image/g3fax":{"source":"iana","extensions":["g3"]},"image/gif":{"source":"iana","compressible":false,"extensions":["gif"]},"image/heic":{"source":"iana","extensions":["heic"]},"image/heic-sequence":{"source":"iana","extensions":["heics"]},"image/heif":{"source":"iana","extensions":["heif"]},"image/heif-sequence":{"source":"iana","extensions":["heifs"]},"image/hej2k":{"source":"iana","extensions":["hej2"]},"image/hsj2":{"source":"iana","extensions":["hsj2"]},"image/ief":{"source":"iana","extensions":["ief"]},"image/jls":{"source":"iana","extensions":["jls"]},"image/jp2":{"source":"iana","compressible":false,"extensions":["jp2","jpg2"]},"image/jpeg":{"source":"iana","compressible":false,"extensions":["jpeg","jpg","jpe"]},"image/jph":{"source":"iana","extensions":["jph"]},"image/jphc":{"source":"iana","extensions":["jhc"]},"image/jpm":{"source":"iana","compressible":false,"extensions":["jpm"]},"image/jpx":{"source":"iana","compressible":false,"extensions":["jpx","jpf"]},"image/jxr":{"source":"iana","extensions":["jxr"]},"image/jxra":{"source":"iana","extensions":["jxra"]},"image/jxrs":{"source":"iana","extensions":["jxrs"]},"image/jxs":{"source":"iana","extensions":["jxs"]},"image/jxsc":{"source":"iana","extensions":["jxsc"]},"image/jxsi":{"source":"iana","extensions":["jxsi"]},"image/jxss":{"source":"iana","extensions":["jxss"]},"image/ktx":{"source":"iana","extensions":["ktx"]},"image/ktx2":{"source":"iana","extensions":["ktx2"]},"image/naplps":{"source":"iana"},"image/pjpeg":{"compressible":false},"image/png":{"source":"iana","compressible":false,"extensions":["png"]},"image/prs.btif":{"source":"iana","extensions":["btif"]},"image/prs.pti":{"source":"iana","extensions":["pti"]},"image/pwg-raster":{"source":"iana"},"image/sgi":{"source":"apache","extensions":["sgi"]},"image/svg+xml":{"source":"iana","compressible":true,"extensions":["svg","svgz"]},"image/t38":{"source":"iana","extensions":["t38"]},"image/tiff":{"source":"iana","compressible":false,"extensions":["tif","tiff"]},"image/tiff-fx":{"source":"iana","extensions":["tfx"]},"image/vnd.adobe.photoshop":{"source":"iana","compressible":true,"extensions":["psd"]},"image/vnd.airzip.accelerator.azv":{"source":"iana","extensions":["azv"]},"image/vnd.cns.inf2":{"source":"iana"},"image/vnd.dece.graphic":{"source":"iana","extensions":["uvi","uvvi","uvg","uvvg"]},"image/vnd.djvu":{"source":"iana","extensions":["djvu","djv"]},"image/vnd.dvb.subtitle":{"source":"iana","extensions":["sub"]},"image/vnd.dwg":{"source":"iana","extensions":["dwg"]},"image/vnd.dxf":{"source":"iana","extensions":["dxf"]},"image/vnd.fastbidsheet":{"source":"iana","extensions":["fbs"]},"image/vnd.fpx":{"source":"iana","extensions":["fpx"]},"image/vnd.fst":{"source":"iana","extensions":["fst"]},"image/vnd.fujixerox.edmics-mmr":{"source":"iana","extensions":["mmr"]},"image/vnd.fujixerox.edmics-rlc":{"source":"iana","extensions":["rlc"]},"image/vnd.globalgraphics.pgb":{"source":"iana"},"image/vnd.microsoft.icon":{"source":"iana","extensions":["ico"]},"image/vnd.mix":{"source":"iana"},"image/vnd.mozilla.apng":{"source":"iana"},"image/vnd.ms-dds":{"extensions":["dds"]},"image/vnd.ms-modi":{"source":"iana","extensions":["mdi"]},"image/vnd.ms-photo":{"source":"apache","extensions":["wdp"]},"image/vnd.net-fpx":{"source":"iana","extensions":["npx"]},"image/vnd.pco.b16":{"source":"iana","extensions":["b16"]},"image/vnd.radiance":{"source":"iana"},"image/vnd.sealed.png":{"source":"iana"},"image/vnd.sealedmedia.softseal.gif":{"source":"iana"},"image/vnd.sealedmedia.softseal.jpg":{"source":"iana"},"image/vnd.svf":{"source":"iana"},"image/vnd.tencent.tap":{"source":"iana","extensions":["tap"]},"image/vnd.valve.source.texture":{"source":"iana","extensions":["vtf"]},"image/vnd.wap.wbmp":{"source":"iana","extensions":["wbmp"]},"image/vnd.xiff":{"source":"iana","extensions":["xif"]},"image/vnd.zbrush.pcx":{"source":"iana","extensions":["pcx"]},"image/webp":{"source":"apache","extensions":["webp"]},"image/wmf":{"source":"iana","extensions":["wmf"]},"image/x-3ds":{"source":"apache","extensions":["3ds"]},"image/x-cmu-raster":{"source":"apache","extensions":["ras"]},"image/x-cmx":{"source":"apache","extensions":["cmx"]},"image/x-freehand":{"source":"apache","extensions":["fh","fhc","fh4","fh5","fh7"]},"image/x-icon":{"source":"apache","compressible":true,"extensions":["ico"]},"image/x-jng":{"source":"nginx","extensions":["jng"]},"image/x-mrsid-image":{"source":"apache","extensions":["sid"]},"image/x-ms-bmp":{"source":"nginx","compressible":true,"extensions":["bmp"]},"image/x-pcx":{"source":"apache","extensions":["pcx"]},"image/x-pict":{"source":"apache","extensions":["pic","pct"]},"image/x-portable-anymap":{"source":"apache","extensions":["pnm"]},"image/x-portable-bitmap":{"source":"apache","extensions":["pbm"]},"image/x-portable-graymap":{"source":"apache","extensions":["pgm"]},"image/x-portable-pixmap":{"source":"apache","extensions":["ppm"]},"image/x-rgb":{"source":"apache","extensions":["rgb"]},"image/x-tga":{"source":"apache","extensions":["tga"]},"image/x-xbitmap":{"source":"apache","extensions":["xbm"]},"image/x-xcf":{"compressible":false},"image/x-xpixmap":{"source":"apache","extensions":["xpm"]},"image/x-xwindowdump":{"source":"apache","extensions":["xwd"]},"message/cpim":{"source":"iana"},"message/delivery-status":{"source":"iana"},"message/disposition-notification":{"source":"iana","extensions":["disposition-notification"]},"message/external-body":{"source":"iana"},"message/feedback-report":{"source":"iana"},"message/global":{"source":"iana","extensions":["u8msg"]},"message/global-delivery-status":{"source":"iana","extensions":["u8dsn"]},"message/global-disposition-notification":{"source":"iana","extensions":["u8mdn"]},"message/global-headers":{"source":"iana","extensions":["u8hdr"]},"message/http":{"source":"iana","compressible":false},"message/imdn+xml":{"source":"iana","compressible":true},"message/news":{"source":"iana"},"message/partial":{"source":"iana","compressible":false},"message/rfc822":{"source":"iana","compressible":true,"extensions":["eml","mime"]},"message/s-http":{"source":"iana"},"message/sip":{"source":"iana"},"message/sipfrag":{"source":"iana"},"message/tracking-status":{"source":"iana"},"message/vnd.si.simp":{"source":"iana"},"message/vnd.wfa.wsc":{"source":"iana","extensions":["wsc"]},"model/3mf":{"source":"iana","extensions":["3mf"]},"model/e57":{"source":"iana"},"model/gltf+json":{"source":"iana","compressible":true,"extensions":["gltf"]},"model/gltf-binary":{"source":"iana","compressible":true,"extensions":["glb"]},"model/iges":{"source":"iana","compressible":false,"extensions":["igs","iges"]},"model/mesh":{"source":"iana","compressible":false,"extensions":["msh","mesh","silo"]},"model/mtl":{"source":"iana","extensions":["mtl"]},"model/obj":{"source":"iana","extensions":["obj"]},"model/stl":{"source":"iana","extensions":["stl"]},"model/vnd.collada+xml":{"source":"iana","compressible":true,"extensions":["dae"]},"model/vnd.dwf":{"source":"iana","extensions":["dwf"]},"model/vnd.flatland.3dml":{"source":"iana"},"model/vnd.gdl":{"source":"iana","extensions":["gdl"]},"model/vnd.gs-gdl":{"source":"apache"},"model/vnd.gs.gdl":{"source":"iana"},"model/vnd.gtw":{"source":"iana","extensions":["gtw"]},"model/vnd.moml+xml":{"source":"iana","compressible":true},"model/vnd.mts":{"source":"iana","extensions":["mts"]},"model/vnd.opengex":{"source":"iana","extensions":["ogex"]},"model/vnd.parasolid.transmit.binary":{"source":"iana","extensions":["x_b"]},"model/vnd.parasolid.transmit.text":{"source":"iana","extensions":["x_t"]},"model/vnd.rosette.annotated-data-model":{"source":"iana"},"model/vnd.usdz+zip":{"source":"iana","compressible":false,"extensions":["usdz"]},"model/vnd.valve.source.compiled-map":{"source":"iana","extensions":["bsp"]},"model/vnd.vtu":{"source":"iana","extensions":["vtu"]},"model/vrml":{"source":"iana","compressible":false,"extensions":["wrl","vrml"]},"model/x3d+binary":{"source":"apache","compressible":false,"extensions":["x3db","x3dbz"]},"model/x3d+fastinfoset":{"source":"iana","extensions":["x3db"]},"model/x3d+vrml":{"source":"apache","compressible":false,"extensions":["x3dv","x3dvz"]},"model/x3d+xml":{"source":"iana","compressible":true,"extensions":["x3d","x3dz"]},"model/x3d-vrml":{"source":"iana","extensions":["x3dv"]},"multipart/alternative":{"source":"iana","compressible":false},"multipart/appledouble":{"source":"iana"},"multipart/byteranges":{"source":"iana"},"multipart/digest":{"source":"iana"},"multipart/encrypted":{"source":"iana","compressible":false},"multipart/form-data":{"source":"iana","compressible":false},"multipart/header-set":{"source":"iana"},"multipart/mixed":{"source":"iana"},"multipart/multilingual":{"source":"iana"},"multipart/parallel":{"source":"iana"},"multipart/related":{"source":"iana","compressible":false},"multipart/report":{"source":"iana"},"multipart/signed":{"source":"iana","compressible":false},"multipart/vnd.bint.med-plus":{"source":"iana"},"multipart/voice-message":{"source":"iana"},"multipart/x-mixed-replace":{"source":"iana"},"text/1d-interleaved-parityfec":{"source":"iana"},"text/cache-manifest":{"source":"iana","compressible":true,"extensions":["appcache","manifest"]},"text/calendar":{"source":"iana","extensions":["ics","ifb"]},"text/calender":{"compressible":true},"text/cmd":{"compressible":true},"text/coffeescript":{"extensions":["coffee","litcoffee"]},"text/css":{"source":"iana","charset":"UTF-8","compressible":true,"extensions":["css"]},"text/csv":{"source":"iana","compressible":true,"extensions":["csv"]},"text/csv-schema":{"source":"iana"},"text/directory":{"source":"iana"},"text/dns":{"source":"iana"},"text/ecmascript":{"source":"iana"},"text/encaprtp":{"source":"iana"},"text/enriched":{"source":"iana"},"text/flexfec":{"source":"iana"},"text/fwdred":{"source":"iana"},"text/gff3":{"source":"iana"},"text/grammar-ref-list":{"source":"iana"},"text/html":{"source":"iana","compressible":true,"extensions":["html","htm","shtml"]},"text/jade":{"extensions":["jade"]},"text/javascript":{"source":"iana","compressible":true},"text/jcr-cnd":{"source":"iana"},"text/jsx":{"compressible":true,"extensions":["jsx"]},"text/less":{"compressible":true,"extensions":["less"]},"text/markdown":{"source":"iana","compressible":true,"extensions":["markdown","md"]},"text/mathml":{"source":"nginx","extensions":["mml"]},"text/mdx":{"compressible":true,"extensions":["mdx"]},"text/mizar":{"source":"iana"},"text/n3":{"source":"iana","charset":"UTF-8","compressible":true,"extensions":["n3"]},"text/parameters":{"source":"iana","charset":"UTF-8"},"text/parityfec":{"source":"iana"},"text/plain":{"source":"iana","compressible":true,"extensions":["txt","text","conf","def","list","log","in","ini"]},"text/provenance-notation":{"source":"iana","charset":"UTF-8"},"text/prs.fallenstein.rst":{"source":"iana"},"text/prs.lines.tag":{"source":"iana","extensions":["dsc"]},"text/prs.prop.logic":{"source":"iana"},"text/raptorfec":{"source":"iana"},"text/red":{"source":"iana"},"text/rfc822-headers":{"source":"iana"},"text/richtext":{"source":"iana","compressible":true,"extensions":["rtx"]},"text/rtf":{"source":"iana","compressible":true,"extensions":["rtf"]},"text/rtp-enc-aescm128":{"source":"iana"},"text/rtploopback":{"source":"iana"},"text/rtx":{"source":"iana"},"text/sgml":{"source":"iana","extensions":["sgml","sgm"]},"text/shaclc":{"source":"iana"},"text/shex":{"extensions":["shex"]},"text/slim":{"extensions":["slim","slm"]},"text/spdx":{"source":"iana","extensions":["spdx"]},"text/strings":{"source":"iana"},"text/stylus":{"extensions":["stylus","styl"]},"text/t140":{"source":"iana"},"text/tab-separated-values":{"source":"iana","compressible":true,"extensions":["tsv"]},"text/troff":{"source":"iana","extensions":["t","tr","roff","man","me","ms"]},"text/turtle":{"source":"iana","charset":"UTF-8","extensions":["ttl"]},"text/ulpfec":{"source":"iana"},"text/uri-list":{"source":"iana","compressible":true,"extensions":["uri","uris","urls"]},"text/vcard":{"source":"iana","compressible":true,"extensions":["vcard"]},"text/vnd.a":{"source":"iana"},"text/vnd.abc":{"source":"iana"},"text/vnd.ascii-art":{"source":"iana"},"text/vnd.curl":{"source":"iana","extensions":["curl"]},"text/vnd.curl.dcurl":{"source":"apache","extensions":["dcurl"]},"text/vnd.curl.mcurl":{"source":"apache","extensions":["mcurl"]},"text/vnd.curl.scurl":{"source":"apache","extensions":["scurl"]},"text/vnd.debian.copyright":{"source":"iana","charset":"UTF-8"},"text/vnd.dmclientscript":{"source":"iana"},"text/vnd.dvb.subtitle":{"source":"iana","extensions":["sub"]},"text/vnd.esmertec.theme-descriptor":{"source":"iana","charset":"UTF-8"},"text/vnd.ficlab.flt":{"source":"iana"},"text/vnd.fly":{"source":"iana","extensions":["fly"]},"text/vnd.fmi.flexstor":{"source":"iana","extensions":["flx"]},"text/vnd.gml":{"source":"iana"},"text/vnd.graphviz":{"source":"iana","extensions":["gv"]},"text/vnd.hans":{"source":"iana"},"text/vnd.hgl":{"source":"iana"},"text/vnd.in3d.3dml":{"source":"iana","extensions":["3dml"]},"text/vnd.in3d.spot":{"source":"iana","extensions":["spot"]},"text/vnd.iptc.newsml":{"source":"iana"},"text/vnd.iptc.nitf":{"source":"iana"},"text/vnd.latex-z":{"source":"iana"},"text/vnd.motorola.reflex":{"source":"iana"},"text/vnd.ms-mediapackage":{"source":"iana"},"text/vnd.net2phone.commcenter.command":{"source":"iana"},"text/vnd.radisys.msml-basic-layout":{"source":"iana"},"text/vnd.senx.warpscript":{"source":"iana"},"text/vnd.si.uricatalogue":{"source":"iana"},"text/vnd.sosi":{"source":"iana"},"text/vnd.sun.j2me.app-descriptor":{"source":"iana","charset":"UTF-8","extensions":["jad"]},"text/vnd.trolltech.linguist":{"source":"iana","charset":"UTF-8"},"text/vnd.wap.si":{"source":"iana"},"text/vnd.wap.sl":{"source":"iana"},"text/vnd.wap.wml":{"source":"iana","extensions":["wml"]},"text/vnd.wap.wmlscript":{"source":"iana","extensions":["wmls"]},"text/vtt":{"source":"iana","charset":"UTF-8","compressible":true,"extensions":["vtt"]},"text/x-asm":{"source":"apache","extensions":["s","asm"]},"text/x-c":{"source":"apache","extensions":["c","cc","cxx","cpp","h","hh","dic"]},"text/x-component":{"source":"nginx","extensions":["htc"]},"text/x-fortran":{"source":"apache","extensions":["f","for","f77","f90"]},"text/x-gwt-rpc":{"compressible":true},"text/x-handlebars-template":{"extensions":["hbs"]},"text/x-java-source":{"source":"apache","extensions":["java"]},"text/x-jquery-tmpl":{"compressible":true},"text/x-lua":{"extensions":["lua"]},"text/x-markdown":{"compressible":true,"extensions":["mkd"]},"text/x-nfo":{"source":"apache","extensions":["nfo"]},"text/x-opml":{"source":"apache","extensions":["opml"]},"text/x-org":{"compressible":true,"extensions":["org"]},"text/x-pascal":{"source":"apache","extensions":["p","pas"]},"text/x-processing":{"compressible":true,"extensions":["pde"]},"text/x-sass":{"extensions":["sass"]},"text/x-scss":{"extensions":["scss"]},"text/x-setext":{"source":"apache","extensions":["etx"]},"text/x-sfv":{"source":"apache","extensions":["sfv"]},"text/x-suse-ymp":{"compressible":true,"extensions":["ymp"]},"text/x-uuencode":{"source":"apache","extensions":["uu"]},"text/x-vcalendar":{"source":"apache","extensions":["vcs"]},"text/x-vcard":{"source":"apache","extensions":["vcf"]},"text/xml":{"source":"iana","compressible":true,"extensions":["xml"]},"text/xml-external-parsed-entity":{"source":"iana"},"text/yaml":{"extensions":["yaml","yml"]},"video/1d-interleaved-parityfec":{"source":"iana"},"video/3gpp":{"source":"iana","extensions":["3gp","3gpp"]},"video/3gpp-tt":{"source":"iana"},"video/3gpp2":{"source":"iana","extensions":["3g2"]},"video/bmpeg":{"source":"iana"},"video/bt656":{"source":"iana"},"video/celb":{"source":"iana"},"video/dv":{"source":"iana"},"video/encaprtp":{"source":"iana"},"video/flexfec":{"source":"iana"},"video/h261":{"source":"iana","extensions":["h261"]},"video/h263":{"source":"iana","extensions":["h263"]},"video/h263-1998":{"source":"iana"},"video/h263-2000":{"source":"iana"},"video/h264":{"source":"iana","extensions":["h264"]},"video/h264-rcdo":{"source":"iana"},"video/h264-svc":{"source":"iana"},"video/h265":{"source":"iana"},"video/iso.segment":{"source":"iana"},"video/jpeg":{"source":"iana","extensions":["jpgv"]},"video/jpeg2000":{"source":"iana"},"video/jpm":{"source":"apache","extensions":["jpm","jpgm"]},"video/mj2":{"source":"iana","extensions":["mj2","mjp2"]},"video/mp1s":{"source":"iana"},"video/mp2p":{"source":"iana"},"video/mp2t":{"source":"iana","extensions":["ts"]},"video/mp4":{"source":"iana","compressible":false,"extensions":["mp4","mp4v","mpg4"]},"video/mp4v-es":{"source":"iana"},"video/mpeg":{"source":"iana","compressible":false,"extensions":["mpeg","mpg","mpe","m1v","m2v"]},"video/mpeg4-generic":{"source":"iana"},"video/mpv":{"source":"iana"},"video/nv":{"source":"iana"},"video/ogg":{"source":"iana","compressible":false,"extensions":["ogv"]},"video/parityfec":{"source":"iana"},"video/pointer":{"source":"iana"},"video/quicktime":{"source":"iana","compressible":false,"extensions":["qt","mov"]},"video/raptorfec":{"source":"iana"},"video/raw":{"source":"iana"},"video/rtp-enc-aescm128":{"source":"iana"},"video/rtploopback":{"source":"iana"},"video/rtx":{"source":"iana"},"video/smpte291":{"source":"iana"},"video/smpte292m":{"source":"iana"},"video/ulpfec":{"source":"iana"},"video/vc1":{"source":"iana"},"video/vc2":{"source":"iana"},"video/vnd.cctv":{"source":"iana"},"video/vnd.dece.hd":{"source":"iana","extensions":["uvh","uvvh"]},"video/vnd.dece.mobile":{"source":"iana","extensions":["uvm","uvvm"]},"video/vnd.dece.mp4":{"source":"iana"},"video/vnd.dece.pd":{"source":"iana","extensions":["uvp","uvvp"]},"video/vnd.dece.sd":{"source":"iana","extensions":["uvs","uvvs"]},"video/vnd.dece.video":{"source":"iana","extensions":["uvv","uvvv"]},"video/vnd.directv.mpeg":{"source":"iana"},"video/vnd.directv.mpeg-tts":{"source":"iana"},"video/vnd.dlna.mpeg-tts":{"source":"iana"},"video/vnd.dvb.file":{"source":"iana","extensions":["dvb"]},"video/vnd.fvt":{"source":"iana","extensions":["fvt"]},"video/vnd.hns.video":{"source":"iana"},"video/vnd.iptvforum.1dparityfec-1010":{"source":"iana"},"video/vnd.iptvforum.1dparityfec-2005":{"source":"iana"},"video/vnd.iptvforum.2dparityfec-1010":{"source":"iana"},"video/vnd.iptvforum.2dparityfec-2005":{"source":"iana"},"video/vnd.iptvforum.ttsavc":{"source":"iana"},"video/vnd.iptvforum.ttsmpeg2":{"source":"iana"},"video/vnd.motorola.video":{"source":"iana"},"video/vnd.motorola.videop":{"source":"iana"},"video/vnd.mpegurl":{"source":"iana","extensions":["mxu","m4u"]},"video/vnd.ms-playready.media.pyv":{"source":"iana","extensions":["pyv"]},"video/vnd.nokia.interleaved-multimedia":{"source":"iana"},"video/vnd.nokia.mp4vr":{"source":"iana"},"video/vnd.nokia.videovoip":{"source":"iana"},"video/vnd.objectvideo":{"source":"iana"},"video/vnd.radgamettools.bink":{"source":"iana"},"video/vnd.radgamettools.smacker":{"source":"iana"},"video/vnd.sealed.mpeg1":{"source":"iana"},"video/vnd.sealed.mpeg4":{"source":"iana"},"video/vnd.sealed.swf":{"source":"iana"},"video/vnd.sealedmedia.softseal.mov":{"source":"iana"},"video/vnd.uvvu.mp4":{"source":"iana","extensions":["uvu","uvvu"]},"video/vnd.vivo":{"source":"iana","extensions":["viv"]},"video/vnd.youtube.yt":{"source":"iana"},"video/vp8":{"source":"iana"},"video/webm":{"source":"apache","compressible":false,"extensions":["webm"]},"video/x-f4v":{"source":"apache","extensions":["f4v"]},"video/x-fli":{"source":"apache","extensions":["fli"]},"video/x-flv":{"source":"apache","compressible":false,"extensions":["flv"]},"video/x-m4v":{"source":"apache","extensions":["m4v"]},"video/x-matroska":{"source":"apache","compressible":false,"extensions":["mkv","mk3d","mks"]},"video/x-mng":{"source":"apache","extensions":["mng"]},"video/x-ms-asf":{"source":"apache","extensions":["asf","asx"]},"video/x-ms-vob":{"source":"apache","extensions":["vob"]},"video/x-ms-wm":{"source":"apache","extensions":["wm"]},"video/x-ms-wmv":{"source":"apache","compressible":false,"extensions":["wmv"]},"video/x-ms-wmx":{"source":"apache","extensions":["wmx"]},"video/x-ms-wvx":{"source":"apache","extensions":["wvx"]},"video/x-msvideo":{"source":"apache","extensions":["avi"]},"video/x-sgi-movie":{"source":"apache","extensions":["movie"]},"video/x-smv":{"source":"apache","extensions":["smv"]},"x-conference/x-cooltalk":{"source":"apache","extensions":["ice"]},"x-shader/x-fragment":{"compressible":true},"x-shader/x-vertex":{"compressible":true}};
 
 /***/ }),
 /* 513 */,
@@ -44972,7 +45142,87 @@ exports.defaultSetter = defaultSetter;
 
 
 /***/ }),
-/* 560 */,
+/* 560 */
+/***/ (function(__unusedmodule, exports) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.Context = void 0;
+/*
+ * Copyright The OpenTelemetry Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var Context = /** @class */ (function () {
+    /**
+     * Construct a new context which inherits values from an optional parent context.
+     *
+     * @param parentContext a context from which to inherit values
+     */
+    function Context(parentContext) {
+        this._currentContext = parentContext ? new Map(parentContext) : new Map();
+    }
+    /** Get a key to uniquely identify a context value */
+    Context.createKey = function (description) {
+        return Symbol(description);
+    };
+    /**
+     * Get a value from the context.
+     *
+     * @param key key which identifies a context value
+     */
+    Context.prototype.getValue = function (key) {
+        return this._currentContext.get(key);
+    };
+    /**
+     * Create a new context which inherits from this context and has
+     * the given key set to the given value.
+     *
+     * @param key context key for which to set the value
+     * @param value value to set for the given key
+     */
+    Context.prototype.setValue = function (key, value) {
+        var context = new Context(this._currentContext);
+        context._currentContext.set(key, value);
+        return context;
+    };
+    /**
+     * Return a new context which inherits from this context but does
+     * not contain a value for the given key.
+     *
+     * @param key context key for which to clear a value
+     */
+    Context.prototype.deleteValue = function (key) {
+        var context = new Context(this._currentContext);
+        context._currentContext.delete(key);
+        return context;
+    };
+    /** The root context is used as the default parent context when there is no active context */
+    Context.ROOT_CONTEXT = new Context();
+    /**
+     * This is another identifier to the root context which allows developers to easily search the
+     * codebase for direct uses of context which need to be removed in later PRs.
+     *
+     * It's existence is temporary and it should be removed when all references are fixed.
+     */
+    Context.TODO = Context.ROOT_CONTEXT;
+    return Context;
+}());
+exports.Context = Context;
+//# sourceMappingURL=context.js.map
+
+/***/ }),
 /* 561 */,
 /* 562 */
 /***/ (function(__unusedmodule, exports, __webpack_require__) {
@@ -45059,7 +45309,372 @@ function clean(key)
 /***/ }),
 /* 567 */,
 /* 568 */,
-/* 569 */,
+/* 569 */
+/***/ (function(module, __unusedexports, __webpack_require__) {
+
+const assert = __webpack_require__(357)
+const path = __webpack_require__(622)
+const fs = __webpack_require__(747)
+let glob = undefined
+try {
+  glob = __webpack_require__(402)
+} catch (_err) {
+  // treat glob as optional.
+}
+
+const defaultGlobOpts = {
+  nosort: true,
+  silent: true
+}
+
+// for EMFILE handling
+let timeout = 0
+
+const isWindows = (process.platform === "win32")
+
+const defaults = options => {
+  const methods = [
+    'unlink',
+    'chmod',
+    'stat',
+    'lstat',
+    'rmdir',
+    'readdir'
+  ]
+  methods.forEach(m => {
+    options[m] = options[m] || fs[m]
+    m = m + 'Sync'
+    options[m] = options[m] || fs[m]
+  })
+
+  options.maxBusyTries = options.maxBusyTries || 3
+  options.emfileWait = options.emfileWait || 1000
+  if (options.glob === false) {
+    options.disableGlob = true
+  }
+  if (options.disableGlob !== true && glob === undefined) {
+    throw Error('glob dependency not found, set `options.disableGlob = true` if intentional')
+  }
+  options.disableGlob = options.disableGlob || false
+  options.glob = options.glob || defaultGlobOpts
+}
+
+const rimraf = (p, options, cb) => {
+  if (typeof options === 'function') {
+    cb = options
+    options = {}
+  }
+
+  assert(p, 'rimraf: missing path')
+  assert.equal(typeof p, 'string', 'rimraf: path should be a string')
+  assert.equal(typeof cb, 'function', 'rimraf: callback function required')
+  assert(options, 'rimraf: invalid options argument provided')
+  assert.equal(typeof options, 'object', 'rimraf: options should be object')
+
+  defaults(options)
+
+  let busyTries = 0
+  let errState = null
+  let n = 0
+
+  const next = (er) => {
+    errState = errState || er
+    if (--n === 0)
+      cb(errState)
+  }
+
+  const afterGlob = (er, results) => {
+    if (er)
+      return cb(er)
+
+    n = results.length
+    if (n === 0)
+      return cb()
+
+    results.forEach(p => {
+      const CB = (er) => {
+        if (er) {
+          if ((er.code === "EBUSY" || er.code === "ENOTEMPTY" || er.code === "EPERM") &&
+              busyTries < options.maxBusyTries) {
+            busyTries ++
+            // try again, with the same exact callback as this one.
+            return setTimeout(() => rimraf_(p, options, CB), busyTries * 100)
+          }
+
+          // this one won't happen if graceful-fs is used.
+          if (er.code === "EMFILE" && timeout < options.emfileWait) {
+            return setTimeout(() => rimraf_(p, options, CB), timeout ++)
+          }
+
+          // already gone
+          if (er.code === "ENOENT") er = null
+        }
+
+        timeout = 0
+        next(er)
+      }
+      rimraf_(p, options, CB)
+    })
+  }
+
+  if (options.disableGlob || !glob.hasMagic(p))
+    return afterGlob(null, [p])
+
+  options.lstat(p, (er, stat) => {
+    if (!er)
+      return afterGlob(null, [p])
+
+    glob(p, options.glob, afterGlob)
+  })
+
+}
+
+// Two possible strategies.
+// 1. Assume it's a file.  unlink it, then do the dir stuff on EPERM or EISDIR
+// 2. Assume it's a directory.  readdir, then do the file stuff on ENOTDIR
+//
+// Both result in an extra syscall when you guess wrong.  However, there
+// are likely far more normal files in the world than directories.  This
+// is based on the assumption that a the average number of files per
+// directory is >= 1.
+//
+// If anyone ever complains about this, then I guess the strategy could
+// be made configurable somehow.  But until then, YAGNI.
+const rimraf_ = (p, options, cb) => {
+  assert(p)
+  assert(options)
+  assert(typeof cb === 'function')
+
+  // sunos lets the root user unlink directories, which is... weird.
+  // so we have to lstat here and make sure it's not a dir.
+  options.lstat(p, (er, st) => {
+    if (er && er.code === "ENOENT")
+      return cb(null)
+
+    // Windows can EPERM on stat.  Life is suffering.
+    if (er && er.code === "EPERM" && isWindows)
+      fixWinEPERM(p, options, er, cb)
+
+    if (st && st.isDirectory())
+      return rmdir(p, options, er, cb)
+
+    options.unlink(p, er => {
+      if (er) {
+        if (er.code === "ENOENT")
+          return cb(null)
+        if (er.code === "EPERM")
+          return (isWindows)
+            ? fixWinEPERM(p, options, er, cb)
+            : rmdir(p, options, er, cb)
+        if (er.code === "EISDIR")
+          return rmdir(p, options, er, cb)
+      }
+      return cb(er)
+    })
+  })
+}
+
+const fixWinEPERM = (p, options, er, cb) => {
+  assert(p)
+  assert(options)
+  assert(typeof cb === 'function')
+
+  options.chmod(p, 0o666, er2 => {
+    if (er2)
+      cb(er2.code === "ENOENT" ? null : er)
+    else
+      options.stat(p, (er3, stats) => {
+        if (er3)
+          cb(er3.code === "ENOENT" ? null : er)
+        else if (stats.isDirectory())
+          rmdir(p, options, er, cb)
+        else
+          options.unlink(p, cb)
+      })
+  })
+}
+
+const fixWinEPERMSync = (p, options, er) => {
+  assert(p)
+  assert(options)
+
+  try {
+    options.chmodSync(p, 0o666)
+  } catch (er2) {
+    if (er2.code === "ENOENT")
+      return
+    else
+      throw er
+  }
+
+  let stats
+  try {
+    stats = options.statSync(p)
+  } catch (er3) {
+    if (er3.code === "ENOENT")
+      return
+    else
+      throw er
+  }
+
+  if (stats.isDirectory())
+    rmdirSync(p, options, er)
+  else
+    options.unlinkSync(p)
+}
+
+const rmdir = (p, options, originalEr, cb) => {
+  assert(p)
+  assert(options)
+  assert(typeof cb === 'function')
+
+  // try to rmdir first, and only readdir on ENOTEMPTY or EEXIST (SunOS)
+  // if we guessed wrong, and it's not a directory, then
+  // raise the original error.
+  options.rmdir(p, er => {
+    if (er && (er.code === "ENOTEMPTY" || er.code === "EEXIST" || er.code === "EPERM"))
+      rmkids(p, options, cb)
+    else if (er && er.code === "ENOTDIR")
+      cb(originalEr)
+    else
+      cb(er)
+  })
+}
+
+const rmkids = (p, options, cb) => {
+  assert(p)
+  assert(options)
+  assert(typeof cb === 'function')
+
+  options.readdir(p, (er, files) => {
+    if (er)
+      return cb(er)
+    let n = files.length
+    if (n === 0)
+      return options.rmdir(p, cb)
+    let errState
+    files.forEach(f => {
+      rimraf(path.join(p, f), options, er => {
+        if (errState)
+          return
+        if (er)
+          return cb(errState = er)
+        if (--n === 0)
+          options.rmdir(p, cb)
+      })
+    })
+  })
+}
+
+// this looks simpler, and is strictly *faster*, but will
+// tie up the JavaScript thread and fail on excessively
+// deep directory trees.
+const rimrafSync = (p, options) => {
+  options = options || {}
+  defaults(options)
+
+  assert(p, 'rimraf: missing path')
+  assert.equal(typeof p, 'string', 'rimraf: path should be a string')
+  assert(options, 'rimraf: missing options')
+  assert.equal(typeof options, 'object', 'rimraf: options should be object')
+
+  let results
+
+  if (options.disableGlob || !glob.hasMagic(p)) {
+    results = [p]
+  } else {
+    try {
+      options.lstatSync(p)
+      results = [p]
+    } catch (er) {
+      results = glob.sync(p, options.glob)
+    }
+  }
+
+  if (!results.length)
+    return
+
+  for (let i = 0; i < results.length; i++) {
+    const p = results[i]
+
+    let st
+    try {
+      st = options.lstatSync(p)
+    } catch (er) {
+      if (er.code === "ENOENT")
+        return
+
+      // Windows can EPERM on stat.  Life is suffering.
+      if (er.code === "EPERM" && isWindows)
+        fixWinEPERMSync(p, options, er)
+    }
+
+    try {
+      // sunos lets the root user unlink directories, which is... weird.
+      if (st && st.isDirectory())
+        rmdirSync(p, options, null)
+      else
+        options.unlinkSync(p)
+    } catch (er) {
+      if (er.code === "ENOENT")
+        return
+      if (er.code === "EPERM")
+        return isWindows ? fixWinEPERMSync(p, options, er) : rmdirSync(p, options, er)
+      if (er.code !== "EISDIR")
+        throw er
+
+      rmdirSync(p, options, er)
+    }
+  }
+}
+
+const rmdirSync = (p, options, originalEr) => {
+  assert(p)
+  assert(options)
+
+  try {
+    options.rmdirSync(p)
+  } catch (er) {
+    if (er.code === "ENOENT")
+      return
+    if (er.code === "ENOTDIR")
+      throw originalEr
+    if (er.code === "ENOTEMPTY" || er.code === "EEXIST" || er.code === "EPERM")
+      rmkidsSync(p, options)
+  }
+}
+
+const rmkidsSync = (p, options) => {
+  assert(p)
+  assert(options)
+  options.readdirSync(p).forEach(f => rimrafSync(path.join(p, f), options))
+
+  // We only end up here once we got ENOTEMPTY at least once, and
+  // at this point, we are guaranteed to have removed all the kids.
+  // So, we know that it won't be ENOENT or ENOTDIR or anything else.
+  // try really hard to delete stuff on windows, because it has a
+  // PROFOUNDLY annoying habit of not closing handles promptly when
+  // files are deleted, resulting in spurious ENOTEMPTY errors.
+  const retries = isWindows ? 100 : 1
+  let i = 0
+  do {
+    let threw = true
+    try {
+      const ret = options.rmdirSync(p, options)
+      threw = false
+      return ret
+    } finally {
+      if (++i < retries && threw)
+        continue
+    }
+  } while (true)
+}
+
+module.exports = rimraf
+rimraf.sync = rimrafSync
+
+
+/***/ }),
 /* 570 */,
 /* 571 */,
 /* 572 */,
@@ -45287,8 +45902,15 @@ Object.defineProperty(exports, "__esModule", { value: true });
 
 "use strict";
 
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
+    result["default"] = mod;
+    return result;
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-const pathHelper = __webpack_require__(972);
+const pathHelper = __importStar(__webpack_require__(972));
 const internal_match_kind_1 = __webpack_require__(327);
 const IS_WINDOWS = process.platform === 'win32';
 /**
@@ -45370,8 +45992,15 @@ exports.partialMatch = partialMatch;
 
 "use strict";
 
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
+    result["default"] = mod;
+    return result;
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-const core = __webpack_require__(470);
+const core = __importStar(__webpack_require__(470));
 /**
  * Returns a copy with defaults filled in.
  */
@@ -46463,9 +47092,13 @@ function restoreCache(paths, primaryKey, restoreKeys, options) {
         try {
             // Download the cache from the cache entry
             yield cacheHttpClient.downloadCache(cacheEntry.archiveLocation, archivePath, options);
+            if (core.isDebug()) {
+                yield tar_1.listTar(archivePath, compressionMethod);
+            }
             const archiveFileSize = utils.getArchiveFileSizeIsBytes(archivePath);
             core.info(`Cache Size: ~${Math.round(archiveFileSize / (1024 * 1024))} MB (${archiveFileSize} B)`);
             yield tar_1.extractTar(archivePath, compressionMethod);
+            core.info('Cache restored successfully');
         }
         finally {
             // Try to delete the archive to save space
@@ -46508,6 +47141,9 @@ function saveCache(paths, key, options) {
         const archivePath = path.join(archiveFolder, utils.getCacheFileName(compressionMethod));
         core.debug(`Archive Path: ${archivePath}`);
         yield tar_1.createTar(archiveFolder, cachePaths, compressionMethod);
+        if (core.isDebug()) {
+            yield tar_1.listTar(archivePath, compressionMethod);
+        }
         const fileSizeLimit = 5 * 1024 * 1024 * 1024; // 5GB per repo limit
         const archiveFileSize = utils.getArchiveFileSizeIsBytes(archivePath);
         core.debug(`File Size: ${archiveFileSize}`);
@@ -46608,7 +47244,316 @@ exports.saveCache = saveCache;
 
 
 /***/ }),
-/* 640 */,
+/* 640 */
+/***/ (function(module) {
+
+/*! *****************************************************************************
+Copyright (c) Microsoft Corporation.
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+PERFORMANCE OF THIS SOFTWARE.
+***************************************************************************** */
+/* global global, define, System, Reflect, Promise */
+var __extends;
+var __assign;
+var __rest;
+var __decorate;
+var __param;
+var __metadata;
+var __awaiter;
+var __generator;
+var __exportStar;
+var __values;
+var __read;
+var __spread;
+var __spreadArrays;
+var __spreadArray;
+var __await;
+var __asyncGenerator;
+var __asyncDelegator;
+var __asyncValues;
+var __makeTemplateObject;
+var __importStar;
+var __importDefault;
+var __classPrivateFieldGet;
+var __classPrivateFieldSet;
+var __createBinding;
+(function (factory) {
+    var root = typeof global === "object" ? global : typeof self === "object" ? self : typeof this === "object" ? this : {};
+    if (typeof define === "function" && define.amd) {
+        define("tslib", ["exports"], function (exports) { factory(createExporter(root, createExporter(exports))); });
+    }
+    else if ( true && typeof module.exports === "object") {
+        factory(createExporter(root, createExporter(module.exports)));
+    }
+    else {
+        factory(createExporter(root));
+    }
+    function createExporter(exports, previous) {
+        if (exports !== root) {
+            if (typeof Object.create === "function") {
+                Object.defineProperty(exports, "__esModule", { value: true });
+            }
+            else {
+                exports.__esModule = true;
+            }
+        }
+        return function (id, v) { return exports[id] = previous ? previous(id, v) : v; };
+    }
+})
+(function (exporter) {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (Object.prototype.hasOwnProperty.call(b, p)) d[p] = b[p]; };
+
+    __extends = function (d, b) {
+        if (typeof b !== "function" && b !== null)
+            throw new TypeError("Class extends value " + String(b) + " is not a constructor or null");
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+
+    __assign = Object.assign || function (t) {
+        for (var s, i = 1, n = arguments.length; i < n; i++) {
+            s = arguments[i];
+            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p)) t[p] = s[p];
+        }
+        return t;
+    };
+
+    __rest = function (s, e) {
+        var t = {};
+        for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
+            t[p] = s[p];
+        if (s != null && typeof Object.getOwnPropertySymbols === "function")
+            for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
+                if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
+                    t[p[i]] = s[p[i]];
+            }
+        return t;
+    };
+
+    __decorate = function (decorators, target, key, desc) {
+        var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+        if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+        else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+        return c > 3 && r && Object.defineProperty(target, key, r), r;
+    };
+
+    __param = function (paramIndex, decorator) {
+        return function (target, key) { decorator(target, key, paramIndex); }
+    };
+
+    __metadata = function (metadataKey, metadataValue) {
+        if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(metadataKey, metadataValue);
+    };
+
+    __awaiter = function (thisArg, _arguments, P, generator) {
+        function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+        return new (P || (P = Promise))(function (resolve, reject) {
+            function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+            function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+            function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+            step((generator = generator.apply(thisArg, _arguments || [])).next());
+        });
+    };
+
+    __generator = function (thisArg, body) {
+        var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
+        return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+        function verb(n) { return function (v) { return step([n, v]); }; }
+        function step(op) {
+            if (f) throw new TypeError("Generator is already executing.");
+            while (_) try {
+                if (f = 1, y && (t = op[0] & 2 ? y["return"] : op[0] ? y["throw"] || ((t = y["return"]) && t.call(y), 0) : y.next) && !(t = t.call(y, op[1])).done) return t;
+                if (y = 0, t) op = [op[0] & 2, t.value];
+                switch (op[0]) {
+                    case 0: case 1: t = op; break;
+                    case 4: _.label++; return { value: op[1], done: false };
+                    case 5: _.label++; y = op[1]; op = [0]; continue;
+                    case 7: op = _.ops.pop(); _.trys.pop(); continue;
+                    default:
+                        if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
+                        if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
+                        if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
+                        if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
+                        if (t[2]) _.ops.pop();
+                        _.trys.pop(); continue;
+                }
+                op = body.call(thisArg, _);
+            } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
+            if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
+        }
+    };
+
+    __exportStar = function(m, o) {
+        for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(o, p)) __createBinding(o, m, p);
+    };
+
+    __createBinding = Object.create ? (function(o, m, k, k2) {
+        if (k2 === undefined) k2 = k;
+        Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+    }) : (function(o, m, k, k2) {
+        if (k2 === undefined) k2 = k;
+        o[k2] = m[k];
+    });
+
+    __values = function (o) {
+        var s = typeof Symbol === "function" && Symbol.iterator, m = s && o[s], i = 0;
+        if (m) return m.call(o);
+        if (o && typeof o.length === "number") return {
+            next: function () {
+                if (o && i >= o.length) o = void 0;
+                return { value: o && o[i++], done: !o };
+            }
+        };
+        throw new TypeError(s ? "Object is not iterable." : "Symbol.iterator is not defined.");
+    };
+
+    __read = function (o, n) {
+        var m = typeof Symbol === "function" && o[Symbol.iterator];
+        if (!m) return o;
+        var i = m.call(o), r, ar = [], e;
+        try {
+            while ((n === void 0 || n-- > 0) && !(r = i.next()).done) ar.push(r.value);
+        }
+        catch (error) { e = { error: error }; }
+        finally {
+            try {
+                if (r && !r.done && (m = i["return"])) m.call(i);
+            }
+            finally { if (e) throw e.error; }
+        }
+        return ar;
+    };
+
+    /** @deprecated */
+    __spread = function () {
+        for (var ar = [], i = 0; i < arguments.length; i++)
+            ar = ar.concat(__read(arguments[i]));
+        return ar;
+    };
+
+    /** @deprecated */
+    __spreadArrays = function () {
+        for (var s = 0, i = 0, il = arguments.length; i < il; i++) s += arguments[i].length;
+        for (var r = Array(s), k = 0, i = 0; i < il; i++)
+            for (var a = arguments[i], j = 0, jl = a.length; j < jl; j++, k++)
+                r[k] = a[j];
+        return r;
+    };
+
+    __spreadArray = function (to, from) {
+        for (var i = 0, il = from.length, j = to.length; i < il; i++, j++)
+            to[j] = from[i];
+        return to;
+    };
+
+    __await = function (v) {
+        return this instanceof __await ? (this.v = v, this) : new __await(v);
+    };
+
+    __asyncGenerator = function (thisArg, _arguments, generator) {
+        if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
+        var g = generator.apply(thisArg, _arguments || []), i, q = [];
+        return i = {}, verb("next"), verb("throw"), verb("return"), i[Symbol.asyncIterator] = function () { return this; }, i;
+        function verb(n) { if (g[n]) i[n] = function (v) { return new Promise(function (a, b) { q.push([n, v, a, b]) > 1 || resume(n, v); }); }; }
+        function resume(n, v) { try { step(g[n](v)); } catch (e) { settle(q[0][3], e); } }
+        function step(r) { r.value instanceof __await ? Promise.resolve(r.value.v).then(fulfill, reject) : settle(q[0][2], r);  }
+        function fulfill(value) { resume("next", value); }
+        function reject(value) { resume("throw", value); }
+        function settle(f, v) { if (f(v), q.shift(), q.length) resume(q[0][0], q[0][1]); }
+    };
+
+    __asyncDelegator = function (o) {
+        var i, p;
+        return i = {}, verb("next"), verb("throw", function (e) { throw e; }), verb("return"), i[Symbol.iterator] = function () { return this; }, i;
+        function verb(n, f) { i[n] = o[n] ? function (v) { return (p = !p) ? { value: __await(o[n](v)), done: n === "return" } : f ? f(v) : v; } : f; }
+    };
+
+    __asyncValues = function (o) {
+        if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
+        var m = o[Symbol.asyncIterator], i;
+        return m ? m.call(o) : (o = typeof __values === "function" ? __values(o) : o[Symbol.iterator](), i = {}, verb("next"), verb("throw"), verb("return"), i[Symbol.asyncIterator] = function () { return this; }, i);
+        function verb(n) { i[n] = o[n] && function (v) { return new Promise(function (resolve, reject) { v = o[n](v), settle(resolve, reject, v.done, v.value); }); }; }
+        function settle(resolve, reject, d, v) { Promise.resolve(v).then(function(v) { resolve({ value: v, done: d }); }, reject); }
+    };
+
+    __makeTemplateObject = function (cooked, raw) {
+        if (Object.defineProperty) { Object.defineProperty(cooked, "raw", { value: raw }); } else { cooked.raw = raw; }
+        return cooked;
+    };
+
+    var __setModuleDefault = Object.create ? (function(o, v) {
+        Object.defineProperty(o, "default", { enumerable: true, value: v });
+    }) : function(o, v) {
+        o["default"] = v;
+    };
+
+    __importStar = function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+
+    __importDefault = function (mod) {
+        return (mod && mod.__esModule) ? mod : { "default": mod };
+    };
+
+    __classPrivateFieldGet = function (receiver, privateMap) {
+        if (!privateMap.has(receiver)) {
+            throw new TypeError("attempted to get private field on non-instance");
+        }
+        return privateMap.get(receiver);
+    };
+
+    __classPrivateFieldSet = function (receiver, privateMap, value) {
+        if (!privateMap.has(receiver)) {
+            throw new TypeError("attempted to set private field on non-instance");
+        }
+        privateMap.set(receiver, value);
+        return value;
+    };
+
+    exporter("__extends", __extends);
+    exporter("__assign", __assign);
+    exporter("__rest", __rest);
+    exporter("__decorate", __decorate);
+    exporter("__param", __param);
+    exporter("__metadata", __metadata);
+    exporter("__awaiter", __awaiter);
+    exporter("__generator", __generator);
+    exporter("__exportStar", __exportStar);
+    exporter("__createBinding", __createBinding);
+    exporter("__values", __values);
+    exporter("__read", __read);
+    exporter("__spread", __spread);
+    exporter("__spreadArrays", __spreadArrays);
+    exporter("__spreadArray", __spreadArray);
+    exporter("__await", __await);
+    exporter("__asyncGenerator", __asyncGenerator);
+    exporter("__asyncDelegator", __asyncDelegator);
+    exporter("__asyncValues", __asyncValues);
+    exporter("__makeTemplateObject", __makeTemplateObject);
+    exporter("__importStar", __importStar);
+    exporter("__importDefault", __importDefault);
+    exporter("__classPrivateFieldGet", __classPrivateFieldGet);
+    exporter("__classPrivateFieldSet", __classPrivateFieldSet);
+});
+
+
+/***/ }),
 /* 641 */,
 /* 642 */,
 /* 643 */,
@@ -49585,87 +50530,7 @@ __webpack_require__(71);
 /***/ }),
 /* 713 */,
 /* 714 */,
-/* 715 */
-/***/ (function(__unusedmodule, exports) {
-
-"use strict";
-
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.Context = void 0;
-/*
- * Copyright The OpenTelemetry Authors
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-var Context = /** @class */ (function () {
-    /**
-     * Construct a new context which inherits values from an optional parent context.
-     *
-     * @param parentContext a context from which to inherit values
-     */
-    function Context(parentContext) {
-        this._currentContext = parentContext ? new Map(parentContext) : new Map();
-    }
-    /** Get a key to uniquely identify a context value */
-    Context.createKey = function (description) {
-        return Symbol(description);
-    };
-    /**
-     * Get a value from the context.
-     *
-     * @param key key which identifies a context value
-     */
-    Context.prototype.getValue = function (key) {
-        return this._currentContext.get(key);
-    };
-    /**
-     * Create a new context which inherits from this context and has
-     * the given key set to the given value.
-     *
-     * @param key context key for which to set the value
-     * @param value value to set for the given key
-     */
-    Context.prototype.setValue = function (key, value) {
-        var context = new Context(this._currentContext);
-        context._currentContext.set(key, value);
-        return context;
-    };
-    /**
-     * Return a new context which inherits from this context but does
-     * not contain a value for the given key.
-     *
-     * @param key context key for which to clear a value
-     */
-    Context.prototype.deleteValue = function (key) {
-        var context = new Context(this._currentContext);
-        context._currentContext.delete(key);
-        return context;
-    };
-    /** The root context is used as the default parent context when there is no active context */
-    Context.ROOT_CONTEXT = new Context();
-    /**
-     * This is another identifier to the root context which allows developers to easily search the
-     * codebase for direct uses of context which need to be removed in later PRs.
-     *
-     * It's existence is temporary and it should be removed when all references are fixed.
-     */
-    Context.TODO = Context.ROOT_CONTEXT;
-    return Context;
-}());
-exports.Context = Context;
-//# sourceMappingURL=context.js.map
-
-/***/ }),
+/* 715 */,
 /* 716 */,
 /* 717 */,
 /* 718 */,
@@ -49876,7 +50741,316 @@ exports.saveCache = saveCache;
 
 
 /***/ }),
-/* 725 */,
+/* 725 */
+/***/ (function(module) {
+
+/*! *****************************************************************************
+Copyright (c) Microsoft Corporation.
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+PERFORMANCE OF THIS SOFTWARE.
+***************************************************************************** */
+/* global global, define, System, Reflect, Promise */
+var __extends;
+var __assign;
+var __rest;
+var __decorate;
+var __param;
+var __metadata;
+var __awaiter;
+var __generator;
+var __exportStar;
+var __values;
+var __read;
+var __spread;
+var __spreadArrays;
+var __spreadArray;
+var __await;
+var __asyncGenerator;
+var __asyncDelegator;
+var __asyncValues;
+var __makeTemplateObject;
+var __importStar;
+var __importDefault;
+var __classPrivateFieldGet;
+var __classPrivateFieldSet;
+var __createBinding;
+(function (factory) {
+    var root = typeof global === "object" ? global : typeof self === "object" ? self : typeof this === "object" ? this : {};
+    if (typeof define === "function" && define.amd) {
+        define("tslib", ["exports"], function (exports) { factory(createExporter(root, createExporter(exports))); });
+    }
+    else if ( true && typeof module.exports === "object") {
+        factory(createExporter(root, createExporter(module.exports)));
+    }
+    else {
+        factory(createExporter(root));
+    }
+    function createExporter(exports, previous) {
+        if (exports !== root) {
+            if (typeof Object.create === "function") {
+                Object.defineProperty(exports, "__esModule", { value: true });
+            }
+            else {
+                exports.__esModule = true;
+            }
+        }
+        return function (id, v) { return exports[id] = previous ? previous(id, v) : v; };
+    }
+})
+(function (exporter) {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (Object.prototype.hasOwnProperty.call(b, p)) d[p] = b[p]; };
+
+    __extends = function (d, b) {
+        if (typeof b !== "function" && b !== null)
+            throw new TypeError("Class extends value " + String(b) + " is not a constructor or null");
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+
+    __assign = Object.assign || function (t) {
+        for (var s, i = 1, n = arguments.length; i < n; i++) {
+            s = arguments[i];
+            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p)) t[p] = s[p];
+        }
+        return t;
+    };
+
+    __rest = function (s, e) {
+        var t = {};
+        for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
+            t[p] = s[p];
+        if (s != null && typeof Object.getOwnPropertySymbols === "function")
+            for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
+                if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
+                    t[p[i]] = s[p[i]];
+            }
+        return t;
+    };
+
+    __decorate = function (decorators, target, key, desc) {
+        var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+        if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+        else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+        return c > 3 && r && Object.defineProperty(target, key, r), r;
+    };
+
+    __param = function (paramIndex, decorator) {
+        return function (target, key) { decorator(target, key, paramIndex); }
+    };
+
+    __metadata = function (metadataKey, metadataValue) {
+        if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(metadataKey, metadataValue);
+    };
+
+    __awaiter = function (thisArg, _arguments, P, generator) {
+        function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+        return new (P || (P = Promise))(function (resolve, reject) {
+            function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+            function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+            function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+            step((generator = generator.apply(thisArg, _arguments || [])).next());
+        });
+    };
+
+    __generator = function (thisArg, body) {
+        var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
+        return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+        function verb(n) { return function (v) { return step([n, v]); }; }
+        function step(op) {
+            if (f) throw new TypeError("Generator is already executing.");
+            while (_) try {
+                if (f = 1, y && (t = op[0] & 2 ? y["return"] : op[0] ? y["throw"] || ((t = y["return"]) && t.call(y), 0) : y.next) && !(t = t.call(y, op[1])).done) return t;
+                if (y = 0, t) op = [op[0] & 2, t.value];
+                switch (op[0]) {
+                    case 0: case 1: t = op; break;
+                    case 4: _.label++; return { value: op[1], done: false };
+                    case 5: _.label++; y = op[1]; op = [0]; continue;
+                    case 7: op = _.ops.pop(); _.trys.pop(); continue;
+                    default:
+                        if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
+                        if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
+                        if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
+                        if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
+                        if (t[2]) _.ops.pop();
+                        _.trys.pop(); continue;
+                }
+                op = body.call(thisArg, _);
+            } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
+            if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
+        }
+    };
+
+    __exportStar = function(m, o) {
+        for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(o, p)) __createBinding(o, m, p);
+    };
+
+    __createBinding = Object.create ? (function(o, m, k, k2) {
+        if (k2 === undefined) k2 = k;
+        Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+    }) : (function(o, m, k, k2) {
+        if (k2 === undefined) k2 = k;
+        o[k2] = m[k];
+    });
+
+    __values = function (o) {
+        var s = typeof Symbol === "function" && Symbol.iterator, m = s && o[s], i = 0;
+        if (m) return m.call(o);
+        if (o && typeof o.length === "number") return {
+            next: function () {
+                if (o && i >= o.length) o = void 0;
+                return { value: o && o[i++], done: !o };
+            }
+        };
+        throw new TypeError(s ? "Object is not iterable." : "Symbol.iterator is not defined.");
+    };
+
+    __read = function (o, n) {
+        var m = typeof Symbol === "function" && o[Symbol.iterator];
+        if (!m) return o;
+        var i = m.call(o), r, ar = [], e;
+        try {
+            while ((n === void 0 || n-- > 0) && !(r = i.next()).done) ar.push(r.value);
+        }
+        catch (error) { e = { error: error }; }
+        finally {
+            try {
+                if (r && !r.done && (m = i["return"])) m.call(i);
+            }
+            finally { if (e) throw e.error; }
+        }
+        return ar;
+    };
+
+    /** @deprecated */
+    __spread = function () {
+        for (var ar = [], i = 0; i < arguments.length; i++)
+            ar = ar.concat(__read(arguments[i]));
+        return ar;
+    };
+
+    /** @deprecated */
+    __spreadArrays = function () {
+        for (var s = 0, i = 0, il = arguments.length; i < il; i++) s += arguments[i].length;
+        for (var r = Array(s), k = 0, i = 0; i < il; i++)
+            for (var a = arguments[i], j = 0, jl = a.length; j < jl; j++, k++)
+                r[k] = a[j];
+        return r;
+    };
+
+    __spreadArray = function (to, from) {
+        for (var i = 0, il = from.length, j = to.length; i < il; i++, j++)
+            to[j] = from[i];
+        return to;
+    };
+
+    __await = function (v) {
+        return this instanceof __await ? (this.v = v, this) : new __await(v);
+    };
+
+    __asyncGenerator = function (thisArg, _arguments, generator) {
+        if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
+        var g = generator.apply(thisArg, _arguments || []), i, q = [];
+        return i = {}, verb("next"), verb("throw"), verb("return"), i[Symbol.asyncIterator] = function () { return this; }, i;
+        function verb(n) { if (g[n]) i[n] = function (v) { return new Promise(function (a, b) { q.push([n, v, a, b]) > 1 || resume(n, v); }); }; }
+        function resume(n, v) { try { step(g[n](v)); } catch (e) { settle(q[0][3], e); } }
+        function step(r) { r.value instanceof __await ? Promise.resolve(r.value.v).then(fulfill, reject) : settle(q[0][2], r);  }
+        function fulfill(value) { resume("next", value); }
+        function reject(value) { resume("throw", value); }
+        function settle(f, v) { if (f(v), q.shift(), q.length) resume(q[0][0], q[0][1]); }
+    };
+
+    __asyncDelegator = function (o) {
+        var i, p;
+        return i = {}, verb("next"), verb("throw", function (e) { throw e; }), verb("return"), i[Symbol.iterator] = function () { return this; }, i;
+        function verb(n, f) { i[n] = o[n] ? function (v) { return (p = !p) ? { value: __await(o[n](v)), done: n === "return" } : f ? f(v) : v; } : f; }
+    };
+
+    __asyncValues = function (o) {
+        if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
+        var m = o[Symbol.asyncIterator], i;
+        return m ? m.call(o) : (o = typeof __values === "function" ? __values(o) : o[Symbol.iterator](), i = {}, verb("next"), verb("throw"), verb("return"), i[Symbol.asyncIterator] = function () { return this; }, i);
+        function verb(n) { i[n] = o[n] && function (v) { return new Promise(function (resolve, reject) { v = o[n](v), settle(resolve, reject, v.done, v.value); }); }; }
+        function settle(resolve, reject, d, v) { Promise.resolve(v).then(function(v) { resolve({ value: v, done: d }); }, reject); }
+    };
+
+    __makeTemplateObject = function (cooked, raw) {
+        if (Object.defineProperty) { Object.defineProperty(cooked, "raw", { value: raw }); } else { cooked.raw = raw; }
+        return cooked;
+    };
+
+    var __setModuleDefault = Object.create ? (function(o, v) {
+        Object.defineProperty(o, "default", { enumerable: true, value: v });
+    }) : function(o, v) {
+        o["default"] = v;
+    };
+
+    __importStar = function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+
+    __importDefault = function (mod) {
+        return (mod && mod.__esModule) ? mod : { "default": mod };
+    };
+
+    __classPrivateFieldGet = function (receiver, privateMap) {
+        if (!privateMap.has(receiver)) {
+            throw new TypeError("attempted to get private field on non-instance");
+        }
+        return privateMap.get(receiver);
+    };
+
+    __classPrivateFieldSet = function (receiver, privateMap, value) {
+        if (!privateMap.has(receiver)) {
+            throw new TypeError("attempted to set private field on non-instance");
+        }
+        privateMap.set(receiver, value);
+        return value;
+    };
+
+    exporter("__extends", __extends);
+    exporter("__assign", __assign);
+    exporter("__rest", __rest);
+    exporter("__decorate", __decorate);
+    exporter("__param", __param);
+    exporter("__metadata", __metadata);
+    exporter("__awaiter", __awaiter);
+    exporter("__generator", __generator);
+    exporter("__exportStar", __exportStar);
+    exporter("__createBinding", __createBinding);
+    exporter("__values", __values);
+    exporter("__read", __read);
+    exporter("__spread", __spread);
+    exporter("__spreadArrays", __spreadArrays);
+    exporter("__spreadArray", __spreadArray);
+    exporter("__await", __await);
+    exporter("__asyncGenerator", __asyncGenerator);
+    exporter("__asyncDelegator", __asyncDelegator);
+    exporter("__asyncValues", __asyncValues);
+    exporter("__makeTemplateObject", __makeTemplateObject);
+    exporter("__importStar", __importStar);
+    exporter("__importDefault", __importDefault);
+    exporter("__classPrivateFieldGet", __classPrivateFieldGet);
+    exporter("__classPrivateFieldSet", __classPrivateFieldSet);
+});
+
+
+/***/ }),
 /* 726 */,
 /* 727 */
 /***/ (function(__unusedmodule, exports) {
@@ -50809,7 +51983,30 @@ __exportStar(__webpack_require__(145), exports);
 //# sourceMappingURL=index.js.map
 
 /***/ }),
-/* 765 */,
+/* 765 */
+/***/ (function(__unusedmodule, exports) {
+
+"use strict";
+
+/*
+ * Copyright The OpenTelemetry Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+//# sourceMappingURL=types.js.map
+
+/***/ }),
 /* 766 */
 /***/ (function(module) {
 
@@ -52479,6 +53676,7 @@ var __values;
 var __read;
 var __spread;
 var __spreadArrays;
+var __spreadArray;
 var __await;
 var __asyncGenerator;
 var __asyncDelegator;
@@ -52518,6 +53716,8 @@ var __createBinding;
         function (d, b) { for (var p in b) if (Object.prototype.hasOwnProperty.call(b, p)) d[p] = b[p]; };
 
     __extends = function (d, b) {
+        if (typeof b !== "function" && b !== null)
+            throw new TypeError("Class extends value " + String(b) + " is not a constructor or null");
         extendStatics(d, b);
         function __() { this.constructor = d; }
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
@@ -52637,18 +53837,26 @@ var __createBinding;
         return ar;
     };
 
+    /** @deprecated */
     __spread = function () {
         for (var ar = [], i = 0; i < arguments.length; i++)
             ar = ar.concat(__read(arguments[i]));
         return ar;
     };
 
+    /** @deprecated */
     __spreadArrays = function () {
         for (var s = 0, i = 0, il = arguments.length; i < il; i++) s += arguments[i].length;
         for (var r = Array(s), k = 0, i = 0; i < il; i++)
             for (var a = arguments[i], j = 0, jl = a.length; j < jl; j++, k++)
                 r[k] = a[j];
         return r;
+    };
+
+    __spreadArray = function (to, from) {
+        for (var i = 0, il = from.length, j = to.length; i < il; i++, j++)
+            to[j] = from[i];
+        return to;
     };
 
     __await = function (v) {
@@ -52733,6 +53941,7 @@ var __createBinding;
     exporter("__read", __read);
     exporter("__spread", __spread);
     exporter("__spreadArrays", __spreadArrays);
+    exporter("__spreadArray", __spreadArray);
     exporter("__await", __await);
     exporter("__asyncGenerator", __asyncGenerator);
     exporter("__asyncDelegator", __asyncDelegator);
@@ -56030,6 +57239,7 @@ var __values;
 var __read;
 var __spread;
 var __spreadArrays;
+var __spreadArray;
 var __await;
 var __asyncGenerator;
 var __asyncDelegator;
@@ -56069,6 +57279,8 @@ var __createBinding;
         function (d, b) { for (var p in b) if (Object.prototype.hasOwnProperty.call(b, p)) d[p] = b[p]; };
 
     __extends = function (d, b) {
+        if (typeof b !== "function" && b !== null)
+            throw new TypeError("Class extends value " + String(b) + " is not a constructor or null");
         extendStatics(d, b);
         function __() { this.constructor = d; }
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
@@ -56188,18 +57400,26 @@ var __createBinding;
         return ar;
     };
 
+    /** @deprecated */
     __spread = function () {
         for (var ar = [], i = 0; i < arguments.length; i++)
             ar = ar.concat(__read(arguments[i]));
         return ar;
     };
 
+    /** @deprecated */
     __spreadArrays = function () {
         for (var s = 0, i = 0, il = arguments.length; i < il; i++) s += arguments[i].length;
         for (var r = Array(s), k = 0, i = 0; i < il; i++)
             for (var a = arguments[i], j = 0, jl = a.length; j < jl; j++, k++)
                 r[k] = a[j];
         return r;
+    };
+
+    __spreadArray = function (to, from) {
+        for (var i = 0, il = from.length, j = to.length; i < il; i++, j++)
+            to[j] = from[i];
+        return to;
     };
 
     __await = function (v) {
@@ -56284,6 +57504,7 @@ var __createBinding;
     exporter("__read", __read);
     exporter("__spread", __spread);
     exporter("__spreadArrays", __spreadArrays);
+    exporter("__spreadArray", __spreadArray);
     exporter("__await", __await);
     exporter("__asyncGenerator", __asyncGenerator);
     exporter("__asyncDelegator", __asyncDelegator);
@@ -56921,13 +58142,13 @@ exports.TraceAPI = TraceAPI;
  * Licensed under the MIT License. See License.txt in the project root for
  * license information.
  * 
- * Azure Core LRO SDK for JavaScript - 1.0.2
+ * Azure Core LRO SDK for JavaScript - 1.0.3
  */
 
 
 Object.defineProperty(exports, '__esModule', { value: true });
 
-var tslib = __webpack_require__(422);
+var tslib = __webpack_require__(725);
 
 // Copyright (c) Microsoft Corporation.
 /**
@@ -57019,9 +58240,10 @@ var PollerCancelledError = /** @class */ (function (_super) {
  * ```
  *
  */
+// eslint-disable-next-line no-use-before-define
 var Poller = /** @class */ (function () {
     /**
-     * A poller needs to be initialized by passing in at least the basic properties of the PollOperation<TState, TResult>.
+     * A poller needs to be initialized by passing in at least the basic properties of the `PollOperation<TState, TResult>`.
      *
      * When writing an implementation of a Poller, this implementation needs to deal with the initialization
      * of any custom state beyond the basic definition of the poller. The basic poller assumes that the poller's
@@ -57083,7 +58305,7 @@ var Poller = /** @class */ (function () {
      * }
      * ```
      *
-     * @param operation Must contain the basic properties of PollOperation<State, TResult>.
+     * @param operation - Must contain the basic properties of `PollOperation<State, TResult>`.
      */
     function Poller(operation) {
         var _this = this;
@@ -57097,11 +58319,13 @@ var Poller = /** @class */ (function () {
         // This prevents the UnhandledPromiseRejectionWarning in node.js from being thrown.
         // The above warning would get thrown if `poller.poll` is called, it returns an error,
         // and pullUntilDone did not have a .catch or await try/catch on it's return value.
-        this.promise.catch(function () { });
+        this.promise.catch(function () {
+            /* intentionally blank */
+        });
     }
     /**
      * @internal
-     * @ignore
+     * @hidden
      * Starts a loop that will break only if the poller is done
      * or if the poller is stopped.
      */
@@ -57130,13 +58354,13 @@ var Poller = /** @class */ (function () {
     };
     /**
      * @internal
-     * @ignore
+     * @hidden
      * pollOnce does one polling, by calling to the update method of the underlying
      * poll operation to make any relevant change effective.
      *
-     * It only optionally receives an object with an abortSignal property, from @azure/abort-controller's AbortSignalLike.
+     * It only optionally receives an object with an abortSignal property, from \@azure/abort-controller's AbortSignalLike.
      *
-     * @param options Optional properties passed to the operation's update method.
+     * @param options - Optional properties passed to the operation's update method.
      */
     Poller.prototype.pollOnce = function (options) {
         if (options === void 0) { options = {}; }
@@ -57158,6 +58382,11 @@ var Poller = /** @class */ (function () {
                     case 2:
                         _a.operation = _b.sent();
                         if (this.isDone() && this.resolve) {
+                            // If the poller has finished polling, this means we now have a result.
+                            // However, it can be the case that TResult is instantiated to void, so
+                            // we are not expecting a result anyway. To assert that we might not
+                            // have a result eventually after finishing polling, we cast the result
+                            // to TResult.
                             this.resolve(state.result);
                         }
                         _b.label = 3;
@@ -57176,13 +58405,13 @@ var Poller = /** @class */ (function () {
     };
     /**
      * @internal
-     * @ignore
+     * @hidden
      * fireProgress calls the functions passed in via onProgress the method of the poller.
      *
      * It loops over all of the callbacks received from onProgress, and executes them, sending them
      * the current operation state.
      *
-     * @param state The current operation state.
+     * @param state - The current operation state.
      */
     Poller.prototype.fireProgress = function (state) {
         for (var _i = 0, _a = this.pollProgressCallbacks; _i < _a.length; _i++) {
@@ -57192,7 +58421,7 @@ var Poller = /** @class */ (function () {
     };
     /**
      * @internal
-     * @ignore
+     * @hidden
      * Invokes the underlying operation's cancel method, and rejects the
      * pollUntilDone promise.
      */
@@ -57219,9 +58448,9 @@ var Poller = /** @class */ (function () {
      * Returns a promise that will resolve once a single polling request finishes.
      * It does this by calling the update method of the Poller's operation.
      *
-     * It only optionally receives an object with an abortSignal property, from @azure/abort-controller's AbortSignalLike.
+     * It only optionally receives an object with an abortSignal property, from \@azure/abort-controller's AbortSignalLike.
      *
-     * @param options Optional properties passed to the operation's update method.
+     * @param options - Optional properties passed to the operation's update method.
      */
     Poller.prototype.poll = function (options) {
         var _this = this;
@@ -57231,7 +58460,7 @@ var Poller = /** @class */ (function () {
             var clearPollOncePromise = function () {
                 _this.pollOncePromise = undefined;
             };
-            this.pollOncePromise.then(clearPollOncePromise, clearPollOncePromise);
+            this.pollOncePromise.then(clearPollOncePromise, clearPollOncePromise).catch(this.reject);
         }
         return this.pollOncePromise;
     };
@@ -57288,11 +58517,11 @@ var Poller = /** @class */ (function () {
     /**
      * Attempts to cancel the underlying operation.
      *
-     * It only optionally receives an object with an abortSignal property, from @azure/abort-controller's AbortSignalLike.
+     * It only optionally receives an object with an abortSignal property, from \@azure/abort-controller's AbortSignalLike.
      *
      * If it's called again before it finishes, it will throw an error.
      *
-     * @param options Optional properties passed to the operation's update method.
+     * @param options - Optional properties passed to the operation's update method.
      */
     Poller.prototype.cancelOperation = function (options) {
         if (options === void 0) { options = {}; }
@@ -57881,17 +59110,27 @@ __exportStar(__webpack_require__(764), exports);
 
 "use strict";
 
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
+    result["default"] = mod;
+    return result;
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-const assert = __webpack_require__(357);
-const os = __webpack_require__(87);
-const path = __webpack_require__(622);
-const pathHelper = __webpack_require__(972);
+const os = __importStar(__webpack_require__(87));
+const path = __importStar(__webpack_require__(622));
+const pathHelper = __importStar(__webpack_require__(972));
+const assert_1 = __importDefault(__webpack_require__(357));
 const minimatch_1 = __webpack_require__(93);
 const internal_match_kind_1 = __webpack_require__(327);
 const internal_path_1 = __webpack_require__(383);
 const IS_WINDOWS = process.platform === 'win32';
 class Pattern {
-    constructor(patternOrNegate, segments) {
+    constructor(patternOrNegate, segments, homedir) {
         /**
          * Indicates whether matches should be excluded from the result set
          */
@@ -57905,9 +59144,9 @@ class Pattern {
         else {
             // Convert to pattern
             segments = segments || [];
-            assert(segments.length, `Parameter 'segments' must not empty`);
+            assert_1.default(segments.length, `Parameter 'segments' must not empty`);
             const root = Pattern.getLiteral(segments[0]);
-            assert(root && pathHelper.hasAbsoluteRoot(root), `Parameter 'segments' first element must be a root path`);
+            assert_1.default(root && pathHelper.hasAbsoluteRoot(root), `Parameter 'segments' first element must be a root path`);
             pattern = new internal_path_1.Path(segments).toString().trim();
             if (patternOrNegate) {
                 pattern = `!${pattern}`;
@@ -57919,7 +59158,7 @@ class Pattern {
             pattern = pattern.substr(1).trim();
         }
         // Normalize slashes and ensures absolute root
-        pattern = Pattern.fixupPattern(pattern);
+        pattern = Pattern.fixupPattern(pattern, homedir);
         // Segments
         this.segments = new internal_path_1.Path(pattern).segments;
         // Trailing slash indicates the pattern should only match directories, not regular files
@@ -57956,11 +59195,11 @@ class Pattern {
             // Normalize slashes
             itemPath = pathHelper.normalizeSeparators(itemPath);
             // Append a trailing slash. Otherwise Minimatch will not match the directory immediately
-            // preceeding the globstar. For example, given the pattern `/foo/**`, Minimatch returns
+            // preceding the globstar. For example, given the pattern `/foo/**`, Minimatch returns
             // false for `/foo` but returns true for `/foo/`. Append a trailing slash to handle that quirk.
             if (!itemPath.endsWith(path.sep)) {
                 // Note, this is safe because the constructor ensures the pattern has an absolute root.
-                // For example, formats like C: and C:foo on Windows are resolved to an aboslute root.
+                // For example, formats like C: and C:foo on Windows are resolved to an absolute root.
                 itemPath = `${itemPath}${path.sep}`;
             }
         }
@@ -57998,15 +59237,15 @@ class Pattern {
     /**
      * Normalizes slashes and ensures absolute root
      */
-    static fixupPattern(pattern) {
+    static fixupPattern(pattern, homedir) {
         // Empty
-        assert(pattern, 'pattern cannot be empty');
+        assert_1.default(pattern, 'pattern cannot be empty');
         // Must not contain `.` segment, unless first segment
         // Must not contain `..` segment
         const literalSegments = new internal_path_1.Path(pattern).segments.map(x => Pattern.getLiteral(x));
-        assert(literalSegments.every((x, i) => (x !== '.' || i === 0) && x !== '..'), `Invalid pattern '${pattern}'. Relative pathing '.' and '..' is not allowed.`);
+        assert_1.default(literalSegments.every((x, i) => (x !== '.' || i === 0) && x !== '..'), `Invalid pattern '${pattern}'. Relative pathing '.' and '..' is not allowed.`);
         // Must not contain globs in root, e.g. Windows UNC path \\foo\b*r
-        assert(!pathHelper.hasRoot(pattern) || literalSegments[0], `Invalid pattern '${pattern}'. Root segment must not contain globs.`);
+        assert_1.default(!pathHelper.hasRoot(pattern) || literalSegments[0], `Invalid pattern '${pattern}'. Root segment must not contain globs.`);
         // Normalize slashes
         pattern = pathHelper.normalizeSeparators(pattern);
         // Replace leading `.` segment
@@ -58015,9 +59254,9 @@ class Pattern {
         }
         // Replace leading `~` segment
         else if (pattern === '~' || pattern.startsWith(`~${path.sep}`)) {
-            const homedir = os.homedir();
-            assert(homedir, 'Unable to determine HOME directory');
-            assert(pathHelper.hasAbsoluteRoot(homedir), `Expected HOME directory to be a rooted path. Actual '${homedir}'`);
+            homedir = homedir || os.homedir();
+            assert_1.default(homedir, 'Unable to determine HOME directory');
+            assert_1.default(pathHelper.hasAbsoluteRoot(homedir), `Expected HOME directory to be a rooted path. Actual '${homedir}'`);
             pattern = Pattern.globEscape(homedir) + pattern.substr(1);
         }
         // Replace relative drive root, e.g. pattern is C: or C:foo
@@ -58113,53 +59352,7 @@ exports.Pattern = Pattern;
 //# sourceMappingURL=internal-pattern.js.map
 
 /***/ }),
-/* 924 */
-/***/ (function(__unusedmodule, exports, __webpack_require__) {
-
-"use strict";
-
-/*
- * Copyright The OpenTelemetry Authors
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.NoopContextManager = void 0;
-var context_1 = __webpack_require__(715);
-var NoopContextManager = /** @class */ (function () {
-    function NoopContextManager() {
-    }
-    NoopContextManager.prototype.active = function () {
-        return context_1.Context.ROOT_CONTEXT;
-    };
-    NoopContextManager.prototype.with = function (context, fn) {
-        return fn();
-    };
-    NoopContextManager.prototype.bind = function (target, context) {
-        return target;
-    };
-    NoopContextManager.prototype.enable = function () {
-        return this;
-    };
-    NoopContextManager.prototype.disable = function () {
-        return this;
-    };
-    return NoopContextManager;
-}());
-exports.NoopContextManager = NoopContextManager;
-//# sourceMappingURL=NoopContextManager.js.map
-
-/***/ }),
+/* 924 */,
 /* 925 */,
 /* 926 */,
 /* 927 */,
@@ -58173,11 +59366,11 @@ Object.defineProperty(exports, '__esModule', { value: true });
 
 function _interopDefault (ex) { return (ex && (typeof ex === 'object') && 'default' in ex) ? ex['default'] : ex; }
 
-var tslib = __webpack_require__(422);
+var tslib = __webpack_require__(966);
 var util = _interopDefault(__webpack_require__(669));
 var os = __webpack_require__(87);
 
-// Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) Microsoft Corporation.
 function log(message) {
     var args = [];
     for (var _i = 1; _i < arguments.length; _i++) {
@@ -58186,7 +59379,7 @@ function log(message) {
     process.stderr.write("" + util.format.apply(util, tslib.__spread([message], args)) + os.EOL);
 }
 
-// Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) Microsoft Corporation.
 var debugEnvVariable = (typeof process !== "undefined" && process.env && process.env.DEBUG) || undefined;
 var enabledString;
 var enabledNamespaces = [];
@@ -58195,6 +59388,14 @@ var debuggers = [];
 if (debugEnvVariable) {
     enable(debugEnvVariable);
 }
+var debugObj = Object.assign(function (namespace) {
+    return createDebugger(namespace);
+}, {
+    enable: enable,
+    enabled: enabled,
+    disable: disable,
+    log: log
+});
 function enable(namespaces) {
     var e_1, _a, e_2, _b;
     enabledString = namespaces;
@@ -58256,8 +59457,8 @@ function enabled(namespace) {
     }
     try {
         for (var enabledNamespaces_1 = tslib.__values(enabledNamespaces), enabledNamespaces_1_1 = enabledNamespaces_1.next(); !enabledNamespaces_1_1.done; enabledNamespaces_1_1 = enabledNamespaces_1.next()) {
-            var enabled_1 = enabledNamespaces_1_1.value;
-            if (enabled_1.test(namespace)) {
+            var enabledNamespace = enabledNamespaces_1_1.value;
+            if (enabledNamespace.test(namespace)) {
                 return true;
             }
         }
@@ -58277,6 +59478,13 @@ function disable() {
     return result;
 }
 function createDebugger(namespace) {
+    var newDebugger = Object.assign(debug, {
+        enabled: enabled(namespace),
+        destroy: destroy,
+        log: debugObj.log,
+        namespace: namespace,
+        extend: extend
+    });
     function debug() {
         var args = [];
         for (var _i = 0; _i < arguments.length; _i++) {
@@ -58290,13 +59498,6 @@ function createDebugger(namespace) {
         }
         newDebugger.log.apply(newDebugger, tslib.__spread(args));
     }
-    var newDebugger = Object.assign(debug, {
-        enabled: enabled(namespace),
-        destroy: destroy,
-        log: debugObj.log,
-        namespace: namespace,
-        extend: extend
-    });
     debuggers.push(newDebugger);
     return newDebugger;
 }
@@ -58313,16 +59514,8 @@ function extend(namespace) {
     newDebugger.log = this.log;
     return newDebugger;
 }
-var debugObj = Object.assign(function (namespace) {
-    return createDebugger(namespace);
-}, {
-    enable: enable,
-    enabled: enabled,
-    disable: disable,
-    log: log
-});
 
-// Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) Microsoft Corporation.
 var registeredLoggers = new Set();
 var logLevelFromEnv = (typeof process !== "undefined" && process.env && process.env.AZURE_LOG_LEVEL) || undefined;
 var azureLogLevel;
@@ -58351,7 +59544,7 @@ if (logLevelFromEnv) {
 }
 /**
  * Immediately enables logging at the specified log level.
- * @param level The log level to enable for logging.
+ * @param level - The log level to enable for logging.
  * Options from most verbose to least verbose are:
  * - verbose
  * - info
@@ -58396,8 +59589,8 @@ var levelMap = {
 };
 /**
  * Creates a logger for use by the Azure SDKs that inherits from `AzureLogger`.
- * @param namespace The name of the SDK package.
- * @ignore
+ * @param namespace - The name of the SDK package.
+ * @hidden
  */
 function createClientLogger(namespace) {
     var clientRootLogger = AzureLogger.extend(namespace);
@@ -58838,7 +60031,316 @@ exports.checkBypass = checkBypass;
 /* 963 */,
 /* 964 */,
 /* 965 */,
-/* 966 */,
+/* 966 */
+/***/ (function(module) {
+
+/*! *****************************************************************************
+Copyright (c) Microsoft Corporation.
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+PERFORMANCE OF THIS SOFTWARE.
+***************************************************************************** */
+/* global global, define, System, Reflect, Promise */
+var __extends;
+var __assign;
+var __rest;
+var __decorate;
+var __param;
+var __metadata;
+var __awaiter;
+var __generator;
+var __exportStar;
+var __values;
+var __read;
+var __spread;
+var __spreadArrays;
+var __spreadArray;
+var __await;
+var __asyncGenerator;
+var __asyncDelegator;
+var __asyncValues;
+var __makeTemplateObject;
+var __importStar;
+var __importDefault;
+var __classPrivateFieldGet;
+var __classPrivateFieldSet;
+var __createBinding;
+(function (factory) {
+    var root = typeof global === "object" ? global : typeof self === "object" ? self : typeof this === "object" ? this : {};
+    if (typeof define === "function" && define.amd) {
+        define("tslib", ["exports"], function (exports) { factory(createExporter(root, createExporter(exports))); });
+    }
+    else if ( true && typeof module.exports === "object") {
+        factory(createExporter(root, createExporter(module.exports)));
+    }
+    else {
+        factory(createExporter(root));
+    }
+    function createExporter(exports, previous) {
+        if (exports !== root) {
+            if (typeof Object.create === "function") {
+                Object.defineProperty(exports, "__esModule", { value: true });
+            }
+            else {
+                exports.__esModule = true;
+            }
+        }
+        return function (id, v) { return exports[id] = previous ? previous(id, v) : v; };
+    }
+})
+(function (exporter) {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (Object.prototype.hasOwnProperty.call(b, p)) d[p] = b[p]; };
+
+    __extends = function (d, b) {
+        if (typeof b !== "function" && b !== null)
+            throw new TypeError("Class extends value " + String(b) + " is not a constructor or null");
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+
+    __assign = Object.assign || function (t) {
+        for (var s, i = 1, n = arguments.length; i < n; i++) {
+            s = arguments[i];
+            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p)) t[p] = s[p];
+        }
+        return t;
+    };
+
+    __rest = function (s, e) {
+        var t = {};
+        for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
+            t[p] = s[p];
+        if (s != null && typeof Object.getOwnPropertySymbols === "function")
+            for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
+                if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
+                    t[p[i]] = s[p[i]];
+            }
+        return t;
+    };
+
+    __decorate = function (decorators, target, key, desc) {
+        var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+        if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+        else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+        return c > 3 && r && Object.defineProperty(target, key, r), r;
+    };
+
+    __param = function (paramIndex, decorator) {
+        return function (target, key) { decorator(target, key, paramIndex); }
+    };
+
+    __metadata = function (metadataKey, metadataValue) {
+        if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(metadataKey, metadataValue);
+    };
+
+    __awaiter = function (thisArg, _arguments, P, generator) {
+        function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+        return new (P || (P = Promise))(function (resolve, reject) {
+            function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+            function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+            function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+            step((generator = generator.apply(thisArg, _arguments || [])).next());
+        });
+    };
+
+    __generator = function (thisArg, body) {
+        var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
+        return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+        function verb(n) { return function (v) { return step([n, v]); }; }
+        function step(op) {
+            if (f) throw new TypeError("Generator is already executing.");
+            while (_) try {
+                if (f = 1, y && (t = op[0] & 2 ? y["return"] : op[0] ? y["throw"] || ((t = y["return"]) && t.call(y), 0) : y.next) && !(t = t.call(y, op[1])).done) return t;
+                if (y = 0, t) op = [op[0] & 2, t.value];
+                switch (op[0]) {
+                    case 0: case 1: t = op; break;
+                    case 4: _.label++; return { value: op[1], done: false };
+                    case 5: _.label++; y = op[1]; op = [0]; continue;
+                    case 7: op = _.ops.pop(); _.trys.pop(); continue;
+                    default:
+                        if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
+                        if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
+                        if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
+                        if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
+                        if (t[2]) _.ops.pop();
+                        _.trys.pop(); continue;
+                }
+                op = body.call(thisArg, _);
+            } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
+            if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
+        }
+    };
+
+    __exportStar = function(m, o) {
+        for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(o, p)) __createBinding(o, m, p);
+    };
+
+    __createBinding = Object.create ? (function(o, m, k, k2) {
+        if (k2 === undefined) k2 = k;
+        Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+    }) : (function(o, m, k, k2) {
+        if (k2 === undefined) k2 = k;
+        o[k2] = m[k];
+    });
+
+    __values = function (o) {
+        var s = typeof Symbol === "function" && Symbol.iterator, m = s && o[s], i = 0;
+        if (m) return m.call(o);
+        if (o && typeof o.length === "number") return {
+            next: function () {
+                if (o && i >= o.length) o = void 0;
+                return { value: o && o[i++], done: !o };
+            }
+        };
+        throw new TypeError(s ? "Object is not iterable." : "Symbol.iterator is not defined.");
+    };
+
+    __read = function (o, n) {
+        var m = typeof Symbol === "function" && o[Symbol.iterator];
+        if (!m) return o;
+        var i = m.call(o), r, ar = [], e;
+        try {
+            while ((n === void 0 || n-- > 0) && !(r = i.next()).done) ar.push(r.value);
+        }
+        catch (error) { e = { error: error }; }
+        finally {
+            try {
+                if (r && !r.done && (m = i["return"])) m.call(i);
+            }
+            finally { if (e) throw e.error; }
+        }
+        return ar;
+    };
+
+    /** @deprecated */
+    __spread = function () {
+        for (var ar = [], i = 0; i < arguments.length; i++)
+            ar = ar.concat(__read(arguments[i]));
+        return ar;
+    };
+
+    /** @deprecated */
+    __spreadArrays = function () {
+        for (var s = 0, i = 0, il = arguments.length; i < il; i++) s += arguments[i].length;
+        for (var r = Array(s), k = 0, i = 0; i < il; i++)
+            for (var a = arguments[i], j = 0, jl = a.length; j < jl; j++, k++)
+                r[k] = a[j];
+        return r;
+    };
+
+    __spreadArray = function (to, from) {
+        for (var i = 0, il = from.length, j = to.length; i < il; i++, j++)
+            to[j] = from[i];
+        return to;
+    };
+
+    __await = function (v) {
+        return this instanceof __await ? (this.v = v, this) : new __await(v);
+    };
+
+    __asyncGenerator = function (thisArg, _arguments, generator) {
+        if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
+        var g = generator.apply(thisArg, _arguments || []), i, q = [];
+        return i = {}, verb("next"), verb("throw"), verb("return"), i[Symbol.asyncIterator] = function () { return this; }, i;
+        function verb(n) { if (g[n]) i[n] = function (v) { return new Promise(function (a, b) { q.push([n, v, a, b]) > 1 || resume(n, v); }); }; }
+        function resume(n, v) { try { step(g[n](v)); } catch (e) { settle(q[0][3], e); } }
+        function step(r) { r.value instanceof __await ? Promise.resolve(r.value.v).then(fulfill, reject) : settle(q[0][2], r);  }
+        function fulfill(value) { resume("next", value); }
+        function reject(value) { resume("throw", value); }
+        function settle(f, v) { if (f(v), q.shift(), q.length) resume(q[0][0], q[0][1]); }
+    };
+
+    __asyncDelegator = function (o) {
+        var i, p;
+        return i = {}, verb("next"), verb("throw", function (e) { throw e; }), verb("return"), i[Symbol.iterator] = function () { return this; }, i;
+        function verb(n, f) { i[n] = o[n] ? function (v) { return (p = !p) ? { value: __await(o[n](v)), done: n === "return" } : f ? f(v) : v; } : f; }
+    };
+
+    __asyncValues = function (o) {
+        if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
+        var m = o[Symbol.asyncIterator], i;
+        return m ? m.call(o) : (o = typeof __values === "function" ? __values(o) : o[Symbol.iterator](), i = {}, verb("next"), verb("throw"), verb("return"), i[Symbol.asyncIterator] = function () { return this; }, i);
+        function verb(n) { i[n] = o[n] && function (v) { return new Promise(function (resolve, reject) { v = o[n](v), settle(resolve, reject, v.done, v.value); }); }; }
+        function settle(resolve, reject, d, v) { Promise.resolve(v).then(function(v) { resolve({ value: v, done: d }); }, reject); }
+    };
+
+    __makeTemplateObject = function (cooked, raw) {
+        if (Object.defineProperty) { Object.defineProperty(cooked, "raw", { value: raw }); } else { cooked.raw = raw; }
+        return cooked;
+    };
+
+    var __setModuleDefault = Object.create ? (function(o, v) {
+        Object.defineProperty(o, "default", { enumerable: true, value: v });
+    }) : function(o, v) {
+        o["default"] = v;
+    };
+
+    __importStar = function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+
+    __importDefault = function (mod) {
+        return (mod && mod.__esModule) ? mod : { "default": mod };
+    };
+
+    __classPrivateFieldGet = function (receiver, privateMap) {
+        if (!privateMap.has(receiver)) {
+            throw new TypeError("attempted to get private field on non-instance");
+        }
+        return privateMap.get(receiver);
+    };
+
+    __classPrivateFieldSet = function (receiver, privateMap, value) {
+        if (!privateMap.has(receiver)) {
+            throw new TypeError("attempted to set private field on non-instance");
+        }
+        privateMap.set(receiver, value);
+        return value;
+    };
+
+    exporter("__extends", __extends);
+    exporter("__assign", __assign);
+    exporter("__rest", __rest);
+    exporter("__decorate", __decorate);
+    exporter("__param", __param);
+    exporter("__metadata", __metadata);
+    exporter("__awaiter", __awaiter);
+    exporter("__generator", __generator);
+    exporter("__exportStar", __exportStar);
+    exporter("__createBinding", __createBinding);
+    exporter("__values", __values);
+    exporter("__read", __read);
+    exporter("__spread", __spread);
+    exporter("__spreadArrays", __spreadArrays);
+    exporter("__spreadArray", __spreadArray);
+    exporter("__await", __await);
+    exporter("__asyncGenerator", __asyncGenerator);
+    exporter("__asyncDelegator", __asyncDelegator);
+    exporter("__asyncValues", __asyncValues);
+    exporter("__makeTemplateObject", __makeTemplateObject);
+    exporter("__importStar", __importStar);
+    exporter("__importDefault", __importDefault);
+    exporter("__classPrivateFieldGet", __classPrivateFieldGet);
+    exporter("__classPrivateFieldSet", __classPrivateFieldSet);
+});
+
+
+/***/ }),
 /* 967 */,
 /* 968 */,
 /* 969 */,
@@ -58849,9 +60351,19 @@ exports.checkBypass = checkBypass;
 
 "use strict";
 
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
+    result["default"] = mod;
+    return result;
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-const assert = __webpack_require__(357);
-const path = __webpack_require__(622);
+const path = __importStar(__webpack_require__(622));
+const assert_1 = __importDefault(__webpack_require__(357));
 const IS_WINDOWS = process.platform === 'win32';
 /**
  * Similar to path.dirname except normalizes the path separators and slightly better handling for Windows UNC paths.
@@ -58891,8 +60403,8 @@ exports.dirname = dirname;
  * or `C:` are expanded based on the current working directory.
  */
 function ensureAbsoluteRoot(root, itemPath) {
-    assert(root, `ensureAbsoluteRoot parameter 'root' must not be empty`);
-    assert(itemPath, `ensureAbsoluteRoot parameter 'itemPath' must not be empty`);
+    assert_1.default(root, `ensureAbsoluteRoot parameter 'root' must not be empty`);
+    assert_1.default(itemPath, `ensureAbsoluteRoot parameter 'itemPath' must not be empty`);
     // Already rooted
     if (hasAbsoluteRoot(itemPath)) {
         return itemPath;
@@ -58902,7 +60414,7 @@ function ensureAbsoluteRoot(root, itemPath) {
         // Check for itemPath like C: or C:foo
         if (itemPath.match(/^[A-Z]:[^\\/]|^[A-Z]:$/i)) {
             let cwd = process.cwd();
-            assert(cwd.match(/^[A-Z]:\\/i), `Expected current directory to start with an absolute drive root. Actual '${cwd}'`);
+            assert_1.default(cwd.match(/^[A-Z]:\\/i), `Expected current directory to start with an absolute drive root. Actual '${cwd}'`);
             // Drive letter matches cwd? Expand to cwd
             if (itemPath[0].toUpperCase() === cwd[0].toUpperCase()) {
                 // Drive only, e.g. C:
@@ -58927,11 +60439,11 @@ function ensureAbsoluteRoot(root, itemPath) {
         // Check for itemPath like \ or \foo
         else if (normalizeSeparators(itemPath).match(/^\\$|^\\[^\\]/)) {
             const cwd = process.cwd();
-            assert(cwd.match(/^[A-Z]:\\/i), `Expected current directory to start with an absolute drive root. Actual '${cwd}'`);
+            assert_1.default(cwd.match(/^[A-Z]:\\/i), `Expected current directory to start with an absolute drive root. Actual '${cwd}'`);
             return `${cwd[0]}:\\${itemPath.substr(1)}`;
         }
     }
-    assert(hasAbsoluteRoot(root), `ensureAbsoluteRoot parameter 'root' must have an absolute root`);
+    assert_1.default(hasAbsoluteRoot(root), `ensureAbsoluteRoot parameter 'root' must have an absolute root`);
     // Otherwise ensure root ends with a separator
     if (root.endsWith('/') || (IS_WINDOWS && root.endsWith('\\'))) {
         // Intentionally empty
@@ -58948,7 +60460,7 @@ exports.ensureAbsoluteRoot = ensureAbsoluteRoot;
  * `\\hello\share` and `C:\hello` (and using alternate separator).
  */
 function hasAbsoluteRoot(itemPath) {
-    assert(itemPath, `hasAbsoluteRoot parameter 'itemPath' must not be empty`);
+    assert_1.default(itemPath, `hasAbsoluteRoot parameter 'itemPath' must not be empty`);
     // Normalize separators
     itemPath = normalizeSeparators(itemPath);
     // Windows
@@ -58965,7 +60477,7 @@ exports.hasAbsoluteRoot = hasAbsoluteRoot;
  * `\`, `\hello`, `\\hello\share`, `C:`, and `C:\hello` (and using alternate separator).
  */
 function hasRoot(itemPath) {
-    assert(itemPath, `isRooted parameter 'itemPath' must not be empty`);
+    assert_1.default(itemPath, `isRooted parameter 'itemPath' must not be empty`);
     // Normalize separators
     itemPath = normalizeSeparators(itemPath);
     // Windows
@@ -59321,10 +60833,11 @@ var node_fetch = _interopDefault(__webpack_require__(454));
 var abortController = __webpack_require__(106);
 var FormData = _interopDefault(__webpack_require__(790));
 var util = __webpack_require__(669);
+var url = __webpack_require__(835);
 var stream = __webpack_require__(794);
+var logger$1 = __webpack_require__(928);
 var tunnel = __webpack_require__(413);
 var coreAuth = __webpack_require__(229);
-var logger$1 = __webpack_require__(928);
 var xml2js = __webpack_require__(992);
 var os = __webpack_require__(87);
 var coreTracing = __webpack_require__(263);
@@ -59339,20 +60852,20 @@ function getHeaderKey(headerName) {
     return headerName.toLowerCase();
 }
 function isHttpHeadersLike(object) {
-    if (!object || typeof object !== "object") {
-        return false;
-    }
-    if (typeof object.rawHeaders === "function" &&
-        typeof object.clone === "function" &&
-        typeof object.get === "function" &&
-        typeof object.set === "function" &&
-        typeof object.contains === "function" &&
-        typeof object.remove === "function" &&
-        typeof object.headersArray === "function" &&
-        typeof object.headerValues === "function" &&
-        typeof object.headerNames === "function" &&
-        typeof object.toJson === "function") {
-        return true;
+    if (object && typeof object === "object") {
+        var castObject = object;
+        if (typeof castObject.rawHeaders === "function" &&
+            typeof castObject.clone === "function" &&
+            typeof castObject.get === "function" &&
+            typeof castObject.set === "function" &&
+            typeof castObject.contains === "function" &&
+            typeof castObject.remove === "function" &&
+            typeof castObject.headersArray === "function" &&
+            typeof castObject.headerValues === "function" &&
+            typeof castObject.headerNames === "function" &&
+            typeof castObject.toJson === "function") {
+            return true;
+        }
     }
     return false;
 }
@@ -59371,8 +60884,8 @@ var HttpHeaders = /** @class */ (function () {
     /**
      * Set a header in this collection with the provided name and value. The name is
      * case-insensitive.
-     * @param headerName The name of the header to set. This value is case-insensitive.
-     * @param headerValue The value of the header to set.
+     * @param headerName - The name of the header to set. This value is case-insensitive.
+     * @param headerValue - The value of the header to set.
      */
     HttpHeaders.prototype.set = function (headerName, headerValue) {
         this._headersMap[getHeaderKey(headerName)] = {
@@ -59383,7 +60896,7 @@ var HttpHeaders = /** @class */ (function () {
     /**
      * Get the header value for the provided header name, or undefined if no header exists in this
      * collection with the provided name.
-     * @param headerName The name of the header.
+     * @param headerName - The name of the header.
      */
     HttpHeaders.prototype.get = function (headerName) {
         var header = this._headersMap[getHeaderKey(headerName)];
@@ -59398,7 +60911,7 @@ var HttpHeaders = /** @class */ (function () {
     /**
      * Remove the header with the provided headerName. Return whether or not the header existed and
      * was removed.
-     * @param headerName The name of the header to remove.
+     * @param headerName - The name of the header to remove.
      */
     HttpHeaders.prototype.remove = function (headerName) {
         var result = this.contains(headerName);
@@ -59473,14 +60986,14 @@ var HttpHeaders = /** @class */ (function () {
 // Licensed under the MIT license.
 /**
  * Encodes a string in base64 format.
- * @param value the string to encode
+ * @param value - The string to encode
  */
 function encodeString(value) {
     return Buffer.from(value).toString("base64");
 }
 /**
  * Encodes a byte array in base64 format.
- * @param value the Uint8Aray to encode
+ * @param value - The Uint8Aray to encode
  */
 function encodeByteArray(value) {
     // Buffer.from accepts <ArrayBuffer> | <SharedArrayBuffer>-- the TypeScript definition is off here
@@ -59490,7 +61003,7 @@ function encodeByteArray(value) {
 }
 /**
  * Decodes a base64 string into a byte array.
- * @param value the base64 string to decode
+ * @param value - The base64 string to decode
  */
 function decodeString(value) {
     return Buffer.from(value, "base64");
@@ -59501,58 +61014,35 @@ function decodeString(value) {
 var Constants = {
     /**
      * The core-http version
-     * @const
-     * @type {string}
      */
-    coreHttpVersion: "1.1.9",
+    coreHttpVersion: "1.2.3",
     /**
      * Specifies HTTP.
-     *
-     * @const
-     * @type {string}
      */
     HTTP: "http:",
     /**
      * Specifies HTTPS.
-     *
-     * @const
-     * @type {string}
      */
     HTTPS: "https:",
     /**
      * Specifies HTTP Proxy.
-     *
-     * @const
-     * @type {string}
      */
     HTTP_PROXY: "HTTP_PROXY",
     /**
      * Specifies HTTPS Proxy.
-     *
-     * @const
-     * @type {string}
      */
     HTTPS_PROXY: "HTTPS_PROXY",
     /**
      * Specifies NO Proxy.
-     *
-     * @const
-     * @type {string}
      */
     NO_PROXY: "NO_PROXY",
     /**
      * Specifies ALL Proxy.
-     *
-     * @const
-     * @type {string}
      */
     ALL_PROXY: "ALL_PROXY",
     HttpConstants: {
         /**
          * Http Verbs
-         *
-         * @const
-         * @enum {string}
          */
         HttpVerbs: {
             PUT: "PUT",
@@ -59573,9 +61063,6 @@ var Constants = {
     HeaderConstants: {
         /**
          * The Authorization header.
-         *
-         * @const
-         * @type {string}
          */
         AUTHORIZATION: "authorization",
         AUTHORIZATION_SCHEME: "Bearer",
@@ -59583,20 +61070,25 @@ var Constants = {
          * The Retry-After response-header field can be used with a 503 (Service
          * Unavailable) or 349 (Too Many Requests) responses to indicate how long
          * the service is expected to be unavailable to the requesting client.
-         *
-         * @const
-         * @type {string}
          */
         RETRY_AFTER: "Retry-After",
         /**
          * The UserAgent header.
-         *
-         * @const
-         * @type {string}
          */
         USER_AGENT: "User-Agent"
     }
 };
+
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT license.
+/**
+ * Default key used to access the XML attributes.
+ */
+var XML_ATTRKEY = "$";
+/**
+ * Default key used to access the XML value content.
+ */
+var XML_CHARKEY = "_";
 
 // Copyright (c) Microsoft Corporation.
 var validUuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/i;
@@ -59610,8 +61102,8 @@ var isNode = typeof process !== "undefined" &&
 /**
  * Encodes an URI.
  *
- * @param {string} uri The URI to be encoded.
- * @return {string} The encoded URI.
+ * @param uri - The URI to be encoded.
+ * @returns The encoded URI.
  */
 function encodeUri(uri) {
     return encodeURIComponent(uri)
@@ -59625,9 +61117,8 @@ function encodeUri(uri) {
  * Returns a stripped version of the Http Response which only contains body,
  * headers and the status.
  *
- * @param {HttpOperationResponse} response The Http Response
- *
- * @return {object} The stripped version of Http Response.
+ * @param response - The Http Response
+ * @returns The stripped version of Http Response.
  */
 function stripResponse(response) {
     var strippedResponse = {};
@@ -59640,9 +61131,8 @@ function stripResponse(response) {
  * Returns a stripped version of the Http Request that does not contain the
  * Authorization header.
  *
- * @param {WebResourceLike} request The Http Request object
- *
- * @return {WebResourceLike} The stripped version of Http Request.
+ * @param request - The Http Request object
+ * @returns The stripped version of Http Request.
  */
 function stripRequest(request) {
     var strippedRequest = request.clone();
@@ -59654,9 +61144,8 @@ function stripRequest(request) {
 /**
  * Validates the given uuid as a string
  *
- * @param {string} uuid The uuid as a string that needs to be validated
- *
- * @return {boolean} True if the uuid is valid; false otherwise.
+ * @param uuid - The uuid as a string that needs to be validated
+ * @returns True if the uuid is valid; false otherwise.
  */
 function isValidUuid(uuid) {
     return validUuidRegex.test(uuid);
@@ -59664,7 +61153,7 @@ function isValidUuid(uuid) {
 /**
  * Generated UUID
  *
- * @return {string} RFC4122 v4 UUID.
+ * @returns RFC4122 v4 UUID.
  */
 function generateUuid() {
     return uuid.v4();
@@ -59673,12 +61162,10 @@ function generateUuid() {
  * Executes an array of promises sequentially. Inspiration of this method is here:
  * https://pouchdb.com/2015/05/18/we-have-a-problem-with-promises.html. An awesome blog on promises!
  *
- * @param {Array} promiseFactories An array of promise factories(A function that return a promise)
- *
- * @param {any} [kickstart] Input to the first promise that is used to kickstart the promise chain.
+ * @param promiseFactories - An array of promise factories(A function that return a promise)
+ * @param kickstart - Input to the first promise that is used to kickstart the promise chain.
  * If not provided then the promise chain starts with undefined.
- *
- * @return A chain of resolved or rejected promises
+ * @returns A chain of resolved or rejected promises
  */
 function executePromisesSequentially(promiseFactories, kickstart) {
     var result = Promise.resolve(kickstart);
@@ -59689,23 +61176,25 @@ function executePromisesSequentially(promiseFactories, kickstart) {
 }
 /**
  * A wrapper for setTimeout that resolves a promise after t milliseconds.
- * @param {number} t The number of milliseconds to be delayed.
- * @param {T} value The value to be resolved with after a timeout of t milliseconds.
- * @returns {Promise<T>} Resolved promise
+ * @param t - The number of milliseconds to be delayed.
+ * @param value - The value to be resolved with after a timeout of t milliseconds.
+ * @returns Resolved promise
  */
 function delay(t, value) {
     return new Promise(function (resolve) { return setTimeout(function () { return resolve(value); }, t); });
 }
 /**
  * Converts a Promise to a callback.
- * @param {Promise<any>} promise The Promise to be converted to a callback
- * @returns {Function} A function that takes the callback (cb: Function): void
+ * @param promise - The Promise to be converted to a callback
+ * @returns A function that takes the callback `(cb: Function) => void`
  * @deprecated generated code should instead depend on responseToBody
  */
+// eslint-disable-next-line @typescript-eslint/ban-types
 function promiseToCallback(promise) {
     if (typeof promise.then !== "function") {
         throw new Error("The provided input is not a Promise.");
     }
+    // eslint-disable-next-line @typescript-eslint/ban-types
     return function (cb) {
         promise
             .then(function (data) {
@@ -59720,8 +61209,8 @@ function promiseToCallback(promise) {
 }
 /**
  * Converts a Promise to a service callback.
- * @param {Promise<HttpOperationResponse>} promise - The Promise of HttpOperationResponse to be converted to a service callback
- * @returns {Function} A function that takes the service callback (cb: ServiceCallback<T>): void
+ * @param promise - The Promise of HttpOperationResponse to be converted to a service callback
+ * @returns A function that takes the service callback (cb: ServiceCallback<T>): void
  */
 function promiseToServiceCallback(promise) {
     if (typeof promise.then !== "function") {
@@ -59745,35 +61234,38 @@ function prepareXMLRootList(obj, elementName, xmlNamespaceKey, xmlNamespace) {
     if (!xmlNamespaceKey || !xmlNamespace) {
         return _a = {}, _a[elementName] = obj, _a;
     }
-    return _b = {}, _b[elementName] = obj, _b.$ = (_c = {}, _c[xmlNamespaceKey] = xmlNamespace, _c), _b;
+    var result = (_b = {}, _b[elementName] = obj, _b);
+    result[XML_ATTRKEY] = (_c = {}, _c[xmlNamespaceKey] = xmlNamespace, _c);
+    return result;
 }
 /**
  * Applies the properties on the prototype of sourceCtors to the prototype of targetCtor
- * @param {object} targetCtor The target object on which the properties need to be applied.
- * @param {Array<object>} sourceCtors An array of source objects from which the properties need to be taken.
+ * @param targetCtor - The target object on which the properties need to be applied.
+ * @param sourceCtors - An array of source objects from which the properties need to be taken.
  */
-function applyMixins(targetCtor, sourceCtors) {
-    sourceCtors.forEach(function (sourceCtors) {
-        Object.getOwnPropertyNames(sourceCtors.prototype).forEach(function (name) {
-            targetCtor.prototype[name] = sourceCtors.prototype[name];
+function applyMixins(targetCtorParam, sourceCtors) {
+    var castTargetCtorParam = targetCtorParam;
+    sourceCtors.forEach(function (sourceCtor) {
+        Object.getOwnPropertyNames(sourceCtor.prototype).forEach(function (name) {
+            castTargetCtorParam.prototype[name] = sourceCtor.prototype[name];
         });
     });
 }
 var validateISODuration = /^(-|\+)?P(?:([-+]?[0-9,.]*)Y)?(?:([-+]?[0-9,.]*)M)?(?:([-+]?[0-9,.]*)W)?(?:([-+]?[0-9,.]*)D)?(?:T(?:([-+]?[0-9,.]*)H)?(?:([-+]?[0-9,.]*)M)?(?:([-+]?[0-9,.]*)S)?)?$/;
 /**
  * Indicates whether the given string is in ISO 8601 format.
- * @param {string} value The value to be validated for ISO 8601 duration format.
- * @return {boolean} `true` if valid, `false` otherwise.
+ * @param value - The value to be validated for ISO 8601 duration format.
+ * @returns `true` if valid, `false` otherwise.
  */
 function isDuration(value) {
     return validateISODuration.test(value);
 }
 /**
  * Replace all of the instances of searchValue in value with the provided replaceValue.
- * @param {string | undefined} value The value to search and replace in.
- * @param {string} searchValue The value to search for in the value argument.
- * @param {string} replaceValue The value to replace searchValue with in the value argument.
- * @returns {string | undefined} The value where each instance of searchValue was replaced with replacedValue.
+ * @param value - The value to search and replace in.
+ * @param searchValue - The value to search for in the value argument.
+ * @param replaceValue - The value to replace searchValue with in the value argument.
+ * @returns The value where each instance of searchValue was replaced with replacedValue.
  */
 function replaceAll(value, searchValue, replaceValue) {
     return !value || !searchValue ? value : value.split(searchValue).join(replaceValue || "");
@@ -59781,8 +61273,8 @@ function replaceAll(value, searchValue, replaceValue) {
 /**
  * Determines whether the given entity is a basic/primitive type
  * (string, number, boolean, null, undefined).
- * @param {any} value Any entity
- * @return {boolean} - true is it is primitive type, false otherwise.
+ * @param value - Any entity
+ * @returns true is it is primitive type, false otherwise.
  */
 function isPrimitiveType(value) {
     return (typeof value !== "object" && typeof value !== "function") || value === null;
@@ -59809,32 +61301,34 @@ var Serializer = /** @class */ (function () {
             throw new Error("\"" + objectName + "\" with value \"" + value + "\" should satisfy the constraint \"" + constraintName + "\": " + constraintValue + ".");
         };
         if (mapper.constraints && value != undefined) {
+            var valueAsNumber = value;
             var _a = mapper.constraints, ExclusiveMaximum = _a.ExclusiveMaximum, ExclusiveMinimum = _a.ExclusiveMinimum, InclusiveMaximum = _a.InclusiveMaximum, InclusiveMinimum = _a.InclusiveMinimum, MaxItems = _a.MaxItems, MaxLength = _a.MaxLength, MinItems = _a.MinItems, MinLength = _a.MinLength, MultipleOf = _a.MultipleOf, Pattern = _a.Pattern, UniqueItems = _a.UniqueItems;
-            if (ExclusiveMaximum != undefined && value >= ExclusiveMaximum) {
+            if (ExclusiveMaximum != undefined && valueAsNumber >= ExclusiveMaximum) {
                 failValidation("ExclusiveMaximum", ExclusiveMaximum);
             }
-            if (ExclusiveMinimum != undefined && value <= ExclusiveMinimum) {
+            if (ExclusiveMinimum != undefined && valueAsNumber <= ExclusiveMinimum) {
                 failValidation("ExclusiveMinimum", ExclusiveMinimum);
             }
-            if (InclusiveMaximum != undefined && value > InclusiveMaximum) {
+            if (InclusiveMaximum != undefined && valueAsNumber > InclusiveMaximum) {
                 failValidation("InclusiveMaximum", InclusiveMaximum);
             }
-            if (InclusiveMinimum != undefined && value < InclusiveMinimum) {
+            if (InclusiveMinimum != undefined && valueAsNumber < InclusiveMinimum) {
                 failValidation("InclusiveMinimum", InclusiveMinimum);
             }
-            if (MaxItems != undefined && value.length > MaxItems) {
+            var valueAsArray = value;
+            if (MaxItems != undefined && valueAsArray.length > MaxItems) {
                 failValidation("MaxItems", MaxItems);
             }
-            if (MaxLength != undefined && value.length > MaxLength) {
+            if (MaxLength != undefined && valueAsArray.length > MaxLength) {
                 failValidation("MaxLength", MaxLength);
             }
-            if (MinItems != undefined && value.length < MinItems) {
+            if (MinItems != undefined && valueAsArray.length < MinItems) {
                 failValidation("MinItems", MinItems);
             }
-            if (MinLength != undefined && value.length < MinLength) {
+            if (MinLength != undefined && valueAsArray.length < MinLength) {
                 failValidation("MinLength", MinLength);
             }
-            if (MultipleOf != undefined && value % MultipleOf !== 0) {
+            if (MultipleOf != undefined && valueAsNumber % MultipleOf !== 0) {
                 failValidation("MultipleOf", MultipleOf);
             }
             if (Pattern) {
@@ -59844,7 +61338,7 @@ var Serializer = /** @class */ (function () {
                 }
             }
             if (UniqueItems &&
-                value.some(function (item, i, ar) { return ar.indexOf(item) !== i; })) {
+                valueAsArray.some(function (item, i, ar) { return ar.indexOf(item) !== i; })) {
                 failValidation("UniqueItems", UniqueItems);
             }
         }
@@ -59852,15 +61346,20 @@ var Serializer = /** @class */ (function () {
     /**
      * Serialize the given object based on its metadata defined in the mapper
      *
-     * @param {Mapper} mapper The mapper which defines the metadata of the serializable object
-     *
-     * @param {object|string|Array|number|boolean|Date|stream} object A valid Javascript object to be serialized
-     *
-     * @param {string} objectName Name of the serialized object
-     *
-     * @returns {object|string|Array|number|boolean|Date|stream} A valid serialized Javascript object
+     * @param mapper - The mapper which defines the metadata of the serializable object
+     * @param object - A valid Javascript object to be serialized
+     * @param objectName - Name of the serialized object
+     * @param options - additional options to deserialization
+     * @returns A valid serialized Javascript object
      */
-    Serializer.prototype.serialize = function (mapper, object, objectName) {
+    Serializer.prototype.serialize = function (mapper, object, objectName, options) {
+        var _a, _b, _c;
+        if (options === void 0) { options = {}; }
+        var updatedOptions = {
+            rootName: (_a = options.rootName) !== null && _a !== void 0 ? _a : "",
+            includeRoot: (_b = options.includeRoot) !== null && _b !== void 0 ? _b : false,
+            xmlCharKey: (_c = options.xmlCharKey) !== null && _c !== void 0 ? _c : XML_CHARKEY
+        };
         var payload = {};
         var mapperType = mapper.type.name;
         if (!objectName) {
@@ -59917,13 +61416,13 @@ var Serializer = /** @class */ (function () {
                 payload = serializeBase64UrlType(objectName, object);
             }
             else if (mapperType.match(/^Sequence$/i) !== null) {
-                payload = serializeSequenceType(this, mapper, object, objectName, Boolean(this.isXML));
+                payload = serializeSequenceType(this, mapper, object, objectName, Boolean(this.isXML), updatedOptions);
             }
             else if (mapperType.match(/^Dictionary$/i) !== null) {
-                payload = serializeDictionaryType(this, mapper, object, objectName, Boolean(this.isXML));
+                payload = serializeDictionaryType(this, mapper, object, objectName, Boolean(this.isXML), updatedOptions);
             }
             else if (mapperType.match(/^Composite$/i) !== null) {
-                payload = serializeCompositeType(this, mapper, object, objectName, Boolean(this.isXML));
+                payload = serializeCompositeType(this, mapper, object, objectName, Boolean(this.isXML), updatedOptions);
             }
         }
         return payload;
@@ -59931,15 +61430,20 @@ var Serializer = /** @class */ (function () {
     /**
      * Deserialize the given object based on its metadata defined in the mapper
      *
-     * @param {object} mapper The mapper which defines the metadata of the serializable object
-     *
-     * @param {object|string|Array|number|boolean|Date|stream} responseBody A valid Javascript entity to be deserialized
-     *
-     * @param {string} objectName Name of the deserialized object
-     *
-     * @returns {object|string|Array|number|boolean|Date|stream} A valid deserialized Javascript object
+     * @param mapper - The mapper which defines the metadata of the serializable object
+     * @param responseBody - A valid Javascript entity to be deserialized
+     * @param objectName - Name of the deserialized object
+     * @param options - Controls behavior of XML parser and builder.
+     * @returns A valid deserialized Javascript object
      */
-    Serializer.prototype.deserialize = function (mapper, responseBody, objectName) {
+    Serializer.prototype.deserialize = function (mapper, responseBody, objectName, options) {
+        var _a, _b, _c;
+        if (options === void 0) { options = {}; }
+        var updatedOptions = {
+            rootName: (_a = options.rootName) !== null && _a !== void 0 ? _a : "",
+            includeRoot: (_b = options.includeRoot) !== null && _b !== void 0 ? _b : false,
+            xmlCharKey: (_c = options.xmlCharKey) !== null && _c !== void 0 ? _c : XML_CHARKEY
+        };
         if (responseBody == undefined) {
             if (this.isXML && mapper.type.name === "Sequence" && !mapper.xmlIsWrapped) {
                 // Edge case for empty XML non-wrapped lists. xml2js can't distinguish
@@ -59959,17 +61463,20 @@ var Serializer = /** @class */ (function () {
             objectName = mapper.serializedName;
         }
         if (mapperType.match(/^Composite$/i) !== null) {
-            payload = deserializeCompositeType(this, mapper, responseBody, objectName);
+            payload = deserializeCompositeType(this, mapper, responseBody, objectName, updatedOptions);
         }
         else {
             if (this.isXML) {
+                var xmlCharKey = updatedOptions.xmlCharKey;
+                var castResponseBody = responseBody;
                 /**
                  * If the mapper specifies this as a non-composite type value but the responseBody contains
-                 * both header ("$") and body ("_") properties, then just reduce the responseBody value to
-                 * the body ("_") property.
+                 * both header ("$" i.e., XML_ATTRKEY) and body ("#" i.e., XML_CHARKEY) properties,
+                 * then just reduce the responseBody value to the body ("#" i.e., XML_CHARKEY) property.
                  */
-                if (responseBody["$"] != undefined && responseBody["_"] != undefined) {
-                    responseBody = responseBody["_"];
+                if (castResponseBody[XML_ATTRKEY] != undefined &&
+                    castResponseBody[xmlCharKey] != undefined) {
+                    responseBody = castResponseBody[xmlCharKey];
                 }
             }
             if (mapperType.match(/^Number$/i) !== null) {
@@ -60005,10 +61512,10 @@ var Serializer = /** @class */ (function () {
                 payload = base64UrlToByteArray(responseBody);
             }
             else if (mapperType.match(/^Sequence$/i) !== null) {
-                payload = deserializeSequenceType(this, mapper, responseBody, objectName);
+                payload = deserializeSequenceType(this, mapper, responseBody, objectName, updatedOptions);
             }
             else if (mapperType.match(/^Dictionary$/i) !== null) {
-                payload = deserializeDictionaryType(this, mapper, responseBody, objectName);
+                payload = deserializeDictionaryType(this, mapper, responseBody, objectName, updatedOptions);
             }
         }
         if (mapper.isConstant) {
@@ -60113,7 +61620,7 @@ function serializeBasicTypes(typeName, objectName, value) {
                 objectType !== "function" &&
                 !(value instanceof ArrayBuffer) &&
                 !ArrayBuffer.isView(value) &&
-                !(typeof Blob === "function" && value instanceof Blob)) {
+                !((typeof Blob === "function" || typeof Blob === "object") && value instanceof Blob)) {
                 throw new Error(objectName + " must be a string, Blob, ArrayBuffer, ArrayBufferView, or a function returning NodeJS.ReadableStream.");
             }
         }
@@ -60197,7 +61704,7 @@ function serializeDateTypes(typeName, value, objectName) {
     }
     return value;
 }
-function serializeSequenceType(serializer, mapper, object, objectName, isXml) {
+function serializeSequenceType(serializer, mapper, object, objectName, isXml, options) {
     var _a, _b;
     if (!Array.isArray(object)) {
         throw new Error(objectName + " must be of type Array.");
@@ -60209,16 +61716,19 @@ function serializeSequenceType(serializer, mapper, object, objectName, isXml) {
     }
     var tempArray = [];
     for (var i = 0; i < object.length; i++) {
-        var serializedValue = serializer.serialize(elementType, object[i], objectName);
+        var serializedValue = serializer.serialize(elementType, object[i], objectName, options);
         if (isXml && elementType.xmlNamespace) {
             var xmlnsKey = elementType.xmlNamespacePrefix
                 ? "xmlns:" + elementType.xmlNamespacePrefix
                 : "xmlns";
             if (elementType.type.name === "Composite") {
-                tempArray[i] = tslib.__assign(tslib.__assign({}, serializedValue), { $: (_a = {}, _a[xmlnsKey] = elementType.xmlNamespace, _a) });
+                tempArray[i] = tslib.__assign({}, serializedValue);
+                tempArray[i][XML_ATTRKEY] = (_a = {}, _a[xmlnsKey] = elementType.xmlNamespace, _a);
             }
             else {
-                tempArray[i] = { _: serializedValue, $: (_b = {}, _b[xmlnsKey] = elementType.xmlNamespace, _b) };
+                tempArray[i] = {};
+                tempArray[i][options.xmlCharKey] = serializedValue;
+                tempArray[i][XML_ATTRKEY] = (_b = {}, _b[xmlnsKey] = elementType.xmlNamespace, _b);
             }
         }
         else {
@@ -60227,7 +61737,7 @@ function serializeSequenceType(serializer, mapper, object, objectName, isXml) {
     }
     return tempArray;
 }
-function serializeDictionaryType(serializer, mapper, object, objectName, isXml) {
+function serializeDictionaryType(serializer, mapper, object, objectName, isXml, options) {
     var _a;
     if (typeof object !== "object") {
         throw new Error(objectName + " must be of type object.");
@@ -60240,22 +61750,24 @@ function serializeDictionaryType(serializer, mapper, object, objectName, isXml) 
     var tempDictionary = {};
     for (var _i = 0, _b = Object.keys(object); _i < _b.length; _i++) {
         var key = _b[_i];
-        var serializedValue = serializer.serialize(valueType, object[key], objectName);
+        var serializedValue = serializer.serialize(valueType, object[key], objectName, options);
         // If the element needs an XML namespace we need to add it within the $ property
-        tempDictionary[key] = getXmlObjectValue(valueType, serializedValue, isXml);
+        tempDictionary[key] = getXmlObjectValue(valueType, serializedValue, isXml, options);
     }
     // Add the namespace to the root element if needed
     if (isXml && mapper.xmlNamespace) {
         var xmlnsKey = mapper.xmlNamespacePrefix ? "xmlns:" + mapper.xmlNamespacePrefix : "xmlns";
-        return tslib.__assign(tslib.__assign({}, tempDictionary), { $: (_a = {}, _a[xmlnsKey] = mapper.xmlNamespace, _a) });
+        var result = tempDictionary;
+        result[XML_ATTRKEY] = (_a = {}, _a[xmlnsKey] = mapper.xmlNamespace, _a);
+        return result;
     }
     return tempDictionary;
 }
 /**
  * Resolves the additionalProperties property from a referenced mapper
- * @param serializer the serializer containing the entire set of mappers
- * @param mapper the composite mapper to resolve
- * @param objectName name of the object being serialized
+ * @param serializer - The serializer containing the entire set of mappers
+ * @param mapper - The composite mapper to resolve
+ * @param objectName - Name of the object being serialized
  */
 function resolveAdditionalProperties(serializer, mapper, objectName) {
     var additionalProperties = mapper.type.additionalProperties;
@@ -60267,9 +61779,9 @@ function resolveAdditionalProperties(serializer, mapper, objectName) {
 }
 /**
  * Finds the mapper referenced by className
- * @param serializer the serializer containing the entire set of mappers
- * @param mapper the composite mapper to resolve
- * @param objectName name of the object being serialized
+ * @param serializer - The serializer containing the entire set of mappers
+ * @param mapper - The composite mapper to resolve
+ * @param objectName - Name of the object being serialized
  */
 function resolveReferencedMapper(serializer, mapper, objectName) {
     var className = mapper.type.className;
@@ -60280,8 +61792,8 @@ function resolveReferencedMapper(serializer, mapper, objectName) {
 }
 /**
  * Resolves a composite mapper's modelProperties.
- * @param serializer the serializer containing the entire set of mappers
- * @param mapper the composite mapper to resolve
+ * @param serializer - The serializer containing the entire set of mappers
+ * @param mapper - The composite mapper to resolve
  */
 function resolveModelProperties(serializer, mapper, objectName) {
     var modelProps = mapper.type.modelProperties;
@@ -60298,7 +61810,7 @@ function resolveModelProperties(serializer, mapper, objectName) {
     }
     return modelProps;
 }
-function serializeCompositeType(serializer, mapper, object, objectName, isXml) {
+function serializeCompositeType(serializer, mapper, object, objectName, isXml, options) {
     var _a, _b;
     if (getPolymorphicDiscriminatorRecursively(serializer, mapper)) {
         mapper = getPolymorphicMapper(serializer, mapper, object, "clientName");
@@ -60340,7 +61852,7 @@ function serializeCompositeType(serializer, mapper, object, objectName, isXml) {
                     var xmlnsKey = mapper.xmlNamespacePrefix
                         ? "xmlns:" + mapper.xmlNamespacePrefix
                         : "xmlns";
-                    parentObject.$ = tslib.__assign(tslib.__assign({}, parentObject.$), (_a = {}, _a[xmlnsKey] = mapper.xmlNamespace, _a));
+                    parentObject[XML_ATTRKEY] = tslib.__assign(tslib.__assign({}, parentObject[XML_ATTRKEY]), (_a = {}, _a[xmlnsKey] = mapper.xmlNamespace, _a));
                 }
                 var propertyObjectName = propertyMapper.serializedName !== ""
                     ? objectName + "." + propertyMapper.serializedName
@@ -60352,15 +61864,15 @@ function serializeCompositeType(serializer, mapper, object, objectName, isXml) {
                     toSerialize == undefined) {
                     toSerialize = mapper.serializedName;
                 }
-                var serializedValue = serializer.serialize(propertyMapper, toSerialize, propertyObjectName);
+                var serializedValue = serializer.serialize(propertyMapper, toSerialize, propertyObjectName, options);
                 if (serializedValue !== undefined && propName != undefined) {
-                    var value = getXmlObjectValue(propertyMapper, serializedValue, isXml);
+                    var value = getXmlObjectValue(propertyMapper, serializedValue, isXml, options);
                     if (isXml && propertyMapper.xmlIsAttribute) {
-                        // $ is the key attributes are kept under in xml2js.
+                        // XML_ATTRKEY, i.e., $ is the key attributes are kept under in xml2js.
                         // This keeps things simple while preventing name collision
                         // with names in user documents.
-                        parentObject.$ = parentObject.$ || {};
-                        parentObject.$[propName] = serializedValue;
+                        parentObject[XML_ATTRKEY] = parentObject[XML_ATTRKEY] || {};
+                        parentObject[XML_ATTRKEY][propName] = serializedValue;
                     }
                     else if (isXml && propertyMapper.xmlIsWrapped) {
                         parentObject[propName] = (_b = {}, _b[propertyMapper.xmlElementName] = value, _b);
@@ -60377,7 +61889,7 @@ function serializeCompositeType(serializer, mapper, object, objectName, isXml) {
             var _loop_1 = function (clientPropName) {
                 var isAdditionalProperty = propNames.every(function (pn) { return pn !== clientPropName; });
                 if (isAdditionalProperty) {
-                    payload[clientPropName] = serializer.serialize(additionalPropertiesMapper, object[clientPropName], objectName + '["' + clientPropName + '"]');
+                    payload[clientPropName] = serializer.serialize(additionalPropertiesMapper, object[clientPropName], objectName + '["' + clientPropName + '"]', options);
                 }
             };
             for (var clientPropName in object) {
@@ -60388,7 +61900,7 @@ function serializeCompositeType(serializer, mapper, object, objectName, isXml) {
     }
     return object;
 }
-function getXmlObjectValue(propertyMapper, serializedValue, isXml) {
+function getXmlObjectValue(propertyMapper, serializedValue, isXml, options) {
     var _a;
     if (!isXml || !propertyMapper.xmlNamespace) {
         return serializedValue;
@@ -60398,14 +61910,24 @@ function getXmlObjectValue(propertyMapper, serializedValue, isXml) {
         : "xmlns";
     var xmlNamespace = (_a = {}, _a[xmlnsKey] = propertyMapper.xmlNamespace, _a);
     if (["Composite"].includes(propertyMapper.type.name)) {
-        return tslib.__assign({ $: xmlNamespace }, serializedValue);
+        if (serializedValue[XML_ATTRKEY]) {
+            return serializedValue;
+        }
+        else {
+            var result_1 = tslib.__assign({}, serializedValue);
+            result_1[XML_ATTRKEY] = xmlNamespace;
+            return result_1;
+        }
     }
-    return { _: serializedValue, $: xmlNamespace };
+    var result = {};
+    result[options.xmlCharKey] = serializedValue;
+    result[XML_ATTRKEY] = xmlNamespace;
+    return result;
 }
-function isSpecialXmlProperty(propertyName) {
-    return ["$", "_"].includes(propertyName);
+function isSpecialXmlProperty(propertyName, options) {
+    return [XML_ATTRKEY, options.xmlCharKey].includes(propertyName);
 }
-function deserializeCompositeType(serializer, mapper, responseBody, objectName) {
+function deserializeCompositeType(serializer, mapper, responseBody, objectName, options) {
     var _a;
     if (getPolymorphicDiscriminatorRecursively(serializer, mapper)) {
         mapper = getPolymorphicMapper(serializer, mapper, responseBody, "serializedName");
@@ -60429,15 +61951,15 @@ function deserializeCompositeType(serializer, mapper, responseBody, objectName) 
             for (var _c = 0, _d = Object.keys(responseBody); _c < _d.length; _c++) {
                 var headerKey = _d[_c];
                 if (headerKey.startsWith(headerCollectionPrefix)) {
-                    dictionary[headerKey.substring(headerCollectionPrefix.length)] = serializer.deserialize(propertyMapper.type.value, responseBody[headerKey], propertyObjectName);
+                    dictionary[headerKey.substring(headerCollectionPrefix.length)] = serializer.deserialize(propertyMapper.type.value, responseBody[headerKey], propertyObjectName, options);
                 }
                 handledPropertyNames.push(headerKey);
             }
             instance[key] = dictionary;
         }
         else if (serializer.isXML) {
-            if (propertyMapper.xmlIsAttribute && responseBody.$) {
-                instance[key] = serializer.deserialize(propertyMapper, responseBody.$[xmlName], propertyObjectName);
+            if (propertyMapper.xmlIsAttribute && responseBody[XML_ATTRKEY]) {
+                instance[key] = serializer.deserialize(propertyMapper, responseBody[XML_ATTRKEY][xmlName], propertyObjectName, options);
             }
             else {
                 var propertyName = xmlElementName || xmlName || serializedName;
@@ -60458,11 +61980,11 @@ function deserializeCompositeType(serializer, mapper, responseBody, objectName) 
                     */
                     var wrapped = responseBody[xmlName];
                     var elementList = (_a = wrapped === null || wrapped === void 0 ? void 0 : wrapped[xmlElementName]) !== null && _a !== void 0 ? _a : [];
-                    instance[key] = serializer.deserialize(propertyMapper, elementList, propertyObjectName);
+                    instance[key] = serializer.deserialize(propertyMapper, elementList, propertyObjectName, options);
                 }
                 else {
                     var property = responseBody[propertyName];
-                    instance[key] = serializer.deserialize(propertyMapper, property, propertyObjectName);
+                    instance[key] = serializer.deserialize(propertyMapper, property, propertyObjectName, options);
                 }
             }
         }
@@ -60497,10 +62019,10 @@ function deserializeCompositeType(serializer, mapper, responseBody, objectName) 
             // paging
             if (Array.isArray(responseBody[key]) && modelProps[key].serializedName === "") {
                 propertyInstance = responseBody[key];
-                instance = serializer.deserialize(propertyMapper, propertyInstance, propertyObjectName);
+                instance = serializer.deserialize(propertyMapper, propertyInstance, propertyObjectName, options);
             }
             else if (propertyInstance !== undefined || propertyMapper.defaultValue !== undefined) {
-                serializedValue = serializer.deserialize(propertyMapper, propertyInstance, propertyObjectName);
+                serializedValue = serializer.deserialize(propertyMapper, propertyInstance, propertyObjectName, options);
                 instance[key] = serializedValue;
             }
         }
@@ -60518,7 +62040,7 @@ function deserializeCompositeType(serializer, mapper, responseBody, objectName) 
         };
         for (var responsePropName in responseBody) {
             if (isAdditionalProperty(responsePropName)) {
-                instance[responsePropName] = serializer.deserialize(additionalPropertiesMapper, responseBody[responsePropName], objectName + '["' + responsePropName + '"]');
+                instance[responsePropName] = serializer.deserialize(additionalPropertiesMapper, responseBody[responsePropName], objectName + '["' + responsePropName + '"]', options);
             }
         }
     }
@@ -60527,14 +62049,14 @@ function deserializeCompositeType(serializer, mapper, responseBody, objectName) 
             var key = _g[_f];
             if (instance[key] === undefined &&
                 !handledPropertyNames.includes(key) &&
-                !isSpecialXmlProperty(key)) {
+                !isSpecialXmlProperty(key, options)) {
                 instance[key] = responseBody[key];
             }
         }
     }
     return instance;
 }
-function deserializeDictionaryType(serializer, mapper, responseBody, objectName) {
+function deserializeDictionaryType(serializer, mapper, responseBody, objectName, options) {
     var value = mapper.type.value;
     if (!value || typeof value !== "object") {
         throw new Error("\"value\" metadata for a Dictionary must be defined in the " +
@@ -60544,13 +62066,13 @@ function deserializeDictionaryType(serializer, mapper, responseBody, objectName)
         var tempDictionary = {};
         for (var _i = 0, _a = Object.keys(responseBody); _i < _a.length; _i++) {
             var key = _a[_i];
-            tempDictionary[key] = serializer.deserialize(value, responseBody[key], objectName);
+            tempDictionary[key] = serializer.deserialize(value, responseBody[key], objectName, options);
         }
         return tempDictionary;
     }
     return responseBody;
 }
-function deserializeSequenceType(serializer, mapper, responseBody, objectName) {
+function deserializeSequenceType(serializer, mapper, responseBody, objectName, options) {
     var element = mapper.type.element;
     if (!element || typeof element !== "object") {
         throw new Error("element\" metadata for an Array must be defined in the " +
@@ -60563,7 +62085,7 @@ function deserializeSequenceType(serializer, mapper, responseBody, objectName) {
         }
         var tempArray = [];
         for (var i = 0; i < responseBody.length; i++) {
-            tempArray[i] = serializer.deserialize(element, responseBody[i], objectName + "[" + i + "]");
+            tempArray[i] = serializer.deserialize(element, responseBody[i], objectName + "[" + i + "]", options);
         }
         return tempArray;
     }
@@ -60601,6 +62123,7 @@ function getPolymorphicDiscriminatorSafely(serializer, typeName) {
 }
 // TODO: why is this here?
 function serializeObject(toSerialize) {
+    var castToSerialize = toSerialize;
     if (toSerialize == undefined)
         return undefined;
     if (toSerialize instanceof Uint8Array) {
@@ -60620,7 +62143,7 @@ function serializeObject(toSerialize) {
     else if (typeof toSerialize === "object") {
         var dictionary = {};
         for (var property in toSerialize) {
-            dictionary[property] = serializeObject(toSerialize[property]);
+            dictionary[property] = serializeObject(castToSerialize[property]);
         }
         return dictionary;
     }
@@ -60637,6 +62160,7 @@ function strEnum(o) {
     }
     return result;
 }
+// eslint-disable-next-line @typescript-eslint/no-redeclare
 var MapperType = strEnum([
     "Base64Url",
     "Boolean",
@@ -60658,17 +62182,17 @@ var MapperType = strEnum([
 
 // Copyright (c) Microsoft Corporation.
 function isWebResourceLike(object) {
-    if (typeof object !== "object") {
-        return false;
-    }
-    if (typeof object.url === "string" &&
-        typeof object.method === "string" &&
-        typeof object.headers === "object" &&
-        isHttpHeadersLike(object.headers) &&
-        typeof object.validateRequestProperties === "function" &&
-        typeof object.prepare === "function" &&
-        typeof object.clone === "function") {
-        return true;
+    if (object && typeof object === "object") {
+        var castObject = object;
+        if (typeof castObject.url === "string" &&
+            typeof castObject.method === "string" &&
+            typeof castObject.headers === "object" &&
+            isHttpHeadersLike(castObject.headers) &&
+            typeof castObject.validateRequestProperties === "function" &&
+            typeof castObject.prepare === "function" &&
+            typeof castObject.clone === "function") {
+            return true;
+        }
     }
     return false;
 }
@@ -60677,12 +62201,11 @@ function isWebResourceLike(object) {
  *
  * This class provides an abstraction over a REST call by being library / implementation agnostic and wrapping the necessary
  * properties to initiate a request.
- *
- * @constructor
  */
 var WebResource = /** @class */ (function () {
-    function WebResource(url, method, body, query, headers, streamResponseBody, withCredentials, abortSignal, timeout, onUploadProgress, onDownloadProgress, proxySettings, keepAlive, decompressResponse) {
+    function WebResource(url, method, body, query, headers, streamResponseBody, withCredentials, abortSignal, timeout, onUploadProgress, onDownloadProgress, proxySettings, keepAlive, decompressResponse, streamResponseStatusCodes) {
         this.streamResponseBody = streamResponseBody;
+        this.streamResponseStatusCodes = streamResponseStatusCodes;
         this.url = url || "";
         this.method = method || "GET";
         this.headers = isHttpHeadersLike(headers) ? headers : new HttpHeaders(headers);
@@ -60714,8 +62237,8 @@ var WebResource = /** @class */ (function () {
     };
     /**
      * Prepares the request.
-     * @param {RequestPrepareOptions} options Options to provide for preparing the request.
-     * @returns {WebResource} Returns the prepared WebResource (HTTP Request) object that needs to be given to the request pipeline.
+     * @param options - Options to provide for preparing the request.
+     * @returns Returns the prepared WebResource (HTTP Request) object that needs to be given to the request pipeline.
      */
     WebResource.prototype.prepare = function (options) {
         if (!options) {
@@ -60864,7 +62387,7 @@ var WebResource = /** @class */ (function () {
         if (!this.headers.get("Content-Type")) {
             this.headers.set("Content-Type", "application/json; charset=utf-8");
         }
-        // set the request body. request.js automatically sets the Content-Length request header, so we need not set it explicilty
+        // set the request body. request.js automatically sets the Content-Length request header, so we need not set it explicitly
         this.body = options.body;
         if (options.body !== undefined && options.body !== null) {
             // body as a stream special case. set the body as-is and check for some special request headers specific to sending a stream.
@@ -60895,10 +62418,10 @@ var WebResource = /** @class */ (function () {
     };
     /**
      * Clone this WebResource HTTP request object.
-     * @returns {WebResource} The clone of this WebResource HTTP request object.
+     * @returns The clone of this WebResource HTTP request object.
      */
     WebResource.prototype.clone = function () {
-        var result = new WebResource(this.url, this.method, this.body, this.query, this.headers && this.headers.clone(), this.streamResponseBody, this.withCredentials, this.abortSignal, this.timeout, this.onUploadProgress, this.onDownloadProgress, this.proxySettings, this.keepAlive, this.decompressResponse);
+        var result = new WebResource(this.url, this.method, this.body, this.query, this.headers && this.headers.clone(), this.streamResponseBody, this.withCredentials, this.abortSignal, this.timeout, this.onUploadProgress, this.onDownloadProgress, this.proxySettings, this.keepAlive, this.decompressResponse, this.streamResponseStatusCodes);
         if (this.formData) {
             result.formData = this.formData;
         }
@@ -60945,9 +62468,12 @@ var URLQuery = /** @class */ (function () {
      * parameterName.
      */
     URLQuery.prototype.set = function (parameterName, parameterValue) {
+        var caseParameterValue = parameterValue;
         if (parameterName) {
-            if (parameterValue !== undefined && parameterValue !== null) {
-                var newValue = Array.isArray(parameterValue) ? parameterValue : parameterValue.toString();
+            if (caseParameterValue !== undefined && caseParameterValue !== null) {
+                var newValue = Array.isArray(caseParameterValue)
+                    ? caseParameterValue
+                    : caseParameterValue.toString();
                 this._rawQuery[parameterName] = newValue;
             }
             else {
@@ -61524,6 +63050,7 @@ var defaultAllowedHeaderNames = [
     "x-ms-correlation-request-id",
     "x-ms-request-id",
     "client-request-id",
+    "ms-cv",
     "return-client-request-id",
     "traceparent",
     "Access-Control-Allow-Credentials",
@@ -61670,6 +63197,9 @@ var RestError = /** @class */ (function (_super) {
 }(Error));
 
 // Copyright (c) Microsoft Corporation.
+var logger = logger$1.createClientLogger("core-http");
+
+// Copyright (c) Microsoft Corporation.
 var ReportTransform = /** @class */ (function (_super) {
     tslib.__extends(ReportTransform, _super);
     function ReportTransform(progressCallback) {
@@ -61690,10 +63220,12 @@ var FetchHttpClient = /** @class */ (function () {
     function FetchHttpClient() {
     }
     FetchHttpClient.prototype.sendRequest = function (httpRequest) {
+        var _a;
         return tslib.__awaiter(this, void 0, void 0, function () {
-            var abortController$1, abortListener, formData, requestForm_1, appendFormValue, _i, _a, formKey, formValue, j, contentType, body, onUploadProgress, uploadReportStream, platformSpecificRequestInit, requestInit, response, headers, operationResponse, _b, _c, onDownloadProgress, responseBody, downloadReportStream, length_1, error_1, fetchError;
-            return tslib.__generator(this, function (_d) {
-                switch (_d.label) {
+            var abortController$1, abortListener, formData, requestForm_1, appendFormValue, _i, _b, formKey, formValue, j, contentType, body, onUploadProgress, uploadReportStream, platformSpecificRequestInit, requestInit, operationResponse, response, headers, streaming, _c, onDownloadProgress, responseBody, downloadReportStream, length_1, error_1, fetchError, uploadStreamDone, downloadStreamDone;
+            var _d;
+            return tslib.__generator(this, function (_e) {
+                switch (_e.label) {
                     case 0:
                         if (!httpRequest && typeof httpRequest !== "object") {
                             throw new Error("'httpRequest' (WebResourceLike) cannot be null or undefined and must be of type object.");
@@ -61723,16 +63255,17 @@ var FetchHttpClient = /** @class */ (function () {
                                 if (typeof value === "function") {
                                     value = value();
                                 }
-                                // eslint-disable-next-line no-prototype-builtins
-                                if (value && value.hasOwnProperty("value") && value.hasOwnProperty("options")) {
+                                if (value &&
+                                    Object.prototype.hasOwnProperty.call(value, "value") &&
+                                    Object.prototype.hasOwnProperty.call(value, "options")) {
                                     requestForm_1.append(key, value.value, value.options);
                                 }
                                 else {
                                     requestForm_1.append(key, value);
                                 }
                             };
-                            for (_i = 0, _a = Object.keys(formData); _i < _a.length; _i++) {
-                                formKey = _a[_i];
+                            for (_i = 0, _b = Object.keys(formData); _i < _b.length; _i++) {
+                                formKey = _b[_i];
                                 formValue = formData[formKey];
                                 if (Array.isArray(formValue)) {
                                     for (j = 0; j < formValue.length; j++) {
@@ -61774,34 +63307,36 @@ var FetchHttpClient = /** @class */ (function () {
                         }
                         return [4 /*yield*/, this.prepareRequest(httpRequest)];
                     case 1:
-                        platformSpecificRequestInit = _d.sent();
-                        requestInit = tslib.__assign({ body: body, headers: httpRequest.headers.rawHeaders(), method: httpRequest.method, signal: abortController$1.signal }, platformSpecificRequestInit);
-                        _d.label = 2;
+                        platformSpecificRequestInit = _e.sent();
+                        requestInit = tslib.__assign({ body: body, headers: httpRequest.headers.rawHeaders(), method: httpRequest.method, signal: abortController$1.signal, redirect: "manual" }, platformSpecificRequestInit);
+                        _e.label = 2;
                     case 2:
-                        _d.trys.push([2, 8, 9, 10]);
+                        _e.trys.push([2, 8, 9, 10]);
                         return [4 /*yield*/, this.fetch(httpRequest.url, requestInit)];
                     case 3:
-                        response = _d.sent();
+                        response = _e.sent();
                         headers = parseHeaders(response.headers);
-                        _b = {
+                        streaming = ((_a = httpRequest.streamResponseStatusCodes) === null || _a === void 0 ? void 0 : _a.has(response.status)) ||
+                            httpRequest.streamResponseBody;
+                        _d = {
                             headers: headers,
                             request: httpRequest,
                             status: response.status,
-                            readableStreamBody: httpRequest.streamResponseBody
+                            readableStreamBody: streaming
                                 ? response.body
                                 : undefined
                         };
-                        if (!!httpRequest.streamResponseBody) return [3 /*break*/, 5];
+                        if (!!streaming) return [3 /*break*/, 5];
                         return [4 /*yield*/, response.text()];
                     case 4:
-                        _c = _d.sent();
+                        _c = _e.sent();
                         return [3 /*break*/, 6];
                     case 5:
                         _c = undefined;
-                        _d.label = 6;
+                        _e.label = 6;
                     case 6:
-                        operationResponse = (_b.bodyAsText = _c,
-                            _b);
+                        operationResponse = (_d.bodyAsText = _c,
+                            _d);
                         onDownloadProgress = httpRequest.onDownloadProgress;
                         if (onDownloadProgress) {
                             responseBody = response.body || undefined;
@@ -61820,10 +63355,10 @@ var FetchHttpClient = /** @class */ (function () {
                         }
                         return [4 /*yield*/, this.processRequest(operationResponse)];
                     case 7:
-                        _d.sent();
+                        _e.sent();
                         return [2 /*return*/, operationResponse];
                     case 8:
-                        error_1 = _d.sent();
+                        error_1 = _e.sent();
                         fetchError = error_1;
                         if (fetchError.code === "ENOTFOUND") {
                             throw new RestError(fetchError.message, RestError.REQUEST_SEND_ERROR, undefined, httpRequest);
@@ -61835,7 +63370,23 @@ var FetchHttpClient = /** @class */ (function () {
                     case 9:
                         // clean up event listener
                         if (httpRequest.abortSignal && abortListener) {
-                            httpRequest.abortSignal.removeEventListener("abort", abortListener);
+                            uploadStreamDone = Promise.resolve();
+                            if (isReadableStream(body)) {
+                                uploadStreamDone = isStreamComplete(body);
+                            }
+                            downloadStreamDone = Promise.resolve();
+                            if (isReadableStream(operationResponse === null || operationResponse === void 0 ? void 0 : operationResponse.readableStreamBody)) {
+                                downloadStreamDone = isStreamComplete(operationResponse.readableStreamBody);
+                            }
+                            Promise.all([uploadStreamDone, downloadStreamDone])
+                                .then(function () {
+                                var _a;
+                                (_a = httpRequest.abortSignal) === null || _a === void 0 ? void 0 : _a.removeEventListener("abort", abortListener);
+                                return;
+                            })
+                                .catch(function (e) {
+                                logger.warning("Error when cleaning up abortListener on httpRequest", e);
+                            });
                         }
                         return [7 /*endfinally*/];
                     case 10: return [2 /*return*/];
@@ -61847,6 +63398,13 @@ var FetchHttpClient = /** @class */ (function () {
 }());
 function isReadableStream(body) {
     return body && typeof body.pipe === "function";
+}
+function isStreamComplete(stream) {
+    return new Promise(function (resolve) {
+        stream.on("close", resolve);
+        stream.on("end", resolve);
+        stream.on("error", resolve);
+    });
 }
 function parseHeaders(headers) {
     var httpHeaders = new HttpHeaders();
@@ -62054,7 +63612,7 @@ var NodeFetchHttpClient = /** @class */ (function (_super) {
 /**
  * Converts an OperationOptions to a RequestOptionsBase
  *
- * @param opts OperationOptions object to convert to RequestOptionsBase
+ * @param opts - OperationOptions object to convert to RequestOptionsBase
  */
 function operationOptionsToRequestOptionsBase(opts) {
     var requestOptions = opts.requestOptions, tracingOptions = opts.tracingOptions, additionalOptions = tslib.__rest(opts, ["requestOptions", "tracingOptions"]);
@@ -62076,7 +63634,7 @@ var BaseRequestPolicy = /** @class */ (function () {
     }
     /**
      * Get whether or not a log with the provided log level should be logged.
-     * @param logLevel The log level of the log that will be logged.
+     * @param logLevel - The log level of the log that will be logged.
      * @returns Whether or not a log with the provided log level should be logged.
      */
     BaseRequestPolicy.prototype.shouldLog = function (logLevel) {
@@ -62085,8 +63643,8 @@ var BaseRequestPolicy = /** @class */ (function () {
     /**
      * Attempt to log the provided message to the provided logger. If no logger was provided or if
      * the log level does not meat the logger's threshold, then nothing will be logged.
-     * @param logLevel The log level of this log.
-     * @param message The message of this log.
+     * @param logLevel - The log level of this log.
+     * @param message - The message of this log.
      */
     BaseRequestPolicy.prototype.log = function (logLevel, message) {
         this._options.log(logLevel, message);
@@ -62102,7 +63660,7 @@ var RequestPolicyOptions = /** @class */ (function () {
     }
     /**
      * Get whether or not a log with the provided log level should be logged.
-     * @param logLevel The log level of the log that will be logged.
+     * @param logLevel - The log level of the log that will be logged.
      * @returns Whether or not a log with the provided log level should be logged.
      */
     RequestPolicyOptions.prototype.shouldLog = function (logLevel) {
@@ -62113,8 +63671,8 @@ var RequestPolicyOptions = /** @class */ (function () {
     /**
      * Attempt to log the provided message to the provided logger. If no logger was provided or if
      * the log level does not meet the logger's threshold, then nothing will be logged.
-     * @param logLevel The log level of this log.
-     * @param message The message of this log.
+     * @param logLevel - The log level of this log.
+     * @param message - The message of this log.
      */
     RequestPolicyOptions.prototype.log = function (logLevel, message) {
         if (this._logger && this.shouldLog(logLevel)) {
@@ -62123,9 +63681,6 @@ var RequestPolicyOptions = /** @class */ (function () {
     };
     return RequestPolicyOptions;
 }());
-
-// Copyright (c) Microsoft Corporation.
-var logger = logger$1.createClientLogger("core-http");
 
 // Copyright (c) Microsoft Corporation.
 function logPolicy(loggingOptions) {
@@ -62211,7 +63766,7 @@ var LogPolicy = /** @class */ (function (_super) {
 // Licensed under the MIT license.
 /**
  * Get the path to this parameter's value as a dotted string (a.b.c).
- * @param parameter The parameter to get the path string for.
+ * @param parameter - The parameter to get the path string for.
  * @returns The path to this parameter's value as a dotted string.
  */
 function getPathStringFromParameter(parameter) {
@@ -62232,14 +63787,17 @@ function getPathStringFromParameterPath(parameterPath, mapper) {
 }
 
 // Copyright (c) Microsoft Corporation.
-function isStreamOperation(operationSpec) {
-    var result = false;
+/**
+ * Gets the list of status codes for streaming responses.
+ * @internal @hidden
+ */
+function getStreamResponseStatusCodes(operationSpec) {
+    var result = new Set();
     for (var statusCode in operationSpec.responses) {
         var operationResponse = operationSpec.responses[statusCode];
         if (operationResponse.bodyMapper &&
             operationResponse.bodyMapper.type.name === MapperType.Stream) {
-            result = true;
-            break;
+            result.add(Number(statusCode));
         }
     }
     return result;
@@ -62255,13 +63813,12 @@ var xml2jsDefaultOptionsV2 = {
     trim: false,
     normalize: false,
     normalizeTags: false,
-    attrkey: "$",
-    charkey: "_",
+    attrkey: XML_ATTRKEY,
     explicitArray: true,
     ignoreAttrs: false,
     mergeAttrs: false,
     explicitRoot: true,
-    validator: null,
+    validator: undefined,
     xmlns: false,
     explicitChildren: false,
     preserveChildrenOrder: false,
@@ -62270,17 +63827,17 @@ var xml2jsDefaultOptionsV2 = {
     includeWhiteChars: false,
     async: false,
     strict: true,
-    attrNameProcessors: null,
-    attrValueProcessors: null,
-    tagNameProcessors: null,
-    valueProcessors: null,
+    attrNameProcessors: undefined,
+    attrValueProcessors: undefined,
+    tagNameProcessors: undefined,
+    valueProcessors: undefined,
     rootName: "root",
     xmldec: {
         version: "1.0",
         encoding: "UTF-8",
         standalone: true
     },
-    doctype: null,
+    doctype: undefined,
     renderOpts: {
         pretty: true,
         indent: "  ",
@@ -62302,23 +63859,27 @@ xml2jsBuilderSettings.renderOpts = {
 };
 /**
  * Converts given JSON object to XML string
- * @param obj JSON object to be converted into XML string
- * @param opts Options that govern the parsing of given JSON object
- * `rootName` indicates the name of the root element in the resulting XML
+ * @param obj - JSON object to be converted into XML string
+ * @param opts - Options that govern the parsing of given JSON object
  */
 function stringifyXML(obj, opts) {
-    xml2jsBuilderSettings.rootName = (opts || {}).rootName;
+    var _a;
+    if (opts === void 0) { opts = {}; }
+    xml2jsBuilderSettings.rootName = opts.rootName;
+    xml2jsBuilderSettings.charkey = (_a = opts.xmlCharKey) !== null && _a !== void 0 ? _a : XML_CHARKEY;
     var builder = new xml2js.Builder(xml2jsBuilderSettings);
     return builder.buildObject(obj);
 }
 /**
  * Converts given XML string into JSON
- * @param str String containing the XML content to be parsed into JSON
- * @param opts Options that govern the parsing of given xml string
- * `includeRoot` indicates whether the root element is to be included or not in the output
+ * @param str - String containing the XML content to be parsed into JSON
+ * @param opts - Options that govern the parsing of given xml string
  */
 function parseXML(str, opts) {
-    xml2jsParserSettings.explicitRoot = !!(opts && opts.includeRoot);
+    var _a;
+    if (opts === void 0) { opts = {}; }
+    xml2jsParserSettings.explicitRoot = !!opts.includeRoot;
+    xml2jsParserSettings.charkey = (_a = opts.xmlCharKey) !== null && _a !== void 0 ? _a : XML_CHARKEY;
     var xmlParser = new xml2js.Parser(xml2jsParserSettings);
     return new Promise(function (resolve, reject) {
         if (!str) {
@@ -62342,10 +63903,10 @@ function parseXML(str, opts) {
  * Create a new serialization RequestPolicyCreator that will serialized HTTP request bodies as they
  * pass through the HTTP pipeline.
  */
-function deserializationPolicy(deserializationContentTypes) {
+function deserializationPolicy(deserializationContentTypes, parsingOptions) {
     return {
         create: function (nextPolicy, options) {
-            return new DeserializationPolicy(nextPolicy, deserializationContentTypes, options);
+            return new DeserializationPolicy(nextPolicy, options, deserializationContentTypes, parsingOptions);
         }
     };
 }
@@ -62363,22 +63924,25 @@ var DefaultDeserializationOptions = {
  */
 var DeserializationPolicy = /** @class */ (function (_super) {
     tslib.__extends(DeserializationPolicy, _super);
-    function DeserializationPolicy(nextPolicy, deserializationContentTypes, options) {
-        var _this = _super.call(this, nextPolicy, options) || this;
+    function DeserializationPolicy(nextPolicy, requestPolicyOptions, deserializationContentTypes, parsingOptions) {
+        if (parsingOptions === void 0) { parsingOptions = {}; }
+        var _a;
+        var _this = _super.call(this, nextPolicy, requestPolicyOptions) || this;
         _this.jsonContentTypes =
             (deserializationContentTypes && deserializationContentTypes.json) || defaultJsonContentTypes;
         _this.xmlContentTypes =
             (deserializationContentTypes && deserializationContentTypes.xml) || defaultXmlContentTypes;
+        _this.xmlCharKey = (_a = parsingOptions.xmlCharKey) !== null && _a !== void 0 ? _a : XML_CHARKEY;
         return _this;
     }
     DeserializationPolicy.prototype.sendRequest = function (request) {
         return tslib.__awaiter(this, void 0, void 0, function () {
             var _this = this;
             return tslib.__generator(this, function (_a) {
-                return [2 /*return*/, this._nextPolicy
-                        .sendRequest(request)
-                        .then(function (response) {
-                        return deserializeResponseBody(_this.jsonContentTypes, _this.xmlContentTypes, response);
+                return [2 /*return*/, this._nextPolicy.sendRequest(request).then(function (response) {
+                        return deserializeResponseBody(_this.jsonContentTypes, _this.xmlContentTypes, response, {
+                            xmlCharKey: _this.xmlCharKey
+                        });
                     })];
             });
         });
@@ -62414,8 +63978,15 @@ function shouldDeserializeResponse(parsedResponse) {
     }
     return result;
 }
-function deserializeResponseBody(jsonContentTypes, xmlContentTypes, response) {
-    return parse(jsonContentTypes, xmlContentTypes, response).then(function (parsedResponse) {
+function deserializeResponseBody(jsonContentTypes, xmlContentTypes, response, options) {
+    var _a, _b, _c;
+    if (options === void 0) { options = {}; }
+    var updatedOptions = {
+        rootName: (_a = options.rootName) !== null && _a !== void 0 ? _a : "",
+        includeRoot: (_b = options.includeRoot) !== null && _b !== void 0 ? _b : false,
+        xmlCharKey: (_c = options.xmlCharKey) !== null && _c !== void 0 ? _c : XML_CHARKEY
+    };
+    return parse(jsonContentTypes, xmlContentTypes, response, updatedOptions).then(function (parsedResponse) {
         if (!shouldDeserializeResponse(parsedResponse)) {
             return parsedResponse;
         }
@@ -62424,53 +63995,12 @@ function deserializeResponseBody(jsonContentTypes, xmlContentTypes, response) {
             return parsedResponse;
         }
         var responseSpec = getOperationResponse(parsedResponse);
-        var expectedStatusCodes = Object.keys(operationSpec.responses);
-        var hasNoExpectedStatusCodes = expectedStatusCodes.length === 0 ||
-            (expectedStatusCodes.length === 1 && expectedStatusCodes[0] === "default");
-        var isExpectedStatusCode = hasNoExpectedStatusCodes
-            ? 200 <= parsedResponse.status && parsedResponse.status < 300
-            : !!responseSpec;
-        // There is no operation response spec for current status code.
-        // So, treat it as an error case and use the default response spec to deserialize the response.
-        if (!isExpectedStatusCode) {
-            var defaultResponseSpec = operationSpec.responses.default;
-            if (!defaultResponseSpec) {
-                return parsedResponse;
-            }
-            var defaultBodyMapper = defaultResponseSpec.bodyMapper;
-            var defaultHeadersMapper = defaultResponseSpec.headersMapper;
-            var initialErrorMessage = isStreamOperation(operationSpec)
-                ? "Unexpected status code: " + parsedResponse.status
-                : parsedResponse.bodyAsText;
-            var error = new RestError(initialErrorMessage, undefined, parsedResponse.status, parsedResponse.request, parsedResponse);
-            try {
-                // If error response has a body, try to extract error code & message from it
-                // Then try to deserialize it using default body mapper
-                if (parsedResponse.parsedBody) {
-                    var parsedBody = parsedResponse.parsedBody;
-                    var internalError = parsedBody.error || parsedBody;
-                    error.code = internalError.code;
-                    if (internalError.message) {
-                        error.message = internalError.message;
-                    }
-                    if (defaultBodyMapper) {
-                        var valueToDeserialize = parsedBody;
-                        if (operationSpec.isXML && defaultBodyMapper.type.name === MapperType.Sequence) {
-                            valueToDeserialize =
-                                typeof parsedBody === "object" ? parsedBody[defaultBodyMapper.xmlElementName] : [];
-                        }
-                        error.response.parsedBody = operationSpec.serializer.deserialize(defaultBodyMapper, valueToDeserialize, "error.response.parsedBody");
-                    }
-                }
-                // If error response has headers, try to deserialize it using default header mapper
-                if (parsedResponse.headers && defaultHeadersMapper) {
-                    error.response.parsedHeaders = operationSpec.serializer.deserialize(defaultHeadersMapper, parsedResponse.headers.rawHeaders(), "operationRes.parsedHeaders");
-                }
-            }
-            catch (defaultError) {
-                error.message = "Error \"" + defaultError.message + "\" occurred in deserializing the responseBody - \"" + parsedResponse.bodyAsText + "\" for the default response.";
-            }
+        var _a = handleErrorResponse(parsedResponse, operationSpec, responseSpec), error = _a.error, shouldReturnResponse = _a.shouldReturnResponse;
+        if (error) {
             throw error;
+        }
+        else if (shouldReturnResponse) {
+            return parsedResponse;
         }
         // An operation response spec does exist for current status code, so
         // use it to deserialize the response.
@@ -62484,10 +64014,10 @@ function deserializeResponseBody(jsonContentTypes, xmlContentTypes, response) {
                             : [];
                 }
                 try {
-                    parsedResponse.parsedBody = operationSpec.serializer.deserialize(responseSpec.bodyMapper, valueToDeserialize, "operationRes.parsedBody");
+                    parsedResponse.parsedBody = operationSpec.serializer.deserialize(responseSpec.bodyMapper, valueToDeserialize, "operationRes.parsedBody", options);
                 }
-                catch (error) {
-                    var restError = new RestError("Error " + error + " occurred in deserializing the responseBody - " + parsedResponse.bodyAsText, undefined, parsedResponse.status, parsedResponse.request, parsedResponse);
+                catch (innerError) {
+                    var restError = new RestError("Error " + innerError + " occurred in deserializing the responseBody - " + parsedResponse.bodyAsText, undefined, parsedResponse.status, parsedResponse.request, parsedResponse);
                     throw restError;
                 }
             }
@@ -62496,20 +64026,91 @@ function deserializeResponseBody(jsonContentTypes, xmlContentTypes, response) {
                 parsedResponse.parsedBody = response.status >= 200 && response.status < 300;
             }
             if (responseSpec.headersMapper) {
-                parsedResponse.parsedHeaders = operationSpec.serializer.deserialize(responseSpec.headersMapper, parsedResponse.headers.rawHeaders(), "operationRes.parsedHeaders");
+                parsedResponse.parsedHeaders = operationSpec.serializer.deserialize(responseSpec.headersMapper, parsedResponse.headers.rawHeaders(), "operationRes.parsedHeaders", options);
             }
         }
         return parsedResponse;
     });
 }
-function parse(jsonContentTypes, xmlContentTypes, operationResponse) {
+function isOperationSpecEmpty(operationSpec) {
+    var expectedStatusCodes = Object.keys(operationSpec.responses);
+    return (expectedStatusCodes.length === 0 ||
+        (expectedStatusCodes.length === 1 && expectedStatusCodes[0] === "default"));
+}
+function handleErrorResponse(parsedResponse, operationSpec, responseSpec) {
+    var _a;
+    var isSuccessByStatus = 200 <= parsedResponse.status && parsedResponse.status < 300;
+    var isExpectedStatusCode = isOperationSpecEmpty(operationSpec)
+        ? isSuccessByStatus
+        : !!responseSpec;
+    if (isExpectedStatusCode) {
+        if (responseSpec) {
+            if (!responseSpec.isError) {
+                return { error: null, shouldReturnResponse: false };
+            }
+        }
+        else {
+            return { error: null, shouldReturnResponse: false };
+        }
+    }
+    var errorResponseSpec = responseSpec !== null && responseSpec !== void 0 ? responseSpec : operationSpec.responses.default;
+    var streaming = ((_a = parsedResponse.request.streamResponseStatusCodes) === null || _a === void 0 ? void 0 : _a.has(parsedResponse.status)) ||
+        parsedResponse.request.streamResponseBody;
+    var initialErrorMessage = streaming
+        ? "Unexpected status code: " + parsedResponse.status
+        : parsedResponse.bodyAsText;
+    var error = new RestError(initialErrorMessage, undefined, parsedResponse.status, parsedResponse.request, parsedResponse);
+    // If the item failed but there's no error spec or default spec to deserialize the error,
+    // we should fail so we just throw the parsed response
+    if (!errorResponseSpec) {
+        throw error;
+    }
+    var defaultBodyMapper = errorResponseSpec.bodyMapper;
+    var defaultHeadersMapper = errorResponseSpec.headersMapper;
+    try {
+        // If error response has a body, try to deserialize it using default body mapper.
+        // Then try to extract error code & message from it
+        if (parsedResponse.parsedBody) {
+            var parsedBody = parsedResponse.parsedBody;
+            var parsedError = void 0;
+            if (defaultBodyMapper) {
+                var valueToDeserialize = parsedBody;
+                if (operationSpec.isXML && defaultBodyMapper.type.name === MapperType.Sequence) {
+                    valueToDeserialize =
+                        typeof parsedBody === "object" ? parsedBody[defaultBodyMapper.xmlElementName] : [];
+                }
+                parsedError = operationSpec.serializer.deserialize(defaultBodyMapper, valueToDeserialize, "error.response.parsedBody");
+            }
+            var internalError = parsedBody.error || parsedError || parsedBody;
+            error.code = internalError.code;
+            if (internalError.message) {
+                error.message = internalError.message;
+            }
+            if (defaultBodyMapper) {
+                error.response.parsedBody = parsedError;
+            }
+        }
+        // If error response has headers, try to deserialize it using default header mapper
+        if (parsedResponse.headers && defaultHeadersMapper) {
+            error.response.parsedHeaders = operationSpec.serializer.deserialize(defaultHeadersMapper, parsedResponse.headers.rawHeaders(), "operationRes.parsedHeaders");
+        }
+    }
+    catch (defaultError) {
+        error.message = "Error \"" + defaultError.message + "\" occurred in deserializing the responseBody - \"" + parsedResponse.bodyAsText + "\" for the default response.";
+    }
+    return { error: error, shouldReturnResponse: false };
+}
+function parse(jsonContentTypes, xmlContentTypes, operationResponse, opts) {
+    var _a;
     var errorHandler = function (err) {
         var msg = "Error \"" + err + "\" occurred while parsing the response body - " + operationResponse.bodyAsText + ".";
         var errCode = err.code || RestError.PARSE_ERROR;
         var e = new RestError(msg, errCode, operationResponse.status, operationResponse.request, operationResponse);
         return Promise.reject(e);
     };
-    if (!operationResponse.request.streamResponseBody && operationResponse.bodyAsText) {
+    var streaming = ((_a = operationResponse.request.streamResponseStatusCodes) === null || _a === void 0 ? void 0 : _a.has(operationResponse.status)) ||
+        operationResponse.request.streamResponseBody;
+    if (!streaming && operationResponse.bodyAsText) {
         var text_1 = operationResponse.bodyAsText;
         var contentType = operationResponse.headers.get("Content-Type") || "";
         var contentComponents = !contentType
@@ -62523,7 +64124,7 @@ function parse(jsonContentTypes, xmlContentTypes, operationResponse) {
             }).catch(errorHandler);
         }
         else if (contentComponents.some(function (component) { return xmlContentTypes.indexOf(component) !== -1; })) {
-            return parseXML(text_1)
+            return parseXML(text_1, opts)
                 .then(function (body) {
                 operationResponse.parsedBody = body;
                 return operationResponse;
@@ -62548,10 +64149,10 @@ function isNumber(n) {
  * @internal
  * Determines if the operation should be retried.
  *
- * @param {number} retryLimit Specifies the max number of retries.
- * @param {(response?: HttpOperationResponse, error?: RetryError) => boolean} predicate Initial chekck on whether to retry based on given responses or errors
- * @param {RetryData} retryData  The retry data.
- * @return {boolean} True if the operation qualifies for a retry; false otherwise.
+ * @param retryLimit - Specifies the max number of retries.
+ * @param predicate - Initial chekck on whether to retry based on given responses or errors
+ * @param retryData -  The retry data.
+ * @returns True if the operation qualifies for a retry; false otherwise.
  */
 function shouldRetry(retryLimit, predicate, retryData, response, error) {
     if (!predicate(response, error)) {
@@ -62563,9 +64164,9 @@ function shouldRetry(retryLimit, predicate, retryData, response, error) {
  * @internal
  * Updates the retry data for the next attempt.
  *
- * @param {RetryPolicyOptions} retryOptions specifies retry interval, and its lower bound and upper bound.
- * @param {RetryData} [retryData]  The retry data.
- * @param {RetryError} [err] The operation"s error, if any.
+ * @param retryOptions - specifies retry interval, and its lower bound and upper bound.
+ * @param retryData -  The retry data.
+ * @param err - The operation"s error, if any.
  */
 function updateRetryData(retryOptions, retryData, err) {
     if (retryData === void 0) { retryData = { retryCount: 0, retryInterval: 0 }; }
@@ -62603,19 +64204,17 @@ var DefaultRetryOptions = {
     maxRetryDelayInMs: DEFAULT_CLIENT_MAX_RETRY_INTERVAL
 };
 /**
- * @class
  * Instantiates a new "ExponentialRetryPolicyFilter" instance.
  */
 var ExponentialRetryPolicy = /** @class */ (function (_super) {
     tslib.__extends(ExponentialRetryPolicy, _super);
     /**
-     * @constructor
-     * @param {RequestPolicy} nextPolicy The next RequestPolicy in the pipeline chain.
-     * @param {RequestPolicyOptions} options The options for this RequestPolicy.
-     * @param {number} [retryCount]        The client retry count.
-     * @param {number} [retryInterval]     The client retry interval, in milliseconds.
-     * @param {number} [minRetryInterval]  The minimum retry interval, in milliseconds.
-     * @param {number} [maxRetryInterval]  The maximum retry interval, in milliseconds.
+     * @param nextPolicy - The next RequestPolicy in the pipeline chain.
+     * @param options - The options for this RequestPolicy.
+     * @param retryCount - The client retry count.
+     * @param retryInterval - The client retry interval, in milliseconds.
+     * @param minRetryInterval - The minimum retry interval, in milliseconds.
+     * @param maxRetryInterval - The maximum retry interval, in milliseconds.
      */
     function ExponentialRetryPolicy(nextPolicy, options, retryCount, retryInterval, maxRetryInterval) {
         var _this = _super.call(this, nextPolicy, options) || this;
@@ -62637,8 +64236,8 @@ var ExponentialRetryPolicy = /** @class */ (function (_super) {
 }(BaseRequestPolicy));
 function retry(policy, request, response, retryData, requestError) {
     return tslib.__awaiter(this, void 0, void 0, function () {
-        function shouldPolicyRetry(response) {
-            var statusCode = response === null || response === void 0 ? void 0 : response.status;
+        function shouldPolicyRetry(responseParam) {
+            var statusCode = responseParam === null || responseParam === void 0 ? void 0 : responseParam.status;
             if (statusCode === undefined ||
                 (statusCode < 500 && statusCode !== 408) ||
                 statusCode === 501 ||
@@ -62793,6 +64392,10 @@ var UserAgentPolicy = /** @class */ (function (_super) {
 }(BaseRequestPolicy));
 
 // Copyright (c) Microsoft Corporation.
+/**
+ * Methods that are allowed to follow redirects 301 and 302
+ */
+var allowedRedirect = ["GET", "HEAD"];
 var DefaultRedirectOptions = {
     handleRedirects: true,
     maxRetries: 20
@@ -62825,7 +64428,11 @@ function handleRedirect(policy, response, currentRetries) {
     var request = response.request, status = response.status;
     var locationHeader = response.headers.get("location");
     if (locationHeader &&
-        (status === 300 || status === 307 || (status === 303 && request.method === "POST")) &&
+        (status === 300 ||
+            (status === 301 && allowedRedirect.includes(request.method)) ||
+            (status === 302 && allowedRedirect.includes(request.method)) ||
+            (status === 303 && request.method === "POST") ||
+            status === 307) &&
         (!policy.maxRetries || currentRetries < policy.maxRetries)) {
         var builder = URLBuilder.parse(request.url);
         builder.setPath(locationHeader);
@@ -62834,6 +64441,7 @@ function handleRedirect(policy, response, currentRetries) {
         // redirected GET request if the redirect url is present in the location header
         if (status === 303) {
             request.method = "GET";
+            delete request.body;
         }
         return policy._nextPolicy
             .sendRequest(request)
@@ -62892,9 +64500,9 @@ function registerIfNeeded(policy, request, response) {
 }
 /**
  * Reuses the headers of the original request and url (if specified).
- * @param {WebResourceLike} originalRequest The original request
- * @param {boolean} reuseUrlToo Should the url from the original request be reused as well. Default false.
- * @returns {object} A new request object with desired headers.
+ * @param originalRequest - The original request
+ * @param reuseUrlToo - Should the url from the original request be reused as well. Default false.
+ * @returns A new request object with desired headers.
  */
 function getRequestEssentials(originalRequest, reuseUrlToo) {
     if (reuseUrlToo === void 0) { reuseUrlToo = false; }
@@ -62912,8 +64520,8 @@ function getRequestEssentials(originalRequest, reuseUrlToo) {
 /**
  * Validates the error code and message associated with 409 response status code. If it matches to that of
  * RP not registered then it returns the name of the RP else returns undefined.
- * @param {string} body The response body received after making the original request.
- * @returns {string} The name of the RP if condition is satisfied else undefined.
+ * @param body - The response body received after making the original request.
+ * @returns The name of the RP if condition is satisfied else undefined.
  */
 function checkRPNotRegisteredError(body) {
     var result, responseBody;
@@ -62940,8 +64548,8 @@ function checkRPNotRegisteredError(body) {
 /**
  * Extracts the first part of the URL, just after subscription:
  * https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/
- * @param {string} url The original request url
- * @returns {string} The url prefix as explained above.
+ * @param url - The original request url
+ * @returns The url prefix as explained above.
  */
 function extractSubscriptionUrl(url) {
     var result;
@@ -62956,12 +64564,12 @@ function extractSubscriptionUrl(url) {
 }
 /**
  * Registers the given provider.
- * @param {RPRegistrationPolicy} policy The RPRegistrationPolicy this function is being called against.
- * @param {string} urlPrefix https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/
- * @param {string} provider The provider name to be registered.
- * @param {WebResourceLike} originalRequest The original request sent by the user that returned a 409 response
+ * @param policy - The RPRegistrationPolicy this function is being called against.
+ * @param urlPrefix - https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/
+ * @param provider - The provider name to be registered.
+ * @param originalRequest - The original request sent by the user that returned a 409 response
  * with a message that the provider is not registered.
- * @param {registrationCallback} callback The callback that handles the RP registration
+ * @param callback - The callback that handles the RP registration
  */
 function registerRP(policy, urlPrefix, provider, originalRequest) {
     var postUrl = urlPrefix + "providers/" + provider + "/register?api-version=2016-02-01";
@@ -62979,11 +64587,11 @@ function registerRP(policy, urlPrefix, provider, originalRequest) {
 /**
  * Polls the registration status of the provider that was registered. Polling happens at an interval of 30 seconds.
  * Polling will happen till the registrationState property of the response body is "Registered".
- * @param {RPRegistrationPolicy} policy The RPRegistrationPolicy this function is being called against.
- * @param {string} url The request url for polling
- * @param {WebResourceLike} originalRequest The original request sent by the user that returned a 409 response
+ * @param policy - The RPRegistrationPolicy this function is being called against.
+ * @param url - The request url for polling
+ * @param originalRequest - The original request sent by the user that returned a 409 response
  * with a message that the provider is not registered.
- * @returns {Promise<boolean>} True if RP Registration is successful.
+ * @returns True if RP Registration is successful.
  */
 function getRegistrationStatus(policy, url, originalRequest) {
     var reqOptions = getRequestEssentials(originalRequest);
@@ -63050,8 +64658,6 @@ var AccessTokenRefresher = /** @class */ (function () {
     /**
      * Returns true if the required milliseconds(defaulted to 30000) have been passed signifying
      * that we are ready for a new refresh.
-     *
-     * @returns {boolean}
      */
     AccessTokenRefresher.prototype.isReady = function () {
         // We're only ready for a new refresh if the required milliseconds have passed.
@@ -63062,7 +64668,6 @@ var AccessTokenRefresher = /** @class */ (function () {
      * then requests a new token,
      * then sets this.promise to undefined,
      * then returns the token.
-     * @param options getToken options
      */
     AccessTokenRefresher.prototype.getToken = function (options) {
         return tslib.__awaiter(this, void 0, void 0, function () {
@@ -63083,7 +64688,6 @@ var AccessTokenRefresher = /** @class */ (function () {
     /**
      * Requests a new token if we're not currently waiting for a new token.
      * Returns null if the required time between each call hasn't been reached.
-     * @param options getToken options
      */
     AccessTokenRefresher.prototype.refresh = function (options) {
         if (!this.promise) {
@@ -63096,10 +64700,16 @@ var AccessTokenRefresher = /** @class */ (function () {
 
 // Copyright (c) Microsoft Corporation.
 /**
+ * The automated token refresh will only start to happen at the
+ * expiration date minus the value of timeBetweenRefreshAttemptsInMs,
+ * which is by default 30 seconds.
+ */
+var timeBetweenRefreshAttemptsInMs = 30000;
+/**
  * Creates a new BearerTokenAuthenticationPolicy factory.
  *
- * @param credential The TokenCredential implementation that can supply the bearer token.
- * @param scopes The scopes for which the bearer token applies.
+ * @param credential - The TokenCredential implementation that can supply the bearer token.
+ * @param scopes - The scopes for which the bearer token applies.
  */
 function bearerTokenAuthenticationPolicy(credential, scopes) {
     var tokenCache = new ExpiringAccessTokenCache();
@@ -63110,12 +64720,6 @@ function bearerTokenAuthenticationPolicy(credential, scopes) {
         }
     };
 }
-/**
- * The automated token refresh will only start to happen at the
- * expiration date minus the value of timeBetweenRefreshAttemptsInMs,
- * which is by default 30 seconds.
- */
-var timeBetweenRefreshAttemptsInMs = 30000;
 /**
  *
  * Provides a RequestPolicy that can request a token from a TokenCredential
@@ -63128,11 +64732,11 @@ var BearerTokenAuthenticationPolicy = /** @class */ (function (_super) {
     /**
      * Creates a new BearerTokenAuthenticationPolicy object.
      *
-     * @param nextPolicy The next RequestPolicy in the request pipeline.
-     * @param options Options for this RequestPolicy.
-     * @param credential The TokenCredential implementation that can supply the bearer token.
-     * @param scopes The scopes for which the bearer token applies.
-     * @param tokenCache The cache for the most recent AccessToken returned from the TokenCredential.
+     * @param nextPolicy - The next RequestPolicy in the request pipeline.
+     * @param options - Options for this RequestPolicy.
+     * @param credential - The TokenCredential implementation that can supply the bearer token.
+     * @param scopes - The scopes for which the bearer token applies.
+     * @param tokenCache - The cache for the most recent AccessToken returned from the TokenCredential.
      */
     function BearerTokenAuthenticationPolicy(nextPolicy, options, tokenCache, tokenRefresher) {
         var _this = _super.call(this, nextPolicy, options) || this;
@@ -63142,7 +64746,6 @@ var BearerTokenAuthenticationPolicy = /** @class */ (function (_super) {
     }
     /**
      * Applies the Bearer token to the request through the Authorization header.
-     * @param webResource
      */
     BearerTokenAuthenticationPolicy.prototype.sendRequest = function (webResource) {
         return tslib.__awaiter(this, void 0, void 0, function () {
@@ -63224,14 +64827,10 @@ function systemErrorRetryPolicy(retryCount, retryInterval, minRetryInterval, max
     };
 }
 /**
- * @class
- * Instantiates a new "ExponentialRetryPolicyFilter" instance.
- *
- * @constructor
- * @param {number} retryCount        The client retry count.
- * @param {number} retryInterval     The client retry interval, in milliseconds.
- * @param {number} minRetryInterval  The minimum retry interval, in milliseconds.
- * @param {number} maxRetryInterval  The maximum retry interval, in milliseconds.
+ * @param retryCount - The client retry count.
+ * @param retryInterval - The client retry interval, in milliseconds.
+ * @param minRetryInterval - The minimum retry interval, in milliseconds.
+ * @param maxRetryInterval - The maximum retry interval, in milliseconds.
  */
 var SystemErrorRetryPolicy = /** @class */ (function (_super) {
     tslib.__extends(SystemErrorRetryPolicy, _super);
@@ -63269,7 +64868,7 @@ function retry$1(policy, request, operationResponse, err, retryData) {
             }
             return false;
         }
-        var err_1;
+        var nestedErr_1;
         return tslib.__generator(this, function (_a) {
             switch (_a.label) {
                 case 0:
@@ -63283,8 +64882,8 @@ function retry$1(policy, request, operationResponse, err, retryData) {
                     _a.sent();
                     return [2 /*return*/, policy._nextPolicy.sendRequest(request.clone())];
                 case 3:
-                    err_1 = _a.sent();
-                    return [2 /*return*/, retry$1(policy, request, operationResponse, err_1, retryData)];
+                    nestedErr_1 = _a.sent();
+                    return [2 /*return*/, retry$1(policy, request, operationResponse, nestedErr_1, retryData)];
                 case 4: return [3 /*break*/, 6];
                 case 5:
                     if (err) {
@@ -63308,8 +64907,10 @@ function retry$1(policy, request, operationResponse, err, retryData) {
 })(exports.QueryCollectionFormat || (exports.QueryCollectionFormat = {}));
 
 // Copyright (c) Microsoft Corporation.
-var noProxyList = [];
-var isNoProxyInitalized = false;
+/**
+ * @internal
+ */
+var noProxyList = loadNoProxy();
 var byPassedList = new Map();
 function loadEnvironmentProxyValue() {
     if (!process) {
@@ -63320,45 +64921,53 @@ function loadEnvironmentProxyValue() {
     var httpProxy = getEnvironmentValue(Constants.HTTP_PROXY);
     return httpsProxy || allProxy || httpProxy;
 }
-// Check whether the given `uri` matches the noProxyList. If it matches, any request sent to that same `uri` won't set the proxy settings.
+// Check whether the host of a given `uri` is in the noProxyList.
+// If there's a match, any request sent to the same host won't have the proxy settings set.
+// This implementation is a port of https://github.com/Azure/azure-sdk-for-net/blob/8cca811371159e527159c7eb65602477898683e2/sdk/core/Azure.Core/src/Pipeline/Internal/HttpEnvironmentProxy.cs#L210
 function isBypassed(uri) {
-    if (byPassedList.has(uri)) {
-        return byPassedList.get(uri);
+    if (noProxyList.length === 0) {
+        return false;
     }
-    loadNoProxy();
-    var isBypassed = false;
     var host = URLBuilder.parse(uri).getHost();
+    if (byPassedList.has(host)) {
+        return byPassedList.get(host);
+    }
+    var isBypassedFlag = false;
     for (var _i = 0, noProxyList_1 = noProxyList; _i < noProxyList_1.length; _i++) {
-        var proxyString = noProxyList_1[_i];
-        if (proxyString[0] === ".") {
-            if (uri.endsWith(proxyString)) {
-                isBypassed = true;
+        var pattern = noProxyList_1[_i];
+        if (pattern[0] === ".") {
+            // This should match either domain it self or any subdomain or host
+            // .foo.com will match foo.com it self or *.foo.com
+            if (host.endsWith(pattern)) {
+                isBypassedFlag = true;
             }
             else {
-                if (host === proxyString.slice(1) && host.length === proxyString.length - 1) {
-                    isBypassed = true;
+                if (host.length === pattern.length - 1 && host === pattern.slice(1)) {
+                    isBypassedFlag = true;
                 }
             }
         }
         else {
-            if (host === proxyString) {
-                isBypassed = true;
+            if (host === pattern) {
+                isBypassedFlag = true;
             }
         }
     }
-    byPassedList.set(uri, isBypassed);
-    return isBypassed;
+    byPassedList.set(host, isBypassedFlag);
+    return isBypassedFlag;
 }
+/**
+ * @internal
+ */
 function loadNoProxy() {
-    if (isNoProxyInitalized) {
-        return;
-    }
     var noProxy = getEnvironmentValue(Constants.NO_PROXY);
     if (noProxy) {
-        var list = noProxy.split(",");
-        noProxyList = list.map(function (item) { return item.trim(); }).filter(function (item) { return item.length; });
+        return noProxy
+            .split(",")
+            .map(function (item) { return item.trim(); })
+            .filter(function (item) { return item.length; });
     }
-    isNoProxyInitalized = true;
+    return [];
 }
 function getDefaultProxySettings(proxyUrl) {
     if (!proxyUrl) {
@@ -63544,9 +65153,9 @@ var KeepAlivePolicy = /** @class */ (function (_super) {
     /**
      * Creates an instance of KeepAlivePolicy.
      *
-     * @param {RequestPolicy} nextPolicy
-     * @param {RequestPolicyOptions} options
-     * @param {KeepAliveOptions} [keepAliveOptions]
+     * @param nextPolicy -
+     * @param options -
+     * @param keepAliveOptions -
      */
     function KeepAlivePolicy(nextPolicy, options, keepAliveOptions) {
         var _this = _super.call(this, nextPolicy, options) || this;
@@ -63556,9 +65165,8 @@ var KeepAlivePolicy = /** @class */ (function (_super) {
     /**
      * Sends out request.
      *
-     * @param {WebResourceLike} request
-     * @returns {Promise<HttpOperationResponse>}
-     * @memberof KeepAlivePolicy
+     * @param request -
+     * @returns
      */
     KeepAlivePolicy.prototype.sendRequest = function (request) {
         return tslib.__awaiter(this, void 0, void 0, function () {
@@ -63664,8 +65272,8 @@ var DisableResponseDecompressionPolicy = /** @class */ (function (_super) {
     /**
      * Creates an instance of DisableResponseDecompressionPolicy.
      *
-     * @param {RequestPolicy} nextPolicy
-     * @param {RequestPolicyOptions} options
+     * @param nextPolicy -
+     * @param options -
      */
     // The parent constructor is protected.
     /* eslint-disable-next-line @typescript-eslint/no-useless-constructor */
@@ -63675,8 +65283,8 @@ var DisableResponseDecompressionPolicy = /** @class */ (function (_super) {
     /**
      * Sends out request.
      *
-     * @param {WebResource} request
-     * @returns {Promise<HttpOperationResponse>}
+     * @param request -
+     * @returns
      */
     DisableResponseDecompressionPolicy.prototype.sendRequest = function (request) {
         return tslib.__awaiter(this, void 0, void 0, function () {
@@ -63704,17 +65312,12 @@ var NdJsonPolicy = /** @class */ (function (_super) {
     tslib.__extends(NdJsonPolicy, _super);
     /**
      * Creates an instance of KeepAlivePolicy.
-     *
-     * @param nextPolicy
-     * @param options
      */
     function NdJsonPolicy(nextPolicy, options) {
         return _super.call(this, nextPolicy, options) || this;
     }
     /**
      * Sends a request.
-     *
-     * @param request
      */
     NdJsonPolicy.prototype.sendRequest = function (request) {
         return tslib.__awaiter(this, void 0, void 0, function () {
@@ -63735,16 +65338,23 @@ var NdJsonPolicy = /** @class */ (function (_super) {
 }(BaseRequestPolicy));
 
 // Copyright (c) Microsoft Corporation.
+var cachedHttpClient;
+function getCachedDefaultHttpClient() {
+    if (!cachedHttpClient) {
+        cachedHttpClient = new NodeFetchHttpClient();
+    }
+    return cachedHttpClient;
+}
+
+// Copyright (c) Microsoft Corporation.
 /**
- * @class
- * Initializes a new instance of the ServiceClient.
+ * ServiceClient sends service requests and receives responses.
  */
 var ServiceClient = /** @class */ (function () {
     /**
      * The ServiceClient constructor
-     * @constructor
-     * @param credentials The credentials used for authentication with the service.
-     * @param options The service client options that govern the behavior of the client.
+     * @param credentials - The credentials used for authentication with the service.
+     * @param options - The service client options that govern the behavior of the client.
      */
     function ServiceClient(credentials, 
     /* eslint-disable-next-line @azure/azure-sdk/ts-naming-options */
@@ -63754,7 +65364,7 @@ var ServiceClient = /** @class */ (function () {
             options = {};
         }
         this._withCredentials = options.withCredentials || false;
-        this._httpClient = options.httpClient || new NodeFetchHttpClient();
+        this._httpClient = options.httpClient || getCachedDefaultHttpClient();
         this._requestPolicyOptions = new RequestPolicyOptions(options.httpPipelineLogger);
         var requestPolicyFactories;
         if (Array.isArray(options.requestPolicyFactories)) {
@@ -63775,12 +65385,17 @@ var ServiceClient = /** @class */ (function () {
                     var bearerTokenPolicyFactory = undefined;
                     // eslint-disable-next-line @typescript-eslint/no-this-alias
                     var serviceClient = _this;
+                    var serviceClientOptions = options;
                     return {
-                        create: function (nextPolicy, options) {
-                            if (bearerTokenPolicyFactory === undefined || bearerTokenPolicyFactory === null) {
-                                bearerTokenPolicyFactory = bearerTokenAuthenticationPolicy(credentials, (serviceClient.baseUri || "") + "/.default");
+                        create: function (nextPolicy, createOptions) {
+                            var credentialScopes = getCredentialScopes(serviceClientOptions, serviceClient.baseUri);
+                            if (!credentialScopes) {
+                                throw new Error("When using credential, the ServiceClient must contain a baseUri or a credentialScopes in ServiceClientOptions. Unable to create a bearerTokenAuthenticationPolicy");
                             }
-                            return bearerTokenPolicyFactory.create(nextPolicy, options);
+                            if (bearerTokenPolicyFactory === undefined || bearerTokenPolicyFactory === null) {
+                                bearerTokenPolicyFactory = bearerTokenAuthenticationPolicy(credentials, credentialScopes);
+                            }
+                            return bearerTokenPolicyFactory.create(nextPolicy, createOptions);
                         }
                     };
                 };
@@ -63837,24 +65452,26 @@ var ServiceClient = /** @class */ (function () {
     };
     /**
      * Send an HTTP request that is populated using the provided OperationSpec.
-     * @param {OperationArguments} operationArguments The arguments that the HTTP request's templated values will be populated from.
-     * @param {OperationSpec} operationSpec The OperationSpec to use to populate the httpRequest.
-     * @param {ServiceCallback} callback The callback to call when the response is received.
+     * @param operationArguments - The arguments that the HTTP request's templated values will be populated from.
+     * @param operationSpec - The OperationSpec to use to populate the httpRequest.
+     * @param callback - The callback to call when the response is received.
      */
     ServiceClient.prototype.sendOperationRequest = function (operationArguments, operationSpec, callback) {
+        var _a;
         return tslib.__awaiter(this, void 0, void 0, function () {
-            var httpRequest, result, baseUri, requestUrl, _i, _a, urlParameter, urlParameterValue, _b, _c, queryParameter, queryParameterValue, index, item, index, contentType, _d, _e, headerParameter, headerValue, headerCollectionPrefix, _f, _g, key, options, customHeaderName, rawResponse, sendRequestError, error_1, error_2, cb;
-            return tslib.__generator(this, function (_h) {
-                switch (_h.label) {
+            var serializerOptions, httpRequest, result, baseUri, requestUrl, _i, _b, urlParameter, urlParameterValue, _c, _d, queryParameter, queryParameterValue, index, item, index, contentType, _e, _f, headerParameter, headerValue, headerCollectionPrefix, _g, _h, key, options, customHeaderName, rawResponse, sendRequestError, error_1, error_2, cb;
+            return tslib.__generator(this, function (_j) {
+                switch (_j.label) {
                     case 0:
                         if (typeof operationArguments.options === "function") {
                             callback = operationArguments.options;
                             operationArguments.options = undefined;
                         }
+                        serializerOptions = (_a = operationArguments.options) === null || _a === void 0 ? void 0 : _a.serializerOptions;
                         httpRequest = new WebResource();
-                        _h.label = 1;
+                        _j.label = 1;
                     case 1:
-                        _h.trys.push([1, 6, , 7]);
+                        _j.trys.push([1, 6, , 7]);
                         baseUri = operationSpec.baseUrl || this.baseUri;
                         if (!baseUri) {
                             throw new Error("If operationSpec.baseUrl is not specified, then the ServiceClient must have a baseUri string property that contains the base URL to use.");
@@ -63866,10 +65483,10 @@ var ServiceClient = /** @class */ (function () {
                             requestUrl.appendPath(operationSpec.path);
                         }
                         if (operationSpec.urlParameters && operationSpec.urlParameters.length > 0) {
-                            for (_i = 0, _a = operationSpec.urlParameters; _i < _a.length; _i++) {
-                                urlParameter = _a[_i];
+                            for (_i = 0, _b = operationSpec.urlParameters; _i < _b.length; _i++) {
+                                urlParameter = _b[_i];
                                 urlParameterValue = getOperationArgumentValueFromParameter(this, operationArguments, urlParameter, operationSpec.serializer);
-                                urlParameterValue = operationSpec.serializer.serialize(urlParameter.mapper, urlParameterValue, getPathStringFromParameter(urlParameter));
+                                urlParameterValue = operationSpec.serializer.serialize(urlParameter.mapper, urlParameterValue, getPathStringFromParameter(urlParameter), serializerOptions);
                                 if (!urlParameter.skipEncoding) {
                                     urlParameterValue = encodeURIComponent(urlParameterValue);
                                 }
@@ -63877,16 +65494,17 @@ var ServiceClient = /** @class */ (function () {
                             }
                         }
                         if (operationSpec.queryParameters && operationSpec.queryParameters.length > 0) {
-                            for (_b = 0, _c = operationSpec.queryParameters; _b < _c.length; _b++) {
-                                queryParameter = _c[_b];
+                            for (_c = 0, _d = operationSpec.queryParameters; _c < _d.length; _c++) {
+                                queryParameter = _d[_c];
                                 queryParameterValue = getOperationArgumentValueFromParameter(this, operationArguments, queryParameter, operationSpec.serializer);
                                 if (queryParameterValue !== undefined && queryParameterValue !== null) {
-                                    queryParameterValue = operationSpec.serializer.serialize(queryParameter.mapper, queryParameterValue, getPathStringFromParameter(queryParameter));
+                                    queryParameterValue = operationSpec.serializer.serialize(queryParameter.mapper, queryParameterValue, getPathStringFromParameter(queryParameter), serializerOptions);
                                     if (queryParameter.collectionFormat !== undefined &&
                                         queryParameter.collectionFormat !== null) {
                                         if (queryParameter.collectionFormat === exports.QueryCollectionFormat.Multi) {
                                             if (queryParameterValue.length === 0) {
-                                                queryParameterValue = "";
+                                                // The collection is empty, no need to try serializing the current queryParam
+                                                continue;
                                             }
                                             else {
                                                 for (index in queryParameterValue) {
@@ -63927,20 +65545,20 @@ var ServiceClient = /** @class */ (function () {
                         }
                         httpRequest.url = requestUrl.toString();
                         contentType = operationSpec.contentType || this.requestContentType;
-                        if (contentType) {
+                        if (contentType && operationSpec.requestBody) {
                             httpRequest.headers.set("Content-Type", contentType);
                         }
                         if (operationSpec.headerParameters) {
-                            for (_d = 0, _e = operationSpec.headerParameters; _d < _e.length; _d++) {
-                                headerParameter = _e[_d];
+                            for (_e = 0, _f = operationSpec.headerParameters; _e < _f.length; _e++) {
+                                headerParameter = _f[_e];
                                 headerValue = getOperationArgumentValueFromParameter(this, operationArguments, headerParameter, operationSpec.serializer);
                                 if (headerValue !== undefined && headerValue !== null) {
-                                    headerValue = operationSpec.serializer.serialize(headerParameter.mapper, headerValue, getPathStringFromParameter(headerParameter));
+                                    headerValue = operationSpec.serializer.serialize(headerParameter.mapper, headerValue, getPathStringFromParameter(headerParameter), serializerOptions);
                                     headerCollectionPrefix = headerParameter.mapper
                                         .headerCollectionPrefix;
                                     if (headerCollectionPrefix) {
-                                        for (_f = 0, _g = Object.keys(headerValue); _f < _g.length; _f++) {
-                                            key = _g[_f];
+                                        for (_g = 0, _h = Object.keys(headerValue); _g < _h.length; _g++) {
+                                            key = _h[_g];
                                             httpRequest.headers.set(headerCollectionPrefix + key, headerValue[key]);
                                         }
                                     }
@@ -63979,20 +65597,20 @@ var ServiceClient = /** @class */ (function () {
                         }
                         httpRequest.withCredentials = this._withCredentials;
                         serializeRequestBody(this, httpRequest, operationArguments, operationSpec);
-                        if (httpRequest.streamResponseBody === undefined || httpRequest.streamResponseBody === null) {
-                            httpRequest.streamResponseBody = isStreamOperation(operationSpec);
+                        if (httpRequest.streamResponseStatusCodes === undefined) {
+                            httpRequest.streamResponseStatusCodes = getStreamResponseStatusCodes(operationSpec);
                         }
                         rawResponse = void 0;
                         sendRequestError = void 0;
-                        _h.label = 2;
+                        _j.label = 2;
                     case 2:
-                        _h.trys.push([2, 4, , 5]);
+                        _j.trys.push([2, 4, , 5]);
                         return [4 /*yield*/, this.sendRequest(httpRequest)];
                     case 3:
-                        rawResponse = _h.sent();
+                        rawResponse = _j.sent();
                         return [3 /*break*/, 5];
                     case 4:
-                        error_1 = _h.sent();
+                        error_1 = _j.sent();
                         sendRequestError = error_1;
                         return [3 /*break*/, 5];
                     case 5:
@@ -64008,14 +65626,13 @@ var ServiceClient = /** @class */ (function () {
                         }
                         return [3 /*break*/, 7];
                     case 6:
-                        error_2 = _h.sent();
+                        error_2 = _j.sent();
                         result = Promise.reject(error_2);
                         return [3 /*break*/, 7];
                     case 7:
                         cb = callback;
                         if (cb) {
                             result
-                                // tslint:disable-next-line:no-null-keyword
                                 .then(function (res) { return cb(null, res._response.parsedBody, res._response.request, res._response); })
                                 .catch(function (err) { return cb(err); });
                         }
@@ -64027,7 +65644,14 @@ var ServiceClient = /** @class */ (function () {
     return ServiceClient;
 }());
 function serializeRequestBody(serviceClient, httpRequest, operationArguments, operationSpec) {
-    var _a;
+    var _a, _b, _c, _d, _e, _f;
+    var serializerOptions = (_b = (_a = operationArguments.options) === null || _a === void 0 ? void 0 : _a.serializerOptions) !== null && _b !== void 0 ? _b : {};
+    var updatedOptions = {
+        rootName: (_c = serializerOptions.rootName) !== null && _c !== void 0 ? _c : "",
+        includeRoot: (_d = serializerOptions.includeRoot) !== null && _d !== void 0 ? _d : false,
+        xmlCharKey: (_e = serializerOptions.xmlCharKey) !== null && _e !== void 0 ? _e : XML_CHARKEY
+    };
+    var xmlCharKey = serializerOptions.xmlCharKey;
     if (operationSpec.requestBody && operationSpec.requestBody.mapper) {
         httpRequest.body = getOperationArgumentValueFromParameter(serviceClient, operationArguments, operationSpec.requestBody, operationSpec.serializer);
         var bodyMapper = operationSpec.requestBody.mapper;
@@ -64036,22 +65660,26 @@ function serializeRequestBody(serviceClient, httpRequest, operationArguments, op
         try {
             if ((httpRequest.body !== undefined && httpRequest.body !== null) || required) {
                 var requestBodyParameterPathString = getPathStringFromParameter(operationSpec.requestBody);
-                httpRequest.body = operationSpec.serializer.serialize(bodyMapper, httpRequest.body, requestBodyParameterPathString);
+                httpRequest.body = operationSpec.serializer.serialize(bodyMapper, httpRequest.body, requestBodyParameterPathString, updatedOptions);
                 var isStream = typeName === MapperType.Stream;
                 if (operationSpec.isXML) {
                     var xmlnsKey = xmlNamespacePrefix ? "xmlns:" + xmlNamespacePrefix : "xmlns";
-                    var value = getXmlValueWithNamespace(xmlNamespace, xmlnsKey, typeName, httpRequest.body);
+                    var value = getXmlValueWithNamespace(xmlNamespace, xmlnsKey, typeName, httpRequest.body, updatedOptions);
                     if (typeName === MapperType.Sequence) {
-                        httpRequest.body = stringifyXML(prepareXMLRootList(value, xmlElementName || xmlName || serializedName, xmlnsKey, xmlNamespace), { rootName: xmlName || serializedName });
+                        httpRequest.body = stringifyXML(prepareXMLRootList(value, xmlElementName || xmlName || serializedName, xmlnsKey, xmlNamespace), {
+                            rootName: xmlName || serializedName,
+                            xmlCharKey: xmlCharKey
+                        });
                     }
                     else if (!isStream) {
                         httpRequest.body = stringifyXML(value, {
-                            rootName: xmlName || serializedName
+                            rootName: xmlName || serializedName,
+                            xmlCharKey: xmlCharKey
                         });
                     }
                 }
                 else if (typeName === MapperType.String &&
-                    (((_a = operationSpec.contentType) === null || _a === void 0 ? void 0 : _a.match("text/plain")) || operationSpec.mediaType === "text")) {
+                    (((_f = operationSpec.contentType) === null || _f === void 0 ? void 0 : _f.match("text/plain")) || operationSpec.mediaType === "text")) {
                     // the String serializer has validated that request body is a string
                     // so just send the string.
                     return;
@@ -64067,12 +65695,12 @@ function serializeRequestBody(serviceClient, httpRequest, operationArguments, op
     }
     else if (operationSpec.formDataParameters && operationSpec.formDataParameters.length > 0) {
         httpRequest.formData = {};
-        for (var _i = 0, _b = operationSpec.formDataParameters; _i < _b.length; _i++) {
-            var formDataParameter = _b[_i];
+        for (var _i = 0, _g = operationSpec.formDataParameters; _i < _g.length; _i++) {
+            var formDataParameter = _g[_i];
             var formDataParameterValue = getOperationArgumentValueFromParameter(serviceClient, operationArguments, formDataParameter, operationSpec.serializer);
             if (formDataParameterValue !== undefined && formDataParameterValue !== null) {
                 var formDataParameterPropertyName = formDataParameter.mapper.serializedName || getPathStringFromParameter(formDataParameter);
-                httpRequest.formData[formDataParameterPropertyName] = operationSpec.serializer.serialize(formDataParameter.mapper, formDataParameterValue, getPathStringFromParameter(formDataParameter));
+                httpRequest.formData[formDataParameterPropertyName] = operationSpec.serializer.serialize(formDataParameter.mapper, formDataParameterValue, getPathStringFromParameter(formDataParameter), updatedOptions);
             }
         }
     }
@@ -64080,12 +65708,15 @@ function serializeRequestBody(serviceClient, httpRequest, operationArguments, op
 /**
  * Adds an xml namespace to the xml serialized object if needed, otherwise it just returns the value itself
  */
-function getXmlValueWithNamespace(xmlNamespace, xmlnsKey, typeName, serializedValue) {
+function getXmlValueWithNamespace(xmlNamespace, xmlnsKey, typeName, serializedValue, options) {
     var _a;
     // Composite and Sequence schemas already got their root namespace set during serialization
     // We just need to add xmlns to the other schema types
     if (xmlNamespace && !["Composite", "Sequence", "Dictionary"].includes(typeName)) {
-        return { _: serializedValue, $: (_a = {}, _a[xmlnsKey] = xmlNamespace, _a) };
+        var result = {};
+        result[options.xmlCharKey] = serializedValue;
+        result[XML_ATTRKEY] = (_a = {}, _a[xmlnsKey] = xmlNamespace, _a);
+        return result;
     }
     return serializedValue;
 }
@@ -64174,10 +65805,12 @@ function getOperationArgumentValueFromParameter(serviceClient, operationArgument
     return getOperationArgumentValueFromParameterPath(serviceClient, operationArguments, parameter.parameterPath, parameter.mapper, serializer);
 }
 function getOperationArgumentValueFromParameterPath(serviceClient, operationArguments, parameterPath, parameterMapper, serializer) {
+    var _a;
     var value;
     if (typeof parameterPath === "string") {
         parameterPath = [parameterPath];
     }
+    var serializerOptions = (_a = operationArguments.options) === null || _a === void 0 ? void 0 : _a.serializerOptions;
     if (Array.isArray(parameterPath)) {
         if (parameterPath.length > 0) {
             if (parameterMapper.isConstant) {
@@ -64198,7 +65831,7 @@ function getOperationArgumentValueFromParameterPath(serviceClient, operationArgu
             }
             // Serialize just for validation purposes.
             var parameterPathString = getPathStringFromParameterPath(parameterPath, parameterMapper);
-            serializer.serialize(parameterMapper, value, parameterPathString);
+            serializer.serialize(parameterMapper, value, parameterPathString, serializerOptions);
         }
     }
     else {
@@ -64211,7 +65844,7 @@ function getOperationArgumentValueFromParameterPath(serviceClient, operationArgu
             var propertyValue = getOperationArgumentValueFromParameterPath(serviceClient, operationArguments, propertyPath, propertyMapper, serializer);
             // Serialize just for validation purposes.
             var propertyPathString = getPathStringFromParameterPath(propertyPath, propertyMapper);
-            serializer.serialize(propertyMapper, propertyValue, propertyPathString);
+            serializer.serialize(propertyMapper, propertyValue, propertyPathString, serializerOptions);
             if (propertyValue !== undefined && propertyValue !== null) {
                 if (!value) {
                     value = {};
@@ -64285,6 +65918,46 @@ function flattenResponse(_response, responseSpec) {
     }
     return addOperationResponse(tslib.__assign(tslib.__assign({}, parsedHeaders), _response.parsedBody));
 }
+function getCredentialScopes(options, baseUri) {
+    if (options === null || options === void 0 ? void 0 : options.credentialScopes) {
+        var scopes = options.credentialScopes;
+        return Array.isArray(scopes)
+            ? scopes.map(function (scope) { return new url.URL(scope).toString(); })
+            : new url.URL(scopes).toString();
+    }
+    if (baseUri) {
+        return baseUri + "/.default";
+    }
+    return undefined;
+}
+
+// Copyright (c) Microsoft Corporation.
+/**
+ * Creates a function called createSpan to create spans using the global tracer.
+ * @hidden
+ * @param spanConfig - The name of the operation being performed.
+ * @param tracingOptions - The options for the underlying http request.
+ */
+function createSpanFunction(_a) {
+    var packagePrefix = _a.packagePrefix, namespace = _a.namespace;
+    return function (operationName, operationOptions) {
+        var tracer = coreTracing.getTracer();
+        var tracingOptions = operationOptions.tracingOptions || {};
+        var spanOptions = tslib.__assign(tslib.__assign({}, tracingOptions.spanOptions), { kind: api.SpanKind.INTERNAL });
+        var span = tracer.startSpan(packagePrefix + "." + operationName, spanOptions);
+        span.setAttribute("az.namespace", namespace);
+        var newSpanOptions = tracingOptions.spanOptions || {};
+        if (span.isRecording()) {
+            newSpanOptions = tslib.__assign(tslib.__assign({}, tracingOptions.spanOptions), { parent: span.context(), attributes: tslib.__assign(tslib.__assign({}, spanOptions.attributes), { "az.namespace": namespace }) });
+        }
+        var newTracingOptions = tslib.__assign(tslib.__assign({}, tracingOptions), { spanOptions: newSpanOptions });
+        var newOperationOptions = tslib.__assign(tslib.__assign({}, operationOptions), { tracingOptions: newTracingOptions });
+        return {
+            span: span,
+            updatedOptions: newOperationOptions
+        };
+    };
+}
 
 // Copyright (c) Microsoft Corporation.
 var HeaderConstants = Constants.HeaderConstants;
@@ -64293,10 +65966,9 @@ var BasicAuthenticationCredentials = /** @class */ (function () {
     /**
      * Creates a new BasicAuthenticationCredentials object.
      *
-     * @constructor
-     * @param {string} userName User name.
-     * @param {string} password Password.
-     * @param {string} [authorizationScheme] The authorization scheme.
+     * @param userName - User name.
+     * @param password - Password.
+     * @param authorizationScheme - The authorization scheme.
      */
     function BasicAuthenticationCredentials(userName, password, authorizationScheme) {
         if (authorizationScheme === void 0) { authorizationScheme = DEFAULT_AUTHORIZATION_SCHEME; }
@@ -64314,8 +65986,8 @@ var BasicAuthenticationCredentials = /** @class */ (function () {
     /**
      * Signs a request with the Authentication header.
      *
-     * @param {WebResourceLike} webResource The WebResourceLike to be signed.
-     * @returns {Promise<WebResourceLike>} The signed request object.
+     * @param webResource - The WebResourceLike to be signed.
+     * @returns The signed request object.
      */
     BasicAuthenticationCredentials.prototype.signRequest = function (webResource) {
         var credentials = this.userName + ":" + this.password;
@@ -64334,8 +66006,7 @@ var BasicAuthenticationCredentials = /** @class */ (function () {
  */
 var ApiKeyCredentials = /** @class */ (function () {
     /**
-     * @constructor
-     * @param {object} options   Specifies the options to be provided for auth. Either header or query needs to be provided.
+     * @param options - Specifies the options to be provided for auth. Either header or query needs to be provided.
      */
     function ApiKeyCredentials(options) {
         if (!options || (options && !options.inHeader && !options.inQuery)) {
@@ -64347,8 +66018,8 @@ var ApiKeyCredentials = /** @class */ (function () {
     /**
      * Signs a request with the values provided in the inHeader and inQuery parameter.
      *
-     * @param {WebResourceLike} webResource The WebResourceLike to be signed.
-     * @returns {Promise<WebResourceLike>} The signed request object.
+     * @param webResource - The WebResourceLike to be signed.
+     * @returns The signed request object.
      */
     ApiKeyCredentials.prototype.signRequest = function (webResource) {
         if (!webResource) {
@@ -64387,8 +66058,7 @@ var TopicCredentials = /** @class */ (function (_super) {
     /**
      * Creates a new EventGrid TopicCredentials object.
      *
-     * @constructor
-     * @param {string} topicKey   The EventGrid topic key
+     * @param topicKey - The EventGrid topic key
      */
     function TopicCredentials(topicKey) {
         var _this = this;
@@ -64429,9 +66099,12 @@ exports.TopicCredentials = TopicCredentials;
 exports.URLBuilder = URLBuilder;
 exports.URLQuery = URLQuery;
 exports.WebResource = WebResource;
+exports.XML_ATTRKEY = XML_ATTRKEY;
+exports.XML_CHARKEY = XML_CHARKEY;
 exports.applyMixins = applyMixins;
 exports.bearerTokenAuthenticationPolicy = bearerTokenAuthenticationPolicy;
 exports.createPipelineFromOptions = createPipelineFromOptions;
+exports.createSpanFunction = createSpanFunction;
 exports.delay = delay;
 exports.deserializationPolicy = deserializationPolicy;
 exports.deserializeResponseBody = deserializeResponseBody;

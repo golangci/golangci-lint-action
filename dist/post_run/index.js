@@ -2237,7 +2237,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.findLintVersion = exports.stringifyVersion = void 0;
 const core = __importStar(__webpack_require__(470));
 const httpm = __importStar(__webpack_require__(539));
+const fs = __importStar(__webpack_require__(747));
 const versionRe = /^v(\d+)\.(\d+)(?:\.(\d+))?$/;
+const modVersionRe = /github.com\/golangci\/golangci-lint\s(v.+)/;
 const parseVersion = (s) => {
     if (s == "latest" || s == "") {
         return null;
@@ -2279,7 +2281,15 @@ const isLessVersion = (a, b) => {
     return a.minor < b.minor;
 };
 const getRequestedLintVersion = () => {
-    const requestedLintVersion = core.getInput(`version`);
+    let requestedLintVersion = core.getInput(`version`);
+    if (requestedLintVersion == "") {
+        const content = fs.readFileSync("go.mod", "utf-8");
+        const match = content.match(modVersionRe);
+        if (match) {
+            requestedLintVersion = match[1];
+            core.info(`Found golangci-lint version '${requestedLintVersion}' in go.mod`);
+        }
+    }
     const parsedRequestedLintVersion = parseVersion(requestedLintVersion);
     if (parsedRequestedLintVersion == null) {
         return null;

@@ -1,6 +1,7 @@
 import * as core from "@actions/core"
 import * as httpm from "@actions/http-client"
 import * as fs from "fs"
+import path from "path"
 
 // TODO: make a class
 export type Version = {
@@ -59,13 +60,18 @@ const isLessVersion = (a: Version, b: Version): boolean => {
 
 const getRequestedLintVersion = (): Version => {
   let requestedLintVersion = core.getInput(`version`)
+  const workingDirectory = core.getInput(`working-directory`)
+  let goMod = "go.mod"
+  if (workingDirectory) {
+    goMod = path.join(workingDirectory, goMod)
+  }
 
-  if (requestedLintVersion == "") {
-    const content = fs.readFileSync("go.mod", "utf-8")
+  if (requestedLintVersion == "" && fs.existsSync(goMod)) {
+    const content = fs.readFileSync(goMod, "utf-8")
     const match = content.match(modVersionRe)
     if (match) {
       requestedLintVersion = match[1]
-      core.info(`Found golangci-lint version '${requestedLintVersion}' in go.mod`)
+      core.info(`Found golangci-lint version '${requestedLintVersion}' in '${goMod}' file`)
     }
   }
 

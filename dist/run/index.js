@@ -2233,11 +2233,15 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.findLintVersion = exports.stringifyVersion = void 0;
 const core = __importStar(__webpack_require__(470));
 const httpm = __importStar(__webpack_require__(539));
 const fs = __importStar(__webpack_require__(747));
+const path_1 = __importDefault(__webpack_require__(622));
 const versionRe = /^v(\d+)\.(\d+)(?:\.(\d+))?$/;
 const modVersionRe = /github.com\/golangci\/golangci-lint\s(v.+)/;
 const parseVersion = (s) => {
@@ -2282,12 +2286,17 @@ const isLessVersion = (a, b) => {
 };
 const getRequestedLintVersion = () => {
     let requestedLintVersion = core.getInput(`version`);
-    if (requestedLintVersion == "") {
-        const content = fs.readFileSync("go.mod", "utf-8");
+    const workingDirectory = core.getInput(`working-directory`);
+    let goMod = "go.mod";
+    if (workingDirectory) {
+        goMod = path_1.default.join(workingDirectory, goMod);
+    }
+    if (requestedLintVersion == "" && fs.existsSync(goMod)) {
+        const content = fs.readFileSync(goMod, "utf-8");
         const match = content.match(modVersionRe);
         if (match) {
             requestedLintVersion = match[1];
-            core.info(`Found golangci-lint version '${requestedLintVersion}' in go.mod`);
+            core.info(`Found golangci-lint version '${requestedLintVersion}' in '${goMod}' file`);
         }
     }
     const parsedRequestedLintVersion = parseVersion(requestedLintVersion);

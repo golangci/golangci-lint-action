@@ -56,6 +56,9 @@ jobs:
 
           # Optional: if set to true then the action don't cache or restore ~/.cache/go-build.
           # skip-build-cache: true
+
+          # Optional: if set to true then the action don't fail with just golangci-lint warnings.
+          # allow-warnings: true
 ```
 
 We recommend running this action in a job separate from other jobs (`go test`, etc)

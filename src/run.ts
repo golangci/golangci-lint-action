@@ -175,7 +175,13 @@ async function runLint(lintPath: string, patchPath: string): Promise<void> {
     printOutput(exc)
 
     if (exc.code === 1) {
-      core.setFailed(`issues found`)
+      const allowWarnings = core.getInput(`allow-warnings`, { required: true }).trim()
+      const errorRegex = /^::error.+$/m
+      if (allowWarnings.toLowerCase() == "true" && !exc.stdout.match(errorRegex)) {
+        core.info(`golangci-lint found no errors`)
+      } else {
+        core.setFailed(`issues found`)
+      }
     } else {
       core.setFailed(`golangci-lint exit with code ${exc.code}`)
     }

@@ -121,14 +121,8 @@ async function runLint(lintPath: string, patchPath: string): Promise<void> {
   const userArgs = core.getInput(`args`)
   const addedArgs: string[] = []
 
-  const userArgNames = new Set<string>()
-  userArgs
-    .split(/\s/)
-    .map((arg) => arg.split(`=`)[0])
-    .filter((arg) => arg.startsWith(`-`))
-    .forEach((arg) => {
-      userArgNames.add(arg.replace(`-`, ``))
-    })
+  const userArgNamesRegex = /(?<=(^|\s)-+\b)([^\s=]+)(?==)/ig
+  const userArgNames = new Set<string>(userArgs.match(userArgNamesRegex))
 
   if (userArgNames.has(`out-format`)) {
     throw new Error(`please, don't change out-format for golangci-lint: it can be broken in a future`)

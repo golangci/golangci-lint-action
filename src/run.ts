@@ -1,5 +1,6 @@
 import * as core from "@actions/core"
 import * as github from "@actions/github"
+import style from "ansi-styles"
 import { exec, ExecOptions } from "child_process"
 import * as fs from "fs"
 import * as path from "path"
@@ -100,6 +101,253 @@ async function prepareEnv(): Promise<Env> {
 type ExecRes = {
   stdout: string
   stderr: string
+  code?: number
+}
+
+enum LintSeverity {
+  notice,
+  warning,
+  failure,
+}
+
+type LintSeverityStrings = keyof typeof LintSeverity
+
+type LintIssue = {
+  Text: string
+  FromLinter: string
+  Severity: LintSeverityStrings
+  SourceLines: string[]
+  Pos: {
+    Filename: string
+    Line: number
+    Column: number
+  }
+  LineRange?: {
+    From: number
+    To: number
+  }
+  Replacement: {
+    NeedOnlyDelete: boolean
+    NewLines: string[] | null
+    Inline: {
+      StartCol: number
+      Length: number
+      NewString: string
+    } | null
+  } | null
+}
+
+type UnfilteredLintIssue =
+  | LintIssue
+  | {
+      Severity: string
+    }
+
+type LintOutput = {
+  Issues: LintIssue[]
+  Report: {
+    Warnings?: {
+      Tag?: string
+      Text: string
+    }[]
+    Linters?: {
+      Enabled: boolean
+      Name: string
+    }[]
+    Error?: string
+  }
+}
+
+type GithubAnnotation = {
+  path: string
+  start_line: number
+  end_line: number
+  start_column?: number
+  end_column?: number
+  title: string
+  message: string
+  annotation_level: LintSeverityStrings
+  raw_details?: string
+}
+
+type CheckRun = {
+  id: number
+  output: {
+    title: string
+  }
+}
+
+type SeverityMap = {
+  [key: string]: LintSeverityStrings
+}
+
+const DefaultFailureSeverity = LintSeverity.notice
+
+const parseOutput = (json: string): LintOutput => {
+  const severityMap: SeverityMap = {
+    info: `notice`,
+    notice: `notice`,
+    minor: `warning`,
+    warning: `warning`,
+    error: `failure`,
+    major: `failure`,
+    critical: `failure`,
+    blocker: `failure`,
+    failure: `failure`,
+  }
+  const lintOutput = JSON.parse(json)
+  if (!lintOutput.Report) {
+    throw `golangci-lint returned invalid json`
+  }
+  if (lintOutput.Issues.length) {
+    lintOutput.Issues = lintOutput.Issues.filter((issue: UnfilteredLintIssue) => issue.Severity !== `ignore`).map(
+      (issue: UnfilteredLintIssue): LintIssue => {
+        const Severity = issue.Severity.toLowerCase()
+        issue.Severity = severityMap[`${Severity}`] ? severityMap[`${Severity}`] : `failure`
+        return issue as LintIssue
+      }
+    )
+  }
+  return lintOutput as LintOutput
+}
+
+const logLintIssues = (issues: LintIssue[]): void => {
+  issues.forEach((issue: LintIssue): void => {
+    let header = `${style.red.open}${style.bold.open}Lint Error:${style.bold.close}${style.red.close}`
+    if (issue.Severity === `warning`) {
+      header = `${style.yellow.open}${style.bold.open}Lint Warning:${style.bold.close}${style.yellow.close}`
+    } else if (issue.Severity === `notice`) {
+      header = `${style.cyan.open}${style.bold.open}Lint Notice:${style.bold.close}${style.cyan.close}`
+    }
+
+    let pos = `${issue.Pos.Filename}:${issue.Pos.Line}`
+    if (issue.LineRange !== undefined) {
+      pos += `-${issue.LineRange.To}`
+    } else if (issue.Pos.Column) {
+      pos += `:${issue.Pos.Column}`
+    }
+
+    core.info(`${header} ${pos} - ${issue.Text} (${issue.FromLinter})`)
+  })
+}
+
+async function annotateLintIssues(issues: LintIssue[]): Promise<void> {
+  if (!issues.length) {
+    return
+  }
+  const ctx = github.context
+  const ref = ctx.payload.after
+  const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }))
+  const checkRunsPromise = octokit.checks
+    .listForRef({
+      ...ctx.repo,
+      ref,
+      status: "in_progress",
+    })
+    .catch((e) => {
+      throw `Error getting Check Run Data: ${e}`
+    })
+
+  const chunkSize = 50
+  const issueCounts = {
+    notice: 0,
+    warning: 0,
+    failure: 0,
+  }
+  const githubAnnotations: GithubAnnotation[] = issues.map(
+    (issue: LintIssue): GithubAnnotation => {
+      // If/when we transition to comments, we would build the request structure here
+      const annotation: GithubAnnotation = {
+        path: issue.Pos.Filename,
+        start_line: issue.Pos.Line,
+        end_line: issue.Pos.Line,
+        title: issue.FromLinter,
+        message: issue.Text,
+        annotation_level: issue.Severity,
+      }
+
+      issueCounts[issue.Severity]++
+
+      if (issue.LineRange !== undefined) {
+        annotation.end_line = issue.LineRange.To
+      } else if (issue.Pos.Column) {
+        annotation.start_column = issue.Pos.Column
+        annotation.end_column = issue.Pos.Column
+      }
+
+      if (issue.Replacement !== null) {
+        let replacement = ``
+        if (issue.Replacement.Inline) {
+          replacement =
+            issue.SourceLines[0].slice(0, issue.Replacement.Inline.StartCol) +
+            issue.Replacement.Inline.NewString +
+            issue.SourceLines[0].slice(issue.Replacement.Inline.StartCol + issue.Replacement.Inline.Length)
+        } else if (issue.Replacement.NewLines) {
+          replacement = issue.Replacement.NewLines.join("\n")
+        }
+        annotation.raw_details = "```suggestion\n" + replacement + "\n```"
+      }
+
+      return annotation as GithubAnnotation
+    }
+  )
+  let checkRun: CheckRun | undefined
+  const { data: checkRunsResponse } = await checkRunsPromise
+  if (checkRunsResponse.check_runs.length === 0) {
+    throw `octokit.checks.listForRef(${ref}) returned no results`
+  } else {
+    checkRun = checkRunsResponse.check_runs.find((run) => run.name.includes(`Lint`))
+  }
+  if (!checkRun?.id) {
+    throw `Could not find current check run`
+  }
+  const title = checkRun.output.title ?? `GolangCI-Lint`
+  const summary = `There are {issueCounts.failure} failures, {issueCounts.wairning} warnings, and {issueCounts.notice} notices.`
+  Array.from({ length: Math.ceil(githubAnnotations.length / chunkSize) }, (v, i) =>
+    githubAnnotations.slice(i * chunkSize, i * chunkSize + chunkSize)
+  ).forEach((annotations: GithubAnnotation[]): void => {
+    octokit.checks
+      .update({
+        ...ctx.repo,
+        check_run_id: checkRun?.id as number,
+        output: {
+          title,
+          summary,
+          annotations,
+        },
+      })
+      .catch((e) => {
+        throw `Error patching Check Run Data (annotations): ${e}`
+      })
+  })
+}
+
+const hasFailingIssues = (issues: LintIssue[]): boolean => {
+  // If the user input is not a valid Severity Level, this will be -1, and any issue will fail
+  const userFailureSeverity = core.getInput(`failure-severity`).toLowerCase()
+  let failureSeverity = DefaultFailureSeverity
+  if (userFailureSeverity) {
+    failureSeverity = Object.values(LintSeverity).indexOf(userFailureSeverity)
+  }
+  if (failureSeverity < 0) {
+    core.info(
+      `::warning::failure-severity must be one of (${Object.keys(LintSeverity).join(
+        " | "
+      )}). "${userFailureSeverity}" not supported, using default (${LintSeverity[DefaultFailureSeverity]})`
+    )
+    failureSeverity = DefaultFailureSeverity
+  }
+  if (issues.length) {
+    if (failureSeverity <= 0) {
+      return true
+    }
+    for (const issue of issues) {
+      if (failureSeverity <= LintSeverity[issue.Severity]) {
+        return true
+      }
+    }
+  }
+  return false
 }
 
 const printOutput = (res: ExecRes): void => {
@@ -109,6 +357,58 @@ const printOutput = (res: ExecRes): void => {
   if (res.stderr) {
     core.info(res.stderr)
   }
+}
+
+async function printLintOutput(res: ExecRes): Promise<void> {
+  let lintOutput: LintOutput | undefined
+  const exit_code = res.code ?? 0
+  try {
+    try {
+      if (res.stdout) {
+        // This object contains other information, such as errors and the active linters
+        // TODO: Should we do something with that data?
+        lintOutput = parseOutput(res.stdout)
+
+        if (lintOutput.Issues.length) {
+          logLintIssues(lintOutput.Issues)
+
+          // We can only Annotate (or Comment) on Push or Pull Request
+          switch (github.context.eventName) {
+            case `pull_request`:
+            // TODO: When we are ready to handle these as Comments, instead of Annotations, we would place that logic here
+            /* falls through */
+            case `push`:
+              await annotateLintIssues(lintOutput.Issues)
+              break
+            default:
+              // At this time, other events are not supported
+              break
+          }
+        }
+      }
+    } catch (e) {
+      throw `there was an error processing golangci-lint output: ${e}`
+    }
+
+    if (res.stderr) {
+      core.info(res.stderr)
+    }
+
+    if (exit_code === 1) {
+      if (lintOutput) {
+        if (hasFailingIssues(lintOutput.Issues)) {
+          throw `issues found`
+        }
+      } else {
+        throw `unexpected state, golangci-lint exited with 1, but provided no lint output`
+      }
+    } else if (exit_code > 1) {
+      throw `golangci-lint exit with code ${exit_code}`
+    }
+  } catch (e) {
+    return <void>core.setFailed(`${e}`)
+  }
+  return <void>core.info(`golangci-lint found no blocking issues`)
 }
 
 async function runLint(lintPath: string, patchPath: string): Promise<void> {
@@ -133,7 +433,7 @@ async function runLint(lintPath: string, patchPath: string): Promise<void> {
   if (userArgNames.has(`out-format`)) {
     throw new Error(`please, don't change out-format for golangci-lint: it can be broken in a future`)
   }
-  addedArgs.push(`--out-format=github-actions`)
+  addedArgs.push(`--out-format=json`)
 
   if (patchPath) {
     if (userArgNames.has(`new`) || userArgNames.has(`new-from-rev`) || userArgNames.has(`new-from-patch`)) {
@@ -167,18 +467,11 @@ async function runLint(lintPath: string, patchPath: string): Promise<void> {
   const startedAt = Date.now()
   try {
     const res = await execShellCommand(cmd, cmdArgs)
-    printOutput(res)
-    core.info(`golangci-lint found no issues`)
+    await printLintOutput(res)
   } catch (exc) {
     // This logging passes issues to GitHub annotations but comments can be more convenient for some users.
     // TODO: support reviewdog or leaving comments by GitHub API.
-    printOutput(exc)
-
-    if (exc.code === 1) {
-      core.setFailed(`issues found`)
-    } else {
-      core.setFailed(`golangci-lint exit with code ${exc.code}`)
-    }
+    await printLintOutput(exc)
   }
 
   core.info(`Ran golangci-lint in ${Date.now() - startedAt}ms`)

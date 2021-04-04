@@ -6821,14 +6821,12 @@ function runLint(lintPath, patchPath) {
         }
         const userArgs = core.getInput(`args`);
         const addedArgs = [];
-        const userArgNames = new Set();
-        userArgs
-            .split(/\s/)
+        const userArgNames = new Set(userArgs
+            .trim()
+            .split(/\s+/)
             .map((arg) => arg.split(`=`)[0])
             .filter((arg) => arg.startsWith(`-`))
-            .forEach((arg) => {
-            userArgNames.add(arg.replace(`-`, ``));
-        });
+            .map((arg) => arg.replace(/^-+/, ``)));
         if (userArgNames.has(`out-format`)) {
             throw new Error(`please, don't change out-format for golangci-lint: it can be broken in a future`);
         }

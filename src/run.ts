@@ -5,7 +5,7 @@ import { exec, ExecOptions } from "child_process"
 import * as fs from "fs"
 import * as path from "path"
 import { dir } from "tmp"
-import { promisify } from "util"
+import { inspect, promisify } from "util"
 
 import { restoreCache, saveCache } from "./cache"
 import { installGo, installLint } from "./install"
@@ -236,13 +236,33 @@ async function annotateLintIssues(issues: LintIssue[]): Promise<void> {
     return
   }
   const ctx = github.context
-  const ref = ctx.payload.after
+  core.info(
+    inspect(
+      {
+        ctx: ctx,
+        GITHUB_WORKFLOW: process.env["GITHUB_WORKFLOW"],
+        GITHUB_RUN_ID: process.env["GITHUB_RUN_ID"],
+        GITHUB_RUN_NUMBER: process.env["GITHUB_RUN_NUMBER"],
+        GITHUB_JOB: process.env["GITHUB_JOB"],
+        GITHUB_ACTION: process.env["GITHUB_ACTION"],
+        GITHUB_ACTIONS: process.env["GITHUB_ACTIONS"],
+        GITHUB_SHA: process.env["GITHUB_SHA"],
+        GITHUB_REF: process.env["GITHUB_REF"],
+        GITHUB_HEAD_REF: process.env["GITHUB_HEAD_REF"],
+        GITHUB_BASE_REF: process.env["GITHUB_BASE_REF"],
+      },
+      false,
+      4
+    )
+  )
+  const ref = ctx.payload.after ?? ctx.sha
   const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }))
   const checkRunsPromise = octokit.checks
     .listForRef({
       ...ctx.repo,
       ref,
-      status: "in_progress",
+      status: `in_progress`,
+      filter: `latest`,
     })
     .catch((e) => {
       throw `Error getting Check Run Data: ${e}`
@@ -293,6 +313,7 @@ async function annotateLintIssues(issues: LintIssue[]): Promise<void> {
   )
   let checkRun: CheckRun | undefined
   const { data: checkRunsResponse } = await checkRunsPromise
+  core.info(inspect(checkRunsResponse, false, 4))
   if (checkRunsResponse.check_runs.length === 0) {
     throw `octokit.checks.listForRef(${ref}) returned no results`
   } else {

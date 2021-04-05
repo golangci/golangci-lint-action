@@ -6852,16 +6852,29 @@ const logLintIssues = (issues) => {
     });
 };
 function annotateLintIssues(issues) {
-    var _a;
+    var _a, _b;
     return __awaiter(this, void 0, void 0, function* () {
         if (!issues.length) {
             return;
         }
         const ctx = github.context;
-        const ref = ctx.payload.after;
+        core.info(util_1.inspect({
+            ctx: ctx,
+            GITHUB_WORKFLOW: process.env["GITHUB_WORKFLOW"],
+            GITHUB_RUN_ID: process.env["GITHUB_RUN_ID"],
+            GITHUB_RUN_NUMBER: process.env["GITHUB_RUN_NUMBER"],
+            GITHUB_JOB: process.env["GITHUB_JOB"],
+            GITHUB_ACTION: process.env["GITHUB_ACTION"],
+            GITHUB_ACTIONS: process.env["GITHUB_ACTIONS"],
+            GITHUB_SHA: process.env["GITHUB_SHA"],
+            GITHUB_REF: process.env["GITHUB_REF"],
+            GITHUB_HEAD_REF: process.env["GITHUB_HEAD_REF"],
+            GITHUB_BASE_REF: process.env["GITHUB_BASE_REF"],
+        }, false, 4));
+        const ref = (_a = ctx.payload.after) !== null && _a !== void 0 ? _a : ctx.sha;
         const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }));
         const checkRunsPromise = octokit.checks
-            .listForRef(Object.assign(Object.assign({}, ctx.repo), { ref, status: "in_progress" }))
+            .listForRef(Object.assign(Object.assign({}, ctx.repo), { ref, status: `in_progress`, filter: `latest` }))
             .catch((e) => {
             throw `Error getting Check Run Data: ${e}`;
         });
@@ -6906,6 +6919,7 @@ function annotateLintIssues(issues) {
         });
         let checkRun;
         const { data: checkRunsResponse } = yield checkRunsPromise;
+        core.info(util_1.inspect(checkRunsResponse, false, 4));
         if (checkRunsResponse.check_runs.length === 0) {
             throw `octokit.checks.listForRef(${ref}) returned no results`;
         }
@@ -6915,7 +6929,7 @@ function annotateLintIssues(issues) {
         if (!(checkRun === null || checkRun === void 0 ? void 0 : checkRun.id)) {
             throw `Could not find current check run`;
         }
-        const title = (_a = checkRun.output.title) !== null && _a !== void 0 ? _a : `GolangCI-Lint`;
+        const title = (_b = checkRun.output.title) !== null && _b !== void 0 ? _b : `GolangCI-Lint`;
         const summary = `There are {issueCounts.failure} failures, {issueCounts.wairning} warnings, and {issueCounts.notice} notices.`;
         Array.from({ length: Math.ceil(githubAnnotations.length / chunkSize) }, (v, i) => githubAnnotations.slice(i * chunkSize, i * chunkSize + chunkSize)).forEach((annotations) => {
             octokit.checks

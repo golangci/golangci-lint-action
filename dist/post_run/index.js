@@ -2505,7 +2505,7 @@ exports.toCommandValue = toCommandValue;
 /***/ (function(module, __unusedexports, __webpack_require__) {
 
 var rng = __webpack_require__(139);
-var bytesToUuid = __webpack_require__(105);
+var bytesToUuid = __webpack_require__(722);
 
 // **`v1()` - Generate time-based UUID**
 //
@@ -3769,38 +3769,7 @@ var _default = version;
 exports.default = _default;
 
 /***/ }),
-/* 105 */
-/***/ (function(module) {
-
-/**
- * Convert array of 16 byte values to UUID string format of the form:
- * XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
- */
-var byteToHex = [];
-for (var i = 0; i < 256; ++i) {
-  byteToHex[i] = (i + 0x100).toString(16).substr(1);
-}
-
-function bytesToUuid(buf, offset) {
-  var i = offset || 0;
-  var bth = byteToHex;
-  // join used to fix memory issue caused by concatenation: https://bugs.chromium.org/p/v8/issues/detail?id=3175#c4
-  return ([
-    bth[buf[i++]], bth[buf[i++]],
-    bth[buf[i++]], bth[buf[i++]], '-',
-    bth[buf[i++]], bth[buf[i++]], '-',
-    bth[buf[i++]], bth[buf[i++]], '-',
-    bth[buf[i++]], bth[buf[i++]], '-',
-    bth[buf[i++]], bth[buf[i++]],
-    bth[buf[i++]], bth[buf[i++]],
-    bth[buf[i++]], bth[buf[i++]]
-  ]).join('');
-}
-
-module.exports = bytesToUuid;
-
-
-/***/ }),
+/* 105 */,
 /* 106 */
 /***/ (function(__unusedmodule, exports, __webpack_require__) {
 
@@ -6718,7 +6687,8 @@ const fs = __importStar(__webpack_require__(747));
 const path = __importStar(__webpack_require__(622));
 const tmp_1 = __webpack_require__(150);
 const util_1 = __webpack_require__(669);
-const cache_1 = __webpack_require__(722);
+const uuid_1 = __webpack_require__(930);
+const cache_1 = __webpack_require__(913);
 const install_1 = __webpack_require__(655);
 const version_1 = __webpack_require__(52);
 const execShellCommand = util_1.promisify(child_process_1.exec);
@@ -6787,6 +6757,8 @@ function fetchPatch() {
 function prepareEnv() {
     return __awaiter(this, void 0, void 0, function* () {
         const startedAt = Date.now();
+        // Resolve Check Run ID
+        const resolveCheckRunIdPromise = resolveCheckRunId();
         // Prepare cache, lint and go in parallel.
         const restoreCachePromise = cache_1.restoreCache();
         const prepareLintPromise = prepareLint();
@@ -6796,8 +6768,9 @@ function prepareEnv() {
         yield installGoPromise;
         yield restoreCachePromise;
         const patchPath = yield patchPromise;
+        const checkRunId = yield resolveCheckRunIdPromise;
         core.info(`Prepared env in ${Date.now() - startedAt}ms`);
-        return { lintPath, patchPath };
+        return { lintPath, patchPath, checkRunId };
     });
 }
 var LintSeverity;
@@ -6851,26 +6824,78 @@ const logLintIssues = (issues) => {
         core.info(`${header} ${pos} - ${issue.Text} (${issue.FromLinter})`);
     });
 };
-function annotateLintIssues(issues) {
-    var _a;
+function resolveCheckRunId() {
+    var _a, _b, _c;
     return __awaiter(this, void 0, void 0, function* () {
-        if (!issues.length) {
+        let checkRunId = -1;
+        if (process.env.GITHUB_ACTIONS === `true`) {
+            try {
+                const searchToken = uuid_1.v4();
+                core.info(`::warning::Resolving GitHub CheckRunID (${searchToken})`);
+                const ctx = github.context;
+                const ref = (_a = ctx.payload.after) !== null && _a !== void 0 ? _a : ctx.sha;
+                const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }));
+                const { data: checkRunsResponse } = yield octokit.checks
+                    .listForRef(Object.assign(Object.assign({}, ctx.repo), { ref, status: `in_progress`, filter: `latest` }))
+                    .catch((e) => {
+                    throw `Unable to fetch Check Run List: ${e}`;
+                });
+                if (checkRunsResponse.check_runs.length > 0) {
+                    let checkRuns = checkRunsResponse.check_runs;
+                    if (checkRuns.length > 1) {
+                        checkRuns = (_b = checkRuns.filter((run) => run.name.includes(ctx.job))) !== null && _b !== void 0 ? _b : checkRuns;
+                    }
+                    if (checkRuns.length > 1) {
+                        checkRuns = (_c = checkRuns.filter((run) => run.output.annotations_count > 0)) !== null && _c !== void 0 ? _c : checkRuns;
+                    }
+                    if (checkRuns.length > 1) {
+                        for (const run of checkRuns) {
+                            try {
+                                if ((yield octokit.checks.listAnnotations(Object.assign(Object.assign({}, ctx.repo), { check_run_id: run.id }))).data.findIndex((annotation) => annotation.message.includes(searchToken)) !== -1) {
+                                    checkRunId = run.id;
+                                    break;
+                                }
+                            }
+                            catch (e) {
+                                core.info(`::debug::Error Fetching CheckRun ${run.id}: ${e}`);
+                            }
+                        }
+                    }
+                    else if (checkRuns[0]) {
+                        checkRunId = checkRuns[0].id;
+                        core.info(`Current Check Run is: ${checkRunId}`);
+                    }
+                    else {
+                        throw `Unable to resolve GitHub Check Run`;
+                    }
+                }
+                else {
+                    throw `Fetching octokit.checks.listForRef(${ref}) returned no results`;
+                }
+            }
+            catch (e) {
+                core.info(`::error::Error resolving GitHub Check Run: ${e}`);
+            }
+        }
+        else {
+            core.info(`::debug::Not in GitHub Action Context, Skipping Check Run Resolution`);
+        }
+        return checkRunId;
+    });
+}
+function annotateLintIssues(issues, checkRunId) {
+    return __awaiter(this, void 0, void 0, function* () {
+        if (checkRunId === -1 || !issues.length) {
             return;
         }
-        const ctx = github.context;
-        const ref = ctx.payload.after;
-        const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }));
-        const checkRunsPromise = octokit.checks
-            .listForRef(Object.assign(Object.assign({}, ctx.repo), { ref, status: "in_progress" }))
-            .catch((e) => {
-            throw `Error getting Check Run Data: ${e}`;
-        });
         const chunkSize = 50;
         const issueCounts = {
             notice: 0,
             warning: 0,
             failure: 0,
         };
+        const ctx = github.context;
+        const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }));
         const githubAnnotations = issues.map((issue) => {
             // If/when we transition to comments, we would build the request structure here
             const annotation = {
@@ -6904,22 +6929,11 @@ function annotateLintIssues(issues) {
             }
             return annotation;
         });
-        let checkRun;
-        const { data: checkRunsResponse } = yield checkRunsPromise;
-        if (checkRunsResponse.check_runs.length === 0) {
-            throw `octokit.checks.listForRef(${ref}) returned no results`;
-        }
-        else {
-            checkRun = checkRunsResponse.check_runs.find((run) => run.name.includes(`Lint`));
-        }
-        if (!(checkRun === null || checkRun === void 0 ? void 0 : checkRun.id)) {
-            throw `Could not find current check run`;
-        }
-        const title = (_a = checkRun.output.title) !== null && _a !== void 0 ? _a : `GolangCI-Lint`;
+        const title = `GolangCI-Lint`;
         const summary = `There are {issueCounts.failure} failures, {issueCounts.wairning} warnings, and {issueCounts.notice} notices.`;
         Array.from({ length: Math.ceil(githubAnnotations.length / chunkSize) }, (v, i) => githubAnnotations.slice(i * chunkSize, i * chunkSize + chunkSize)).forEach((annotations) => {
             octokit.checks
-                .update(Object.assign(Object.assign({}, ctx.repo), { check_run_id: checkRun === null || checkRun === void 0 ? void 0 : checkRun.id, output: {
+                .update(Object.assign(Object.assign({}, ctx.repo), { check_run_id: checkRunId, output: {
                     title,
                     summary,
                     annotations,
@@ -6961,14 +6975,14 @@ const printOutput = (res) => {
         core.info(res.stderr);
     }
 };
-function printLintOutput(res) {
+function printLintOutput(res, checkRunId) {
     var _a;
     return __awaiter(this, void 0, void 0, function* () {
         let lintOutput;
         const exit_code = (_a = res.code) !== null && _a !== void 0 ? _a : 0;
         try {
-            try {
-                if (res.stdout) {
+            if (res.stdout) {
+                try {
                     // This object contains other information, such as errors and the active linters
                     // TODO: Should we do something with that data?
                     lintOutput = parseOutput(res.stdout);
@@ -6980,7 +6994,7 @@ function printLintOutput(res) {
                             // TODO: When we are ready to handle these as Comments, instead of Annotations, we would place that logic here
                             /* falls through */
                             case `push`:
-                                yield annotateLintIssues(lintOutput.Issues);
+                                yield annotateLintIssues(lintOutput.Issues, checkRunId);
                                 break;
                             default:
                                 // At this time, other events are not supported
@@ -6988,21 +7002,19 @@ function printLintOutput(res) {
                         }
                     }
                 }
-            }
-            catch (e) {
-                throw `there was an error processing golangci-lint output: ${e}`;
+                catch (e) {
+                    throw `there was an error processing golangci-lint output: ${e}`;
+                }
             }
             if (res.stderr) {
                 core.info(res.stderr);
             }
             if (exit_code === 1) {
-                if (lintOutput) {
-                    if (hasFailingIssues(lintOutput.Issues)) {
-                        throw `issues found`;
-                    }
-                }
-                else {
+                if (!lintOutput) {
                     throw `unexpected state, golangci-lint exited with 1, but provided no lint output`;
+                }
+                if (hasFailingIssues(lintOutput.Issues)) {
+                    throw `issues found`;
                 }
             }
             else if (exit_code > 1) {
@@ -7015,7 +7027,7 @@ function printLintOutput(res) {
         return core.info(`golangci-lint found no blocking issues`);
     });
 }
-function runLint(lintPath, patchPath) {
+function runLint(lintPath, patchPath, checkRunId) {
     return __awaiter(this, void 0, void 0, function* () {
         const debug = core.getInput(`debug`);
         if (debug.split(`,`).includes(`cache`)) {
@@ -7065,12 +7077,12 @@ function runLint(lintPath, patchPath) {
         const startedAt = Date.now();
         try {
             const res = yield execShellCommand(cmd, cmdArgs);
-            yield printLintOutput(res);
+            yield printLintOutput(res, checkRunId);
         }
         catch (exc) {
             // This logging passes issues to GitHub annotations but comments can be more convenient for some users.
             // TODO: support reviewdog or leaving comments by GitHub API.
-            yield printLintOutput(exc);
+            yield printLintOutput(exc, checkRunId);
         }
         core.info(`Ran golangci-lint in ${Date.now() - startedAt}ms`);
     });
@@ -7078,9 +7090,9 @@ function runLint(lintPath, patchPath) {
 function run() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
-            const { lintPath, patchPath } = yield core.group(`prepare environment`, prepareEnv);
+            const { lintPath, patchPath, checkRunId } = yield core.group(`prepare environment`, prepareEnv);
             core.addPath(path.dirname(lintPath));
-            yield core.group(`run golangci-lint`, () => runLint(lintPath, patchPath));
+            yield core.group(`run golangci-lint`, () => runLint(lintPath, patchPath, checkRunId));
         }
         catch (error) {
             core.error(`Failed to run: ${error}, ${error.stack}`);
@@ -52341,183 +52353,34 @@ __webpack_require__(71);
 /* 720 */,
 /* 721 */,
 /* 722 */
-/***/ (function(__unusedmodule, exports, __webpack_require__) {
+/***/ (function(module) {
 
-"use strict";
+/**
+ * Convert array of 16 byte values to UUID string format of the form:
+ * XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
+ */
+var byteToHex = [];
+for (var i = 0; i < 256; ++i) {
+  byteToHex[i] = (i + 0x100).toString(16).substr(1);
+}
 
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.saveCache = exports.restoreCache = void 0;
-const cache = __importStar(__webpack_require__(638));
-const core = __importStar(__webpack_require__(470));
-const crypto = __importStar(__webpack_require__(417));
-const fs = __importStar(__webpack_require__(747));
-const path_1 = __importDefault(__webpack_require__(622));
-const constants_1 = __webpack_require__(196);
-const utils = __importStar(__webpack_require__(443));
-function checksumFile(hashName, path) {
-    return new Promise((resolve, reject) => {
-        const hash = crypto.createHash(hashName);
-        const stream = fs.createReadStream(path);
-        stream.on("error", (err) => reject(err));
-        stream.on("data", (chunk) => hash.update(chunk));
-        stream.on("end", () => resolve(hash.digest("hex")));
-    });
+function bytesToUuid(buf, offset) {
+  var i = offset || 0;
+  var bth = byteToHex;
+  // join used to fix memory issue caused by concatenation: https://bugs.chromium.org/p/v8/issues/detail?id=3175#c4
+  return ([
+    bth[buf[i++]], bth[buf[i++]],
+    bth[buf[i++]], bth[buf[i++]], '-',
+    bth[buf[i++]], bth[buf[i++]], '-',
+    bth[buf[i++]], bth[buf[i++]], '-',
+    bth[buf[i++]], bth[buf[i++]], '-',
+    bth[buf[i++]], bth[buf[i++]],
+    bth[buf[i++]], bth[buf[i++]],
+    bth[buf[i++]], bth[buf[i++]]
+  ]).join('');
 }
-const pathExists = (path) => __awaiter(void 0, void 0, void 0, function* () { return !!(yield fs.promises.stat(path).catch(() => false)); });
-const getLintCacheDir = () => {
-    return path_1.default.resolve(`${process.env.HOME}/.cache/golangci-lint`);
-};
-const getCacheDirs = () => {
-    // Not existing dirs are ok here: it works.
-    const skipPkgCache = core.getInput(`skip-pkg-cache`, { required: true }).trim();
-    const skipBuildCache = core.getInput(`skip-build-cache`, { required: true }).trim();
-    const dirs = [getLintCacheDir()];
-    if (skipBuildCache.toLowerCase() == "true") {
-        core.info(`Omitting ~/.cache/go-build from cache directories`);
-    }
-    else {
-        dirs.push(path_1.default.resolve(`${process.env.HOME}/.cache/go-build`));
-    }
-    if (skipPkgCache.toLowerCase() == "true") {
-        core.info(`Omitting ~/go/pkg from cache directories`);
-    }
-    else {
-        dirs.push(path_1.default.resolve(`${process.env.HOME}/go/pkg`));
-    }
-    return dirs;
-};
-const getIntervalKey = (invalidationIntervalDays) => {
-    const now = new Date();
-    const secondsSinceEpoch = now.getTime() / 1000;
-    const intervalNumber = Math.floor(secondsSinceEpoch / (invalidationIntervalDays * 86400));
-    return intervalNumber.toString();
-};
-function buildCacheKeys() {
-    return __awaiter(this, void 0, void 0, function* () {
-        const keys = [];
-        let cacheKey = `golangci-lint.cache-`;
-        keys.push(cacheKey);
-        // Periodically invalidate a cache because a new code being added.
-        // TODO: configure it via inputs.
-        cacheKey += `${getIntervalKey(7)}-`;
-        keys.push(cacheKey);
-        if (yield pathExists(`go.mod`)) {
-            // Add checksum to key to invalidate a cache when dependencies change.
-            cacheKey += yield checksumFile(`sha1`, `go.mod`);
-        }
-        else {
-            cacheKey += `nogomod`;
-        }
-        keys.push(cacheKey);
-        return keys;
-    });
-}
-function restoreCache() {
-    return __awaiter(this, void 0, void 0, function* () {
-        if (!utils.isValidEvent()) {
-            utils.logWarning(`Event Validation Error: The event type ${process.env[constants_1.Events.Key]} is not supported because it's not tied to a branch or tag ref.`);
-            return;
-        }
-        const startedAt = Date.now();
-        const keys = yield buildCacheKeys();
-        const primaryKey = keys.pop();
-        const restoreKeys = keys.reverse();
-        // Tell golangci-lint to use our cache directory.
-        process.env.GOLANGCI_LINT_CACHE = getLintCacheDir();
-        if (!primaryKey) {
-            utils.logWarning(`Invalid primary key`);
-            return;
-        }
-        core.saveState(constants_1.State.CachePrimaryKey, primaryKey);
-        try {
-            const cacheKey = yield cache.restoreCache(getCacheDirs(), primaryKey, restoreKeys);
-            if (!cacheKey) {
-                core.info(`Cache not found for input keys: ${[primaryKey, ...restoreKeys].join(", ")}`);
-                return;
-            }
-            // Store the matched cache key
-            utils.setCacheState(cacheKey);
-            core.info(`Restored cache for golangci-lint from key '${primaryKey}' in ${Date.now() - startedAt}ms`);
-        }
-        catch (error) {
-            if (error.name === cache.ValidationError.name) {
-                throw error;
-            }
-            else {
-                core.warning(error.message);
-            }
-        }
-    });
-}
-exports.restoreCache = restoreCache;
-function saveCache() {
-    return __awaiter(this, void 0, void 0, function* () {
-        // Validate inputs, this can cause task failure
-        if (!utils.isValidEvent()) {
-            utils.logWarning(`Event Validation Error: The event type ${process.env[constants_1.Events.Key]} is not supported because it's not tied to a branch or tag ref.`);
-            return;
-        }
-        const startedAt = Date.now();
-        const cacheDirs = getCacheDirs();
-        const primaryKey = core.getState(constants_1.State.CachePrimaryKey);
-        if (!primaryKey) {
-            utils.logWarning(`Error retrieving key from state.`);
-            return;
-        }
-        const state = utils.getCacheState();
-        if (utils.isExactKeyMatch(primaryKey, state)) {
-            core.info(`Cache hit occurred on the primary key ${primaryKey}, not saving cache.`);
-            return;
-        }
-        try {
-            yield cache.saveCache(cacheDirs, primaryKey);
-            core.info(`Saved cache for golangci-lint from paths '${cacheDirs.join(`, `)}' in ${Date.now() - startedAt}ms`);
-        }
-        catch (error) {
-            if (error.name === cache.ValidationError.name) {
-                throw error;
-            }
-            else if (error.name === cache.ReserveCacheError.name) {
-                core.info(error.message);
-            }
-            else {
-                core.info(`[warning] ${error.message}`);
-            }
-        }
-    });
-}
-exports.saveCache = saveCache;
+
+module.exports = bytesToUuid;
 
 
 /***/ }),
@@ -55772,7 +55635,7 @@ var __createBinding;
 /***/ (function(module, __unusedexports, __webpack_require__) {
 
 var rng = __webpack_require__(139);
-var bytesToUuid = __webpack_require__(105);
+var bytesToUuid = __webpack_require__(722);
 
 function v4(options, buf, offset) {
   var i = buf && offset || 0;
@@ -60629,7 +60492,187 @@ __exportStar(__webpack_require__(764), exports);
 /***/ }),
 /* 911 */,
 /* 912 */,
-/* 913 */,
+/* 913 */
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.saveCache = exports.restoreCache = void 0;
+const cache = __importStar(__webpack_require__(638));
+const core = __importStar(__webpack_require__(470));
+const crypto = __importStar(__webpack_require__(417));
+const fs = __importStar(__webpack_require__(747));
+const path_1 = __importDefault(__webpack_require__(622));
+const constants_1 = __webpack_require__(196);
+const utils = __importStar(__webpack_require__(443));
+function checksumFile(hashName, path) {
+    return new Promise((resolve, reject) => {
+        const hash = crypto.createHash(hashName);
+        const stream = fs.createReadStream(path);
+        stream.on("error", (err) => reject(err));
+        stream.on("data", (chunk) => hash.update(chunk));
+        stream.on("end", () => resolve(hash.digest("hex")));
+    });
+}
+const pathExists = (path) => __awaiter(void 0, void 0, void 0, function* () { return !!(yield fs.promises.stat(path).catch(() => false)); });
+const getLintCacheDir = () => {
+    return path_1.default.resolve(`${process.env.HOME}/.cache/golangci-lint`);
+};
+const getCacheDirs = () => {
+    // Not existing dirs are ok here: it works.
+    const skipPkgCache = core.getInput(`skip-pkg-cache`, { required: true }).trim();
+    const skipBuildCache = core.getInput(`skip-build-cache`, { required: true }).trim();
+    const dirs = [getLintCacheDir()];
+    if (skipBuildCache.toLowerCase() == "true") {
+        core.info(`Omitting ~/.cache/go-build from cache directories`);
+    }
+    else {
+        dirs.push(path_1.default.resolve(`${process.env.HOME}/.cache/go-build`));
+    }
+    if (skipPkgCache.toLowerCase() == "true") {
+        core.info(`Omitting ~/go/pkg from cache directories`);
+    }
+    else {
+        dirs.push(path_1.default.resolve(`${process.env.HOME}/go/pkg`));
+    }
+    return dirs;
+};
+const getIntervalKey = (invalidationIntervalDays) => {
+    const now = new Date();
+    const secondsSinceEpoch = now.getTime() / 1000;
+    const intervalNumber = Math.floor(secondsSinceEpoch / (invalidationIntervalDays * 86400));
+    return intervalNumber.toString();
+};
+function buildCacheKeys() {
+    return __awaiter(this, void 0, void 0, function* () {
+        const keys = [];
+        let cacheKey = `golangci-lint.cache-`;
+        keys.push(cacheKey);
+        // Periodically invalidate a cache because a new code being added.
+        // TODO: configure it via inputs.
+        cacheKey += `${getIntervalKey(7)}-`;
+        keys.push(cacheKey);
+        if (yield pathExists(`go.mod`)) {
+            // Add checksum to key to invalidate a cache when dependencies change.
+            cacheKey += yield checksumFile(`sha1`, `go.mod`);
+        }
+        else {
+            cacheKey += `nogomod`;
+        }
+        keys.push(cacheKey);
+        return keys;
+    });
+}
+function restoreCache() {
+    return __awaiter(this, void 0, void 0, function* () {
+        if (!utils.isValidEvent()) {
+            utils.logWarning(`Event Validation Error: The event type ${process.env[constants_1.Events.Key]} is not supported because it's not tied to a branch or tag ref.`);
+            return;
+        }
+        const startedAt = Date.now();
+        const keys = yield buildCacheKeys();
+        const primaryKey = keys.pop();
+        const restoreKeys = keys.reverse();
+        // Tell golangci-lint to use our cache directory.
+        process.env.GOLANGCI_LINT_CACHE = getLintCacheDir();
+        if (!primaryKey) {
+            utils.logWarning(`Invalid primary key`);
+            return;
+        }
+        core.saveState(constants_1.State.CachePrimaryKey, primaryKey);
+        try {
+            const cacheKey = yield cache.restoreCache(getCacheDirs(), primaryKey, restoreKeys);
+            if (!cacheKey) {
+                core.info(`Cache not found for input keys: ${[primaryKey, ...restoreKeys].join(", ")}`);
+                return;
+            }
+            // Store the matched cache key
+            utils.setCacheState(cacheKey);
+            core.info(`Restored cache for golangci-lint from key '${primaryKey}' in ${Date.now() - startedAt}ms`);
+        }
+        catch (error) {
+            if (error.name === cache.ValidationError.name) {
+                throw error;
+            }
+            else {
+                core.warning(error.message);
+            }
+        }
+    });
+}
+exports.restoreCache = restoreCache;
+function saveCache() {
+    return __awaiter(this, void 0, void 0, function* () {
+        // Validate inputs, this can cause task failure
+        if (!utils.isValidEvent()) {
+            utils.logWarning(`Event Validation Error: The event type ${process.env[constants_1.Events.Key]} is not supported because it's not tied to a branch or tag ref.`);
+            return;
+        }
+        const startedAt = Date.now();
+        const cacheDirs = getCacheDirs();
+        const primaryKey = core.getState(constants_1.State.CachePrimaryKey);
+        if (!primaryKey) {
+            utils.logWarning(`Error retrieving key from state.`);
+            return;
+        }
+        const state = utils.getCacheState();
+        if (utils.isExactKeyMatch(primaryKey, state)) {
+            core.info(`Cache hit occurred on the primary key ${primaryKey}, not saving cache.`);
+            return;
+        }
+        try {
+            yield cache.saveCache(cacheDirs, primaryKey);
+            core.info(`Saved cache for golangci-lint from paths '${cacheDirs.join(`, `)}' in ${Date.now() - startedAt}ms`);
+        }
+        catch (error) {
+            if (error.name === cache.ValidationError.name) {
+                throw error;
+            }
+            else if (error.name === cache.ReserveCacheError.name) {
+                core.info(error.message);
+            }
+            else {
+                core.info(`[warning] ${error.message}`);
+            }
+        }
+    });
+}
+exports.saveCache = saveCache;
+
+
+/***/ }),
 /* 914 */,
 /* 915 */,
 /* 916 */,

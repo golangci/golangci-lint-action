@@ -5,7 +5,7 @@ import { exec, ExecOptions } from "child_process"
 import * as fs from "fs"
 import * as path from "path"
 import { dir } from "tmp"
-import { promisify } from "util"
+import { inspect, promisify } from "util"
 import { v4 as uuidv4 } from "uuid"
 
 import { restoreCache, saveCache } from "./cache"
@@ -241,45 +241,55 @@ const logLintIssues = (issues: LintIssue[]): void => {
 
 async function resolveCheckRunId(): Promise<number> {
   let jobId = -1
+  const ctx = github.context
 
-  if (process.env.GITHUB_ACTIONS === `true` && process.env.GITHUB_RUN_ID) {
+  if (process.env.GITHUB_ACTIONS === `true` && ctx.runId) {
     try {
-      core.info(`Attempting to resolve current GitHub Job`)
-      const ctx = github.context
+      core.info(`Attempting to resolve current GitHub Job (${ctx.runId})`)
       const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }))
       const { data: workflowResponse } = await octokit.actions
         .listJobsForWorkflowRun({
           ...ctx.repo,
-          run_id: parseInt(process.env.GITHUB_RUN_ID),
+          run_id: ctx.runId,
         })
         .catch((e: string) => {
           throw `Unable to fetch Workflow Job List: ${e}`
         })
 
       if (workflowResponse.jobs.length > 0) {
+        core.info(`resolveCheckRunId() Found ${workflowResponse.jobs.length} Jobs:\n` + inspect(workflowResponse.jobs))
         if (workflowResponse.jobs.length > 1) {
-          workflowResponse.jobs = workflowResponse.jobs.filter((run) => run.name.includes(ctx.job)) ?? workflowResponse.jobs
+          const jobs = workflowResponse.jobs.filter((run) => run.name.includes(ctx.job))
+          core.info(`resolveCheckRunId() Found ${jobs.length} Jobs whose name includes '${ctx.job}'`)
+          workflowResponse.jobs = jobs.length ? jobs : workflowResponse.jobs
         }
         if (workflowResponse.jobs.length > 1) {
           const searchToken = uuidv4()
           core.info(`::warning::[ignore] Resolving GitHub Job with Search Token: ${searchToken}`)
           for (const job of workflowResponse.jobs) {
             try {
+              const { data: annotations } = await octokit.checks.listAnnotations({
+                ...ctx.repo,
+                check_run_id: job.id,
+              })
+
+              core.info(`resolveCheckRunId() Found ${annotations.length} Annotations for Job '${job.id}':\n` + inspect(annotations))
+
               if (
-                (
-                  await octokit.checks.listAnnotations({
-                    ...ctx.repo,
-                    check_run_id: job.id,
-                  })
-                ).data.findIndex((annotation) => annotation.message.includes(searchToken)) !== -1
+                annotations.findIndex((annotation) => {
+                  core.info(`resolveCheckRunId() Looking for Search Token (${searchToken}) in message: ${annotation.message}`)
+                  return annotation.message.includes(searchToken)
+                }) !== -1
               ) {
+                core.info(`resolveCheckRunId() Found Search Token (${searchToken}) in Job ${job.id}`)
                 jobId = job.id
                 break
               }
             } catch (e) {
-              core.info(`::debug::Error Fetching Job ${job.id}: ${e}`)
+              core.info(`resolveCheckRunId() Error Fetching Job ${job.id}: ${e}`)
             }
           }
+          core.info(`resolveCheckRunId() Finished looking for Search Token`)
         } else if (workflowResponse.jobs[0]) {
           jobId = workflowResponse.jobs[0].id
         } else {
@@ -293,7 +303,7 @@ async function resolveCheckRunId(): Promise<number> {
       core.info(`::error::Unable to resolve GitHub Job: ${e}`)
     }
   } else {
-    core.info(`::debug::Not in GitHub Action Context, Skipping Job Resolution`)
+    core.info(`Not in GitHub Action Context, Skipping Job Resolution`)
   }
 
   return jobId

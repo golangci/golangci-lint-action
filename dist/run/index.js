@@ -6845,37 +6845,46 @@ const logLintIssues = (issues) => {
     });
 };
 function resolveCheckRunId() {
-    var _a;
     return __awaiter(this, void 0, void 0, function* () {
         let jobId = -1;
-        if (process.env.GITHUB_ACTIONS === `true` && process.env.GITHUB_RUN_ID) {
+        const ctx = github.context;
+        if (process.env.GITHUB_ACTIONS === `true` && ctx.runId) {
             try {
-                core.info(`Attempting to resolve current GitHub Job`);
-                const ctx = github.context;
+                core.info(`Attempting to resolve current GitHub Job (${ctx.runId})`);
                 const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }));
                 const { data: workflowResponse } = yield octokit.actions
-                    .listJobsForWorkflowRun(Object.assign(Object.assign({}, ctx.repo), { run_id: parseInt(process.env.GITHUB_RUN_ID) }))
+                    .listJobsForWorkflowRun(Object.assign(Object.assign({}, ctx.repo), { run_id: ctx.runId }))
                     .catch((e) => {
                     throw `Unable to fetch Workflow Job List: ${e}`;
                 });
                 if (workflowResponse.jobs.length > 0) {
+                    core.info(`resolveCheckRunId() Found ${workflowResponse.jobs.length} Jobs:\n` + util_1.inspect(workflowResponse.jobs));
                     if (workflowResponse.jobs.length > 1) {
-                        workflowResponse.jobs = (_a = workflowResponse.jobs.filter((run) => run.name.includes(ctx.job))) !== null && _a !== void 0 ? _a : workflowResponse.jobs;
+                        const jobs = workflowResponse.jobs.filter((run) => run.name.includes(ctx.job));
+                        core.info(`resolveCheckRunId() Found ${jobs.length} Jobs whose name includes '${ctx.job}'`);
+                        workflowResponse.jobs = jobs.length ? jobs : workflowResponse.jobs;
                     }
                     if (workflowResponse.jobs.length > 1) {
                         const searchToken = uuid_1.v4();
                         core.info(`::warning::[ignore] Resolving GitHub Job with Search Token: ${searchToken}`);
                         for (const job of workflowResponse.jobs) {
                             try {
-                                if ((yield octokit.checks.listAnnotations(Object.assign(Object.assign({}, ctx.repo), { check_run_id: job.id }))).data.findIndex((annotation) => annotation.message.includes(searchToken)) !== -1) {
+                                const { data: annotations } = yield octokit.checks.listAnnotations(Object.assign(Object.assign({}, ctx.repo), { check_run_id: job.id }));
+                                core.info(`resolveCheckRunId() Found ${annotations.length} Annotations for Job '${job.id}':\n` + util_1.inspect(annotations));
+                                if (annotations.findIndex((annotation) => {
+                                    core.info(`resolveCheckRunId() Looking for Search Token (${searchToken}) in message: ${annotation.message}`);
+                                    return annotation.message.includes(searchToken);
+                                }) !== -1) {
+                                    core.info(`resolveCheckRunId() Found Search Token (${searchToken}) in Job ${job.id}`);
                                     jobId = job.id;
                                     break;
                                 }
                             }
                             catch (e) {
-                                core.info(`::debug::Error Fetching Job ${job.id}: ${e}`);
+                                core.info(`resolveCheckRunId() Error Fetching Job ${job.id}: ${e}`);
                             }
                         }
+                        core.info(`resolveCheckRunId() Finished looking for Search Token`);
                     }
                     else if (workflowResponse.jobs[0]) {
                         jobId = workflowResponse.jobs[0].id;
@@ -6894,7 +6903,7 @@ function resolveCheckRunId() {
             }
         }
         else {
-            core.info(`::debug::Not in GitHub Action Context, Skipping Job Resolution`);
+            core.info(`Not in GitHub Action Context, Skipping Job Resolution`);
         }
         return jobId;
     });

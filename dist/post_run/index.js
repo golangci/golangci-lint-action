@@ -6835,60 +6835,58 @@ const logLintIssues = (issues) => {
     });
 };
 function resolveCheckRunId() {
-    var _a, _b;
+    var _a;
     return __awaiter(this, void 0, void 0, function* () {
-        let checkRunId = -1;
-        if (process.env.GITHUB_ACTIONS === `true`) {
+        let jobId = -1;
+        if (process.env.GITHUB_ACTIONS === `true` && process.env.GITHUB_RUN_ID) {
             try {
-                core.info(`Attempting to resolve GitHub Check Run`);
+                core.info(`Attempting to resolve current GitHub Job`);
                 const ctx = github.context;
-                const ref = (_a = ctx.payload.after) !== null && _a !== void 0 ? _a : ctx.sha;
                 const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }));
-                const { data: checkRunsResponse } = yield octokit.checks
-                    .listForRef(Object.assign(Object.assign({}, ctx.repo), { ref, status: `in_progress`, filter: `latest` }))
+                const { data: workflowResponse } = yield octokit.actions
+                    .listJobsForWorkflowRun(Object.assign(Object.assign({}, ctx.repo), { run_id: parseInt(process.env.GITHUB_RUN_ID) }))
                     .catch((e) => {
-                    throw `Unable to fetch Check Run List: ${e}`;
+                    throw `Unable to fetch Workflow Job List: ${e}`;
                 });
-                if (checkRunsResponse.check_runs.length > 0) {
-                    let checkRuns = checkRunsResponse.check_runs;
-                    if (checkRuns.length > 1) {
-                        checkRuns = (_b = checkRuns.filter((run) => run.name.includes(ctx.job))) !== null && _b !== void 0 ? _b : checkRuns;
+                if (workflowResponse.jobs.length > 0) {
+                    if (workflowResponse.jobs.length > 1) {
+                        workflowResponse.jobs = (_a = workflowResponse.jobs.filter((run) => run.name.includes(ctx.job))) !== null && _a !== void 0 ? _a : workflowResponse.jobs;
                     }
-                    if (checkRuns.length > 1) {
+                    if (workflowResponse.jobs.length > 1) {
                         const searchToken = uuid_1.v4();
-                        core.info(`::warning::[ignore] Resolving GitHub Check Run with Search Token: ${searchToken}`);
-                        for (const run of checkRuns) {
+                        core.info(`::warning::[ignore] Resolving GitHub Job with Search Token: ${searchToken}`);
+                        for (const job of workflowResponse.jobs) {
                             try {
-                                if ((yield octokit.checks.listAnnotations(Object.assign(Object.assign({}, ctx.repo), { check_run_id: run.id }))).data.findIndex((annotation) => annotation.message.includes(searchToken)) !== -1) {
-                                    checkRunId = run.id;
+                                if ((yield octokit.checks.listAnnotations(Object.assign(Object.assign({}, ctx.repo), { check_run_id: job.id }))).data.findIndex((annotation) => annotation.message.includes(searchToken)) !== -1) {
+                                    jobId = job.id;
                                     break;
                                 }
                             }
                             catch (e) {
-                                core.info(`::debug::Error Fetching CheckRun ${run.id}: ${e}`);
+                                core.info(`::debug::Error Fetching Job ${job.id}: ${e}`);
                             }
                         }
                     }
-                    else if (checkRuns[0]) {
-                        checkRunId = checkRuns[0].id;
-                        core.info(`Current Check Run: ${checkRunId}`);
+                    else if (workflowResponse.jobs[0]) {
+                        jobId = workflowResponse.jobs[0].id;
                     }
                     else {
-                        throw `Unable to resolve GitHub Check Run`;
+                        throw `Unable to resolve GitHub Job`;
                     }
+                    core.info(`Current Job: ${jobId}`);
                 }
                 else {
-                    throw `Fetching octokit.checks.listForRef(${ref}) returned no results`;
+                    throw `Fetching octokit.actions.getWorkflowRun(${process.env.GITHUB_RUN_ID}) returned no results`;
                 }
             }
             catch (e) {
-                core.info(`::error::Error resolving GitHub Check Run: ${e}`);
+                core.info(`::error::Unable to resolve GitHub Job: ${e}`);
             }
         }
         else {
-            core.info(`::debug::Not in GitHub Action Context, Skipping Check Run Resolution`);
+            core.info(`::debug::Not in GitHub Action Context, Skipping Job Resolution`);
         }
-        return checkRunId;
+        return jobId;
     });
 }
 function annotateLintIssues(issues, checkRunId) {

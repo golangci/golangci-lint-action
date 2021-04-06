@@ -175,31 +175,6 @@ type GithubAnnotation = {
   raw_details?: string
 }
 
-type CheckRun = {
-  id: number
-  node_id: string
-  head_sha: string
-  external_id: string
-  url: string
-  html_url: string
-  details_url: string
-  status: string
-  conclusion: string | null
-  started_at: string
-  completed_at: string | null
-  output: {
-    title: string | null
-    summary: string | null
-    text: string | null
-    annotations_count: number
-    annotations_url: string
-  }
-  name: string
-  check_suite: {
-    id: number
-  }
-}
-
 type SeverityMap = {
   [key: string]: LintSeverityStrings
 }
@@ -265,68 +240,63 @@ const logLintIssues = (issues: LintIssue[]): void => {
 }
 
 async function resolveCheckRunId(): Promise<number> {
-  let checkRunId = -1
+  let jobId = -1
 
-  if (process.env.GITHUB_ACTIONS === `true`) {
+  if (process.env.GITHUB_ACTIONS === `true` && process.env.GITHUB_RUN_ID) {
     try {
-      core.info(`Attempting to resolve GitHub Check Run`)
+      core.info(`Attempting to resolve current GitHub Job`)
       const ctx = github.context
-      const ref = ctx.payload.after ?? ctx.sha
-
       const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }))
-      const { data: checkRunsResponse } = await octokit.checks
-        .listForRef({
+      const { data: workflowResponse } = await octokit.actions
+        .listJobsForWorkflowRun({
           ...ctx.repo,
-          ref,
-          status: `in_progress`,
-          filter: `latest`,
+          run_id: parseInt(process.env.GITHUB_RUN_ID),
         })
         .catch((e: string) => {
-          throw `Unable to fetch Check Run List: ${e}`
+          throw `Unable to fetch Workflow Job List: ${e}`
         })
 
-      if (checkRunsResponse.check_runs.length > 0) {
-        let checkRuns: CheckRun[] = checkRunsResponse.check_runs
-        if (checkRuns.length > 1) {
-          checkRuns = checkRuns.filter((run) => run.name.includes(ctx.job)) ?? checkRuns
+      if (workflowResponse.jobs.length > 0) {
+        if (workflowResponse.jobs.length > 1) {
+          workflowResponse.jobs = workflowResponse.jobs.filter((run) => run.name.includes(ctx.job)) ?? workflowResponse.jobs
         }
-        if (checkRuns.length > 1) {
+        if (workflowResponse.jobs.length > 1) {
           const searchToken = uuidv4()
-          core.info(`::warning::[ignore] Resolving GitHub Check Run with Search Token: ${searchToken}`)
-          for (const run of checkRuns) {
+          core.info(`::warning::[ignore] Resolving GitHub Job with Search Token: ${searchToken}`)
+          for (const job of workflowResponse.jobs) {
             try {
               if (
                 (
                   await octokit.checks.listAnnotations({
                     ...ctx.repo,
-                    check_run_id: run.id,
+                    check_run_id: job.id,
                   })
-                ).data.findIndex((annotation: { message: string }) => annotation.message.includes(searchToken)) !== -1
+                ).data.findIndex((annotation) => annotation.message.includes(searchToken)) !== -1
               ) {
-                checkRunId = run.id
+                jobId = job.id
                 break
               }
             } catch (e) {
-              core.info(`::debug::Error Fetching CheckRun ${run.id}: ${e}`)
+              core.info(`::debug::Error Fetching Job ${job.id}: ${e}`)
             }
           }
-        } else if (checkRuns[0]) {
-          checkRunId = checkRuns[0].id
-          core.info(`Current Check Run: ${checkRunId}`)
+        } else if (workflowResponse.jobs[0]) {
+          jobId = workflowResponse.jobs[0].id
         } else {
-          throw `Unable to resolve GitHub Check Run`
+          throw `Unable to resolve GitHub Job`
         }
+        core.info(`Current Job: ${jobId}`)
       } else {
-        throw `Fetching octokit.checks.listForRef(${ref}) returned no results`
+        throw `Fetching octokit.actions.getWorkflowRun(${process.env.GITHUB_RUN_ID}) returned no results`
       }
     } catch (e) {
-      core.info(`::error::Error resolving GitHub Check Run: ${e}`)
+      core.info(`::error::Unable to resolve GitHub Job: ${e}`)
     }
   } else {
-    core.info(`::debug::Not in GitHub Action Context, Skipping Check Run Resolution`)
+    core.info(`::debug::Not in GitHub Action Context, Skipping Job Resolution`)
   }
 
-  return checkRunId
+  return jobId
 }
 
 async function annotateLintIssues(issues: LintIssue[], checkRunId: number): Promise<void> {

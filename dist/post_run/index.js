@@ -6857,6 +6857,10 @@ function resolveCheckRunId() {
                     if (workflowResponse.jobs.length > 1) {
                         const searchToken = uuid_1.v4();
                         core.info(`::warning::[ignore] Resolving GitHub Job with Search Token: ${searchToken}`);
+                        yield ((ms) => {
+                            core.info(`resolveCheckRunId() Sleeping for ${ms / 1000} Seconds`);
+                            return new Promise((resolve) => setTimeout(resolve, ms));
+                        })(2 * 1000);
                         for (const job of workflowResponse.jobs) {
                             try {
                                 const { data: annotations } = yield octokit.checks.listAnnotations(Object.assign(Object.assign({}, ctx.repo), { check_run_id: job.id }));

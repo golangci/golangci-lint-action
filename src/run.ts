@@ -266,6 +266,10 @@ async function resolveCheckRunId(): Promise<number> {
         if (workflowResponse.jobs.length > 1) {
           const searchToken = uuidv4()
           core.info(`::warning::[ignore] Resolving GitHub Job with Search Token: ${searchToken}`)
+          await ((ms): Promise<void> => {
+            core.info(`resolveCheckRunId() Sleeping for ${ms / 1000} Seconds`)
+            return new Promise((resolve) => setTimeout(resolve, ms))
+          })(2 * 1000)
           for (const job of workflowResponse.jobs) {
             try {
               const { data: annotations } = await octokit.checks.listAnnotations({

@@ -6808,8 +6808,9 @@ const parseOutput = (json) => {
     }
     if (lintOutput.Issues.length) {
         lintOutput.Issues = lintOutput.Issues.filter((issue) => issue.Severity !== `ignore`).map((issue) => {
-            const Severity = issue.Severity.toLowerCase();
-            issue.Severity = severityMap[`${Severity}`] ? severityMap[`${Severity}`] : `failure`;
+            issue.Severity = ((Severity) => {
+                return severityMap[`${Severity}`] ? severityMap[`${Severity}`] : `failure`;
+            })(issue.Severity.toLowerCase());
             return issue;
         });
     }
@@ -6817,21 +6818,30 @@ const parseOutput = (json) => {
 };
 const logLintIssues = (issues) => {
     issues.forEach((issue) => {
-        let header = `${ansi_styles_1.default.red.open}${ansi_styles_1.default.bold.open}Lint Error:${ansi_styles_1.default.bold.close}${ansi_styles_1.default.red.close}`;
-        if (issue.Severity === `warning`) {
-            header = `${ansi_styles_1.default.yellow.open}${ansi_styles_1.default.bold.open}Lint Warning:${ansi_styles_1.default.bold.close}${ansi_styles_1.default.yellow.close}`;
-        }
-        else if (issue.Severity === `notice`) {
-            header = `${ansi_styles_1.default.cyan.open}${ansi_styles_1.default.bold.open}Lint Notice:${ansi_styles_1.default.bold.close}${ansi_styles_1.default.cyan.close}`;
-        }
-        let pos = `${issue.Pos.Filename}:${issue.Pos.Line}`;
-        if (issue.LineRange !== undefined) {
-            pos += `-${issue.LineRange.To}`;
-        }
-        else if (issue.Pos.Column) {
-            pos += `:${issue.Pos.Column}`;
-        }
-        core.info(`${header} ${pos} - ${issue.Text} (${issue.FromLinter})`);
+        core.info(((issue) => {
+            switch (issue.Severity) {
+                case `warning`:
+                    return `${ansi_styles_1.default.yellow.open}${ansi_styles_1.default.bold.open}Lint Warning:${ansi_styles_1.default.bold.close}${ansi_styles_1.default.yellow.close}`;
+                case `notice`:
+                    return `${ansi_styles_1.default.cyan.open}${ansi_styles_1.default.bold.open}Lint Notice:${ansi_styles_1.default.bold.close}${ansi_styles_1.default.cyan.close}`;
+                default:
+                    return `${ansi_styles_1.default.red.open}${ansi_styles_1.default.bold.open}Lint Error:${ansi_styles_1.default.bold.close}${ansi_styles_1.default.red.close}`;
+            }
+        })(issue) +
+            ` ` +
+            `${issue.Pos.Filename}:${issue.Pos.Line}` +
+            ((issue) => {
+                if (issue.LineRange !== undefined) {
+                    return `-${issue.LineRange.To}`;
+                }
+                else if (issue.Pos.Column) {
+                    return `:${issue.Pos.Column}`;
+                }
+                else {
+                    return ``;
+                }
+            })(issue) +
+            ` - ${issue.Text} (${issue.FromLinter})`);
     });
 };
 function resolveCheckRunId() {
@@ -6904,77 +6914,52 @@ function annotateLintIssues(issues, checkRunId) {
         };
         const ctx = github.context;
         const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }));
-        const githubAnnotations = issues.map((issue) => {
-            // If/when we transition to comments, we would build the request structure here
-            const annotation = {
-                path: issue.Pos.Filename,
-                start_line: issue.Pos.Line,
-                end_line: issue.Pos.Line,
-                title: issue.FromLinter,
-                message: issue.Text,
-                annotation_level: issue.Severity,
-            };
-            issueCounts[issue.Severity]++;
-            if (issue.LineRange !== undefined) {
-                annotation.end_line = issue.LineRange.To;
-            }
-            else if (issue.Pos.Column) {
-                annotation.start_column = issue.Pos.Column;
-                annotation.end_column = issue.Pos.Column;
-            }
-            if (issue.Replacement !== null) {
-                let replacement = ``;
-                if (issue.Replacement.Inline) {
-                    replacement =
-                        issue.SourceLines[0].slice(0, issue.Replacement.Inline.StartCol) +
-                            issue.Replacement.Inline.NewString +
-                            issue.SourceLines[0].slice(issue.Replacement.Inline.StartCol + issue.Replacement.Inline.Length);
-                }
-                else if (issue.Replacement.NewLines) {
-                    replacement = issue.Replacement.NewLines.join("\n");
-                }
-                annotation.raw_details = "```suggestion\n" + replacement + "\n```";
-            }
-            return annotation;
-        });
         const title = `GolangCI-Lint`;
-        const summary = `There are {issueCounts.failure} failures, {issueCounts.wairning} warnings, and {issueCounts.notice} notices.`;
-        Array.from({ length: Math.ceil(githubAnnotations.length / chunkSize) }, (v, i) => githubAnnotations.slice(i * chunkSize, i * chunkSize + chunkSize)).forEach((annotations) => {
+        for (let i = 0; i < Math.ceil(issues.length / chunkSize); i++) {
             octokit.checks
                 .update(Object.assign(Object.assign({}, ctx.repo), { check_run_id: checkRunId, output: {
-                    title,
-                    summary,
-                    annotations,
+                    title: title,
+                    annotations: issues.slice(i * chunkSize, i * chunkSize + chunkSize).map((issue) => {
+                        // If/when we transition to comments, we would build the request structure here
+                        const annotation = {
+                            path: issue.Pos.Filename,
+                            start_line: issue.Pos.Line,
+                            end_line: issue.Pos.Line,
+                            title: issue.FromLinter,
+                            message: issue.Text,
+                            annotation_level: issue.Severity,
+                        };
+                        issueCounts[issue.Severity]++;
+                        if (issue.LineRange !== undefined) {
+                            annotation.end_line = issue.LineRange.To;
+                        }
+                        else if (issue.Pos.Column) {
+                            annotation.start_column = issue.Pos.Column;
+                            annotation.end_column = issue.Pos.Column;
+                        }
+                        if (issue.Replacement !== null) {
+                            let replacement = ``;
+                            if (issue.Replacement.Inline) {
+                                replacement =
+                                    issue.SourceLines[0].slice(0, issue.Replacement.Inline.StartCol) +
+                                        issue.Replacement.Inline.NewString +
+                                        issue.SourceLines[0].slice(issue.Replacement.Inline.StartCol + issue.Replacement.Inline.Length);
+                            }
+                            else if (issue.Replacement.NewLines) {
+                                replacement = issue.Replacement.NewLines.join("\n");
+                            }
+                            annotation.raw_details = "```suggestion\n" + replacement + "\n```";
+                        }
+                        return annotation;
+                    }),
+                    summary: `There are {issueCounts.failure} failures, {issueCounts.wairning} warnings, and {issueCounts.notice} notices.`,
                 } }))
                 .catch((e) => {
                 throw `Error patching Check Run Data (annotations): ${e}`;
             });
-        });
+        }
     });
 }
-const hasFailingIssues = (issues) => {
-    // If the user input is not a valid Severity Level, this will be -1, and any issue will fail
-    const userFailureSeverity = core.getInput(`failure-severity`).toLowerCase();
-    let failureSeverity = DefaultFailureSeverity;
-    if (userFailureSeverity) {
-        failureSeverity = Object.values(LintSeverity).indexOf(userFailureSeverity);
-    }
-    if (failureSeverity < 0) {
-        core.info(`::warning::failure-severity must be one of (${Object.keys(LintSeverity).join(" | ")}). "${userFailureSeverity}" not supported, using default (${LintSeverity[DefaultFailureSeverity]})`);
-        failureSeverity = DefaultFailureSeverity;
-    }
-    if (issues.length) {
-        if (failureSeverity <= 0) {
-            return true;
-        }
-        for (const issue of issues) {
-            if (failureSeverity <= LintSeverity[issue.Severity]) {
-                return true;
-            }
-        }
-    }
-    return false;
-};
 const printOutput = (res) => {
     if (res.stdout) {
         core.info(res.stdout);
@@ -6983,56 +6968,39 @@ const printOutput = (res) => {
         core.info(res.stderr);
     }
 };
-function printLintOutput(res, checkRunId) {
-    var _a;
+function processLintOutput(res, checkRunId) {
     return __awaiter(this, void 0, void 0, function* () {
-        let lintOutput;
-        const exit_code = (_a = res.code) !== null && _a !== void 0 ? _a : 0;
-        try {
-            if (res.stdout) {
-                try {
-                    // This object contains other information, such as errors and the active linters
-                    // TODO: Should we do something with that data?
-                    lintOutput = parseOutput(res.stdout);
-                    if (lintOutput.Issues.length) {
-                        logLintIssues(lintOutput.Issues);
-                        // We can only Annotate (or Comment) on Push or Pull Request
-                        switch (github.context.eventName) {
-                            case `pull_request`:
-                            // TODO: When we are ready to handle these as Comments, instead of Annotations, we would place that logic here
-                            /* falls through */
-                            case `push`:
-                                yield annotateLintIssues(lintOutput.Issues, checkRunId);
-                                break;
-                            default:
-                                // At this time, other events are not supported
-                                break;
-                        }
+        let lintIssues = [];
+        if (res.stdout) {
+            try {
+                // This object contains other information, such as errors and the active linters
+                // TODO: Should we do something with that data?
+                ;
+                ({ Issues: lintIssues } = parseOutput(res.stdout));
+                if (lintIssues.length) {
+                    logLintIssues(lintIssues);
+                    // We can only Annotate (or Comment) on Push or Pull Request
+                    switch (github.context.eventName) {
+                        case `pull_request`:
+                        // TODO: When we are ready to handle these as Comments, instead of Annotations, we would place that logic here
+                        /* falls through */
+                        case `push`:
+                            yield annotateLintIssues(lintIssues, checkRunId);
+                            break;
+                        default:
+                            // At this time, other events are not supported
+                            break;
                     }
                 }
-                catch (e) {
-                    throw `there was an error processing golangci-lint output: ${e}`;
-                }
             }
-            if (res.stderr) {
-                core.info(res.stderr);
-            }
-            if (exit_code === 1) {
-                if (!lintOutput) {
-                    throw `unexpected state, golangci-lint exited with 1, but provided no lint output`;
-                }
-                if (hasFailingIssues(lintOutput.Issues)) {
-                    throw `issues found`;
-                }
-            }
-            else if (exit_code > 1) {
-                throw `golangci-lint exit with code ${exit_code}`;
+            catch (e) {
+                core.setFailed(`Error processing golangci-lint output: ${e}`);
             }
         }
-        catch (e) {
-            return core.setFailed(`${e}`);
+        if (res.stderr) {
+            core.info(res.stderr);
         }
-        return core.info(`golangci-lint found no blocking issues`);
+        return lintIssues;
     });
 }
 function runLint(lintPath, patchPath, checkRunId) {
@@ -7042,6 +7010,17 @@ function runLint(lintPath, patchPath, checkRunId) {
             const res = yield execShellCommand(`${lintPath} cache status`);
             printOutput(res);
         }
+        const failureSeverity = ((userFailureSeverity) => {
+            if (userFailureSeverity) {
+                if (Object.values(LintSeverity).indexOf(userFailureSeverity) != -1) {
+                    return Object.values(LintSeverity).indexOf(userFailureSeverity);
+                }
+                else {
+                    core.info(`::warning::failure-severity must be one of (${Object.keys(LintSeverity).join(" | ")}). "${userFailureSeverity}" not supported, using default (${LintSeverity[DefaultFailureSeverity]})`);
+                }
+            }
+            return DefaultFailureSeverity;
+        })(core.getInput(`failure-severity`).toLowerCase());
         const userArgs = core.getInput(`args`);
         const addedArgs = [];
         const userArgNames = new Set();
@@ -7083,14 +7062,29 @@ function runLint(lintPath, patchPath, checkRunId) {
         const cmd = `${lintPath} run ${addedArgs.join(` `)} ${userArgs}`.trimRight();
         core.info(`Running [${cmd}] in [${cmdArgs.cwd || ``}] ...`);
         const startedAt = Date.now();
+        let exit_code = 0;
         try {
             const res = yield execShellCommand(cmd, cmdArgs);
-            yield printLintOutput(res, checkRunId);
+            processLintOutput(res, checkRunId);
         }
         catch (exc) {
             // This logging passes issues to GitHub annotations but comments can be more convenient for some users.
             // TODO: support reviewdog or leaving comments by GitHub API.
-            yield printLintOutput(exc, checkRunId);
+            const issuesPromise = processLintOutput(exc, checkRunId);
+            if (exc.code !== 1 || (yield issuesPromise).findIndex((issue) => LintSeverity[issue.Severity] >= failureSeverity) != -1) {
+                exit_code = exc.code;
+            }
+        }
+        finally {
+            if (exit_code === 0) {
+                core.info(`golangci-lint found no blocking issues`);
+            }
+            else if (exit_code === 1) {
+                core.setFailed(`issues found`);
+            }
+            else {
+                core.setFailed(`golangci-lint exit with code ${exit_code}`);
+            }
         }
         core.info(`Ran golangci-lint in ${Date.now() - startedAt}ms`);
     });

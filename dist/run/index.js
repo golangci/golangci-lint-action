@@ -6853,24 +6853,23 @@ function resolveCheckRunId() {
                 core.info(`Attempting to resolve current GitHub Job (${ctx.runId})`);
                 const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }));
                 const { data: workflowResponse } = yield octokit.actions
-                    .listJobsForWorkflowRun(Object.assign(Object.assign({}, ctx.repo), { run_id: ctx.runId }))
+                    .listJobsForWorkflowRun(Object.assign(Object.assign({}, ctx.repo), { run_id: ctx.runId, status: "in_progress" }))
                     .catch((e) => {
                     throw `Unable to fetch Workflow Job List: ${e}`;
                 });
                 if (workflowResponse.jobs.length > 0) {
                     core.info(`resolveCheckRunId() Found ${workflowResponse.jobs.length} Jobs:\n` + util_1.inspect(workflowResponse.jobs));
                     if (workflowResponse.jobs.length > 1) {
-                        const jobs = workflowResponse.jobs.filter((run) => run.name.includes(ctx.job));
-                        core.info(`resolveCheckRunId() Found ${jobs.length} Jobs whose name includes '${ctx.job}'`);
+                        const searchRegExp = new RegExp(`/^` + ctx.job.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + `(\\s+\\(|$)/`);
+                        const jobs = workflowResponse.jobs.filter((run) => searchRegExp.test(run.name));
+                        core.info(`resolveCheckRunId() Found ${jobs.length} Jobs whose base name is '${ctx.job}'`);
                         workflowResponse.jobs = jobs.length ? jobs : workflowResponse.jobs;
                     }
                     if (workflowResponse.jobs.length > 1) {
                         const searchToken = uuid_1.v4();
                         core.info(`::warning::[ignore] Resolving GitHub Job with Search Token: ${searchToken}`);
-                        yield ((ms) => {
-                            core.info(`resolveCheckRunId() Sleeping for ${ms / 1000} Seconds`);
-                            return new Promise((resolve) => setTimeout(resolve, ms));
-                        })(2 * 1000);
+                        // Sleep for MS, to allow Annotation to be captured and populated
+                        yield ((ms) => new Promise((resolve) => setTimeout(resolve, ms)))(5 * 1000);
                         for (const job of workflowResponse.jobs) {
                             try {
                                 const { data: annotations } = yield octokit.checks.listAnnotations(Object.assign(Object.assign({}, ctx.repo), { check_run_id: job.id }));

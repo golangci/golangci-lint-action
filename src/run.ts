@@ -251,6 +251,7 @@ async function resolveCheckRunId(): Promise<number> {
         .listJobsForWorkflowRun({
           ...ctx.repo,
           run_id: ctx.runId,
+          status: "in_progress",
         })
         .catch((e: string) => {
           throw `Unable to fetch Workflow Job List: ${e}`
@@ -259,17 +260,16 @@ async function resolveCheckRunId(): Promise<number> {
       if (workflowResponse.jobs.length > 0) {
         core.info(`resolveCheckRunId() Found ${workflowResponse.jobs.length} Jobs:\n` + inspect(workflowResponse.jobs))
         if (workflowResponse.jobs.length > 1) {
-          const jobs = workflowResponse.jobs.filter((run) => run.name.includes(ctx.job))
-          core.info(`resolveCheckRunId() Found ${jobs.length} Jobs whose name includes '${ctx.job}'`)
+          const searchRegExp = new RegExp(`/^` + ctx.job.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + `(\\s+\\(|$)/`)
+          const jobs = workflowResponse.jobs.filter((run) => searchRegExp.test(run.name))
+          core.info(`resolveCheckRunId() Found ${jobs.length} Jobs whose base name is '${ctx.job}'`)
           workflowResponse.jobs = jobs.length ? jobs : workflowResponse.jobs
         }
         if (workflowResponse.jobs.length > 1) {
           const searchToken = uuidv4()
           core.info(`::warning::[ignore] Resolving GitHub Job with Search Token: ${searchToken}`)
-          await ((ms): Promise<void> => {
-            core.info(`resolveCheckRunId() Sleeping for ${ms / 1000} Seconds`)
-            return new Promise((resolve) => setTimeout(resolve, ms))
-          })(2 * 1000)
+          // Sleep for MS, to allow Annotation to be captured and populated
+          await ((ms): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms)))(5 * 1000)
           for (const job of workflowResponse.jobs) {
             try {
               const { data: annotations } = await octokit.checks.listAnnotations({

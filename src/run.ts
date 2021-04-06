@@ -260,9 +260,7 @@ async function resolveCheckRunId(): Promise<number> {
 
   if (process.env.GITHUB_ACTIONS === `true`) {
     try {
-      const searchToken = uuidv4()
-      core.info(`::warning::Resolving GitHub CheckRunID (${searchToken})`)
-
+      core.info(`Attempting to resolve GitHub Check Run`)
       const ctx = github.context
       const ref = ctx.payload.after ?? ctx.sha
 
@@ -284,9 +282,8 @@ async function resolveCheckRunId(): Promise<number> {
           checkRuns = checkRuns.filter((run) => run.name.includes(ctx.job)) ?? checkRuns
         }
         if (checkRuns.length > 1) {
-          checkRuns = checkRuns.filter((run) => run.output.annotations_count > 0) ?? checkRuns
-        }
-        if (checkRuns.length > 1) {
+          const searchToken = uuidv4()
+          core.info(`::warning::[ignore] Resolving GitHub Check Run with Search Token: ${searchToken}`)
           for (const run of checkRuns) {
             try {
               if (
@@ -306,7 +303,7 @@ async function resolveCheckRunId(): Promise<number> {
           }
         } else if (checkRuns[0]) {
           checkRunId = checkRuns[0].id
-          core.info(`Current Check Run is: ${checkRunId}`)
+          core.info(`Current Check Run: ${checkRunId}`)
         } else {
           throw `Unable to resolve GitHub Check Run`
         }

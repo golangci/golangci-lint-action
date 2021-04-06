@@ -6835,13 +6835,12 @@ const logLintIssues = (issues) => {
     });
 };
 function resolveCheckRunId() {
-    var _a, _b, _c;
+    var _a, _b;
     return __awaiter(this, void 0, void 0, function* () {
         let checkRunId = -1;
         if (process.env.GITHUB_ACTIONS === `true`) {
             try {
-                const searchToken = uuid_1.v4();
-                core.info(`::warning::Resolving GitHub CheckRunID (${searchToken})`);
+                core.info(`Attempting to resolve GitHub Check Run`);
                 const ctx = github.context;
                 const ref = (_a = ctx.payload.after) !== null && _a !== void 0 ? _a : ctx.sha;
                 const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }));
@@ -6856,9 +6855,8 @@ function resolveCheckRunId() {
                         checkRuns = (_b = checkRuns.filter((run) => run.name.includes(ctx.job))) !== null && _b !== void 0 ? _b : checkRuns;
                     }
                     if (checkRuns.length > 1) {
-                        checkRuns = (_c = checkRuns.filter((run) => run.output.annotations_count > 0)) !== null && _c !== void 0 ? _c : checkRuns;
-                    }
-                    if (checkRuns.length > 1) {
+                        const searchToken = uuid_1.v4();
+                        core.info(`::warning::[ignore] Resolving GitHub Check Run with Search Token: ${searchToken}`);
                         for (const run of checkRuns) {
                             try {
                                 if ((yield octokit.checks.listAnnotations(Object.assign(Object.assign({}, ctx.repo), { check_run_id: run.id }))).data.findIndex((annotation) => annotation.message.includes(searchToken)) !== -1) {
@@ -6873,7 +6871,7 @@ function resolveCheckRunId() {
                     }
                     else if (checkRuns[0]) {
                         checkRunId = checkRuns[0].id;
-                        core.info(`Current Check Run is: ${checkRunId}`);
+                        core.info(`Current Check Run: ${checkRunId}`);
                     }
                     else {
                         throw `Unable to resolve GitHub Check Run`;

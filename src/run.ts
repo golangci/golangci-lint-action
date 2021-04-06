@@ -247,30 +247,33 @@ async function resolveCheckRunId(): Promise<number> {
     try {
       core.info(`Attempting to resolve current GitHub Job (${ctx.runId})`)
       const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }))
-      const { data: workflowResponse } = await octokit.actions
-        .listJobsForWorkflowRun({
-          ...ctx.repo,
-          run_id: ctx.runId,
-          status: "in_progress",
-        })
-        .catch((e: string) => {
-          throw `Unable to fetch Workflow Job List: ${e}`
-        })
+      let workflowJobs = (
+        await octokit.actions
+          .listJobsForWorkflowRun({
+            ...ctx.repo,
+            run_id: ctx.runId,
+          })
+          .catch((e: string) => {
+            throw `Unable to fetch Workflow Job List: ${e}`
+          })
+      ).data.jobs.filter((job) => job.status === `in_progress`)
 
-      if (workflowResponse.jobs.length > 0) {
-        core.info(`resolveCheckRunId() Found ${workflowResponse.jobs.length} Jobs:\n` + inspect(workflowResponse.jobs))
-        if (workflowResponse.jobs.length > 1) {
-          const searchRegExp = new RegExp(`/^` + ctx.job.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + `(\\s+\\(|$)/`)
-          const jobs = workflowResponse.jobs.filter((run) => searchRegExp.test(run.name))
+      if (workflowJobs.length > 0) {
+        core.info(`resolveCheckRunId() Found ${workflowJobs.length} Jobs:\n` + inspect(workflowJobs))
+        if (workflowJobs.length > 1) {
+          const searchRegExp = new RegExp(`^` + ctx.job.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + `(\\s+\\(|$)`)
+          const jobs = workflowJobs.filter((job) => searchRegExp.test(job.name))
           core.info(`resolveCheckRunId() Found ${jobs.length} Jobs whose base name is '${ctx.job}'`)
-          workflowResponse.jobs = jobs.length ? jobs : workflowResponse.jobs
+          workflowJobs = jobs.length ? jobs : workflowJobs
         }
-        if (workflowResponse.jobs.length > 1) {
+        if (workflowJobs.length > 1) {
           const searchToken = uuidv4()
           core.info(`::warning::[ignore] Resolving GitHub Job with Search Token: ${searchToken}`)
+          const startedAt = Date.now()
           // Sleep for MS, to allow Annotation to be captured and populated
-          await ((ms): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms)))(5 * 1000)
-          for (const job of workflowResponse.jobs) {
+          await ((ms): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms)))(10 * 1000)
+          core.info(`Slept for ${Date.now() - startedAt}ms`)
+          for (const job of workflowJobs) {
             try {
               const { data: annotations } = await octokit.checks.listAnnotations({
                 ...ctx.repo,
@@ -294,8 +297,8 @@ async function resolveCheckRunId(): Promise<number> {
             }
           }
           core.info(`resolveCheckRunId() Finished looking for Search Token`)
-        } else if (workflowResponse.jobs[0]) {
-          jobId = workflowResponse.jobs[0].id
+        } else if (workflowJobs[0]) {
+          jobId = workflowJobs[0].id
         } else {
           throw `Unable to resolve GitHub Job`
         }

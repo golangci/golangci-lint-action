@@ -80,7 +80,7 @@ async function fetchPatch(): Promise<string> {
 type Env = {
   lintPath: string
   patchPath: string
-  checkRunId: number
+  checkRunIdent: CheckRunIdent
 }
 
 type CheckRunIdent = {
@@ -270,44 +270,52 @@ async function resolveCheckRunId(checkRunIdent: CheckRunIdent): Promise<number> 
   return checkRunId
 }
 
-async function prepareEnv(): Promise<void> {
+async function prepareEnv(): Promise<Env> {
   const startedAt = Date.now()
 
-  // Resolve Check Run ID
-  const prepareCheckRunIdentPromise = prepareCheckRunIdent()
+  const checkRunPromise = (async () => {
+    let checkRunIdent: CheckRunIdent | undefined
+    try {
+      checkRunIdent = JSON.parse(core.getState(EnvKey.CheckRunIdent))
+    } catch (e) {
+      checkRunIdent = undefined
+    }
+    if (!checkRunIdent) {
+      core.saveState(EnvKey.CheckRunIdent, JSON.stringify((checkRunIdent = await prepareCheckRunIdent())))
+    }
+
+    return checkRunIdent
+  })()
+
+  const prepareLintPromise = (async () => {
+    let lintPath = core.getState(EnvKey.LintPath)
+    if (!lintPath) {
+      core.saveState(EnvKey.LintPath, (lintPath = await prepareLint()))
+    }
+    return lintPath
+  })()
+
+  const patchPromise = (async () => {
+    let patchPath = core.getState(EnvKey.PatchPath)
+    if (!patchPath) {
+      core.saveState(EnvKey.PatchPath, (patchPath = await fetchPatch()))
+    }
+    return patchPath
+  })()
 
   // Prepare cache, lint and go in parallel.
   const restoreCachePromise = restoreCache()
-  const prepareLintPromise = prepareLint()
   const installGoPromise = installGo()
-  const patchPromise = fetchPatch()
 
-  core.saveState(EnvKey.LintPath, await prepareLintPromise)
+  const lintPath = await prepareLintPromise
+  const patchPath = await patchPromise
+  const checkRunIdent = await checkRunPromise
   await installGoPromise
   await restoreCachePromise
-  core.saveState(EnvKey.PatchPath, await patchPromise)
-  core.saveState(EnvKey.CheckRunIdent, JSON.stringify(await prepareCheckRunIdentPromise))
 
   core.info(`Prepared env in ${Date.now() - startedAt}ms`)
-}
 
-async function restoreEnv(): Promise<Env> {
-  const startedAt = Date.now()
-
-  const lintPath = core.getState(EnvKey.LintPath)
-  const patchPath = core.getState(EnvKey.PatchPath)
-  let checkRunId: number
-  try {
-    const checkRunIdent: CheckRunIdent = JSON.parse(core.getState(EnvKey.CheckRunIdent))
-    checkRunId = await resolveCheckRunId(checkRunIdent)
-  } catch (e) {
-    core.info(`::error::Error Resolving Check Run ID: ${e}`)
-    checkRunId = -1
-  }
-
-  core.info(`Restored env in ${Date.now() - startedAt}ms`)
-
-  return { lintPath, patchPath, checkRunId }
+  return { lintPath, patchPath, checkRunIdent }
 }
 
 type ExecRes = {
@@ -664,17 +672,24 @@ async function runLint(lintPath: string, patchPath: string, checkRunId: number):
 
 export async function setup(): Promise<void> {
   try {
-    await core.group(`prepare environment`, prepareEnv)
+    await core.group(`pre-prepare environment`, prepareEnv)
   } catch (error) {
-    core.error(`Failed to prepare: ${error}, ${error.stack}`)
+    core.error(`Failed to pre-prepare: ${error}, ${error.stack}`)
     core.setFailed(error.message)
   }
 }
 
 export async function run(): Promise<void> {
   try {
-    const { lintPath, patchPath, checkRunId } = await core.group(`restore environment`, restoreEnv)
+    const { lintPath, patchPath, checkRunIdent } = await core.group(`prepare environment`, prepareEnv)
     core.addPath(path.dirname(lintPath))
+    let checkRunId: number
+    try {
+      checkRunId = await resolveCheckRunId(checkRunIdent)
+    } catch (e) {
+      core.info(`::error::Error Resolving Check Run ID: ${e}`)
+      checkRunId = -1
+    }
     await core.group(`run golangci-lint`, () => runLint(lintPath, patchPath, checkRunId))
   } catch (error) {
     core.error(`Failed to run: ${error}, ${error.stack}`)

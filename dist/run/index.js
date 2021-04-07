@@ -6913,37 +6913,43 @@ function resolveCheckRunId(checkRunIdent) {
 function prepareEnv() {
     return __awaiter(this, void 0, void 0, function* () {
         const startedAt = Date.now();
-        // Resolve Check Run ID
-        const prepareCheckRunIdentPromise = prepareCheckRunIdent();
+        const checkRunPromise = (() => __awaiter(this, void 0, void 0, function* () {
+            let checkRunIdent;
+            try {
+                checkRunIdent = JSON.parse(core.getState(constants_1.Env.CheckRunIdent));
+            }
+            catch (e) {
+                checkRunIdent = undefined;
+            }
+            if (!checkRunIdent) {
+                core.saveState(constants_1.Env.CheckRunIdent, JSON.stringify((checkRunIdent = yield prepareCheckRunIdent())));
+            }
+            return checkRunIdent;
+        }))();
+        const prepareLintPromise = (() => __awaiter(this, void 0, void 0, function* () {
+            let lintPath = core.getState(constants_1.Env.LintPath);
+            if (!lintPath) {
+                core.saveState(constants_1.Env.LintPath, (lintPath = yield prepareLint()));
+            }
+            return lintPath;
+        }))();
+        const patchPromise = (() => __awaiter(this, void 0, void 0, function* () {
+            let patchPath = core.getState(constants_1.Env.PatchPath);
+            if (!patchPath) {
+                core.saveState(constants_1.Env.PatchPath, (patchPath = yield fetchPatch()));
+            }
+            return patchPath;
+        }))();
         // Prepare cache, lint and go in parallel.
         const restoreCachePromise = cache_1.restoreCache();
-        const prepareLintPromise = prepareLint();
         const installGoPromise = install_1.installGo();
-        const patchPromise = fetchPatch();
-        core.saveState(constants_1.Env.LintPath, yield prepareLintPromise);
+        const lintPath = yield prepareLintPromise;
+        const patchPath = yield patchPromise;
+        const checkRunIdent = yield checkRunPromise;
         yield installGoPromise;
         yield restoreCachePromise;
-        core.saveState(constants_1.Env.PatchPath, yield patchPromise);
-        core.saveState(constants_1.Env.CheckRunIdent, JSON.stringify(yield prepareCheckRunIdentPromise));
         core.info(`Prepared env in ${Date.now() - startedAt}ms`);
-    });
-}
-function restoreEnv() {
-    return __awaiter(this, void 0, void 0, function* () {
-        const startedAt = Date.now();
-        const lintPath = core.getState(constants_1.Env.LintPath);
-        const patchPath = core.getState(constants_1.Env.PatchPath);
-        let checkRunId;
-        try {
-            const checkRunIdent = JSON.parse(core.getState(constants_1.Env.CheckRunIdent));
-            checkRunId = yield resolveCheckRunId(checkRunIdent);
-        }
-        catch (e) {
-            core.info(`::error::Error Resolving Check Run ID: ${e}`);
-            checkRunId = -1;
-        }
-        core.info(`Restored env in ${Date.now() - startedAt}ms`);
-        return { lintPath, patchPath, checkRunId };
+        return { lintPath, patchPath, checkRunIdent };
     });
 }
 var LintSeverity;
@@ -7210,10 +7216,10 @@ function runLint(lintPath, patchPath, checkRunId) {
 function setup() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
-            yield core.group(`prepare environment`, prepareEnv);
+            yield core.group(`pre-prepare environment`, prepareEnv);
         }
         catch (error) {
-            core.error(`Failed to prepare: ${error}, ${error.stack}`);
+            core.error(`Failed to pre-prepare: ${error}, ${error.stack}`);
             core.setFailed(error.message);
         }
     });
@@ -7222,8 +7228,16 @@ exports.setup = setup;
 function run() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
-            const { lintPath, patchPath, checkRunId } = yield core.group(`restore environment`, restoreEnv);
+            const { lintPath, patchPath, checkRunIdent } = yield core.group(`prepare environment`, prepareEnv);
             core.addPath(path.dirname(lintPath));
+            let checkRunId;
+            try {
+                checkRunId = yield resolveCheckRunId(checkRunIdent);
+            }
+            catch (e) {
+                core.info(`::error::Error Resolving Check Run ID: ${e}`);
+                checkRunId = -1;
+            }
             yield core.group(`run golangci-lint`, () => runLint(lintPath, patchPath, checkRunId));
         }
         catch (error) {

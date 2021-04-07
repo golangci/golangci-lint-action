@@ -6678,7 +6678,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.postRun = exports.run = void 0;
+exports.postRun = exports.run = exports.setup = void 0;
 const core = __importStar(__webpack_require__(470));
 const github = __importStar(__webpack_require__(469));
 const ansi_styles_1 = __importDefault(__webpack_require__(663));
@@ -6689,6 +6689,7 @@ const tmp_1 = __webpack_require__(150);
 const util_1 = __webpack_require__(669);
 const uuid_1 = __webpack_require__(930);
 const cache_1 = __webpack_require__(913);
+const constants_1 = __webpack_require__(196);
 const install_1 = __webpack_require__(655);
 const version_1 = __webpack_require__(52);
 const execShellCommand = util_1.promisify(child_process_1.exec);
@@ -6754,22 +6755,184 @@ function fetchPatch() {
         }
     });
 }
+function fetchCheckSuiteId(runId) {
+    var _a;
+    return __awaiter(this, void 0, void 0, function* () {
+        let currentCheckSuiteId = -1;
+        if (runId > 0) {
+            try {
+                const { data: currentRun } = yield github
+                    .getOctokit(core.getInput(`github-token`, { required: true }))
+                    .actions.getWorkflowRun(Object.assign(Object.assign({}, github.context.repo), { run_id: runId }))
+                    .catch((e) => {
+                    throw `Unable to fetch Workflow Run: ${e}`;
+                });
+                if (currentRun.status === `in_progress`) {
+                    // The GitHub API it's self does present the `check_suite_id` property, but it is not documented or present returned object's `type`
+                    currentCheckSuiteId = (_a = parseInt(currentRun.check_suite_url.substr(1 + currentRun.check_suite_url.lastIndexOf(`/`)))) !== null && _a !== void 0 ? _a : -1;
+                    // The following SHOULD work, but alas
+                    // currentCheckSuiteId = currentRun.check_suite_id
+                    if (currentCheckSuiteId <= 0) {
+                        throw `Error extracting Check Suite ID from: ${currentRun.check_suite_url}`;
+                    }
+                }
+            }
+            catch (e) {
+                core.info(`::error::Error Fetching Current Run: ${e}`);
+            }
+        }
+        return currentCheckSuiteId;
+    });
+}
+function fetchCheckSuiteRuns(checkSuiteId, name) {
+    return __awaiter(this, void 0, void 0, function* () {
+        let checkSuiteRuns = [];
+        if (checkSuiteId > 0) {
+            try {
+                checkSuiteRuns = (yield github
+                    .getOctokit(core.getInput(`github-token`, { required: true }))
+                    .checks.listForSuite(Object.assign(Object.assign({}, github.context.repo), { check_suite_id: checkSuiteId }))
+                    .catch((e) => {
+                    throw `Unable to fetch Check Suite Runs List: ${e}`;
+                })).data.check_runs.filter((run) => run.status === `in_progress`);
+                if (checkSuiteRuns.length > 0 && name) {
+                    const _checkSuiteRuns = checkSuiteRuns.filter((run) => run.name.indexOf(name) === 0 && (run.name.length === name.length || run.name[name.length] === ` `));
+                    checkSuiteRuns = _checkSuiteRuns.length ? _checkSuiteRuns : checkSuiteRuns;
+                }
+                if (checkSuiteRuns.length === 0) {
+                    throw `Check Suite returned 0 runs`;
+                }
+            }
+            catch (e) {
+                core.info(`::error::Error Fetching Check Suite Runs (${checkSuiteId}): ${e}`);
+            }
+        }
+        return checkSuiteRuns;
+    });
+}
+function prepareCheckRunIdent(runId, runName) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const checkRunIdent = {
+            runId: runId !== null && runId !== void 0 ? runId : github.context.runId,
+            runName: runName !== null && runName !== void 0 ? runName : github.context.job,
+            checkRunId: -1,
+        };
+        if (process.env.GITHUB_ACTIONS === `true` && checkRunIdent.runId > 0) {
+            core.info(`Resolving current GitHub Check Run ${checkRunIdent.runId}`);
+            try {
+                const checkSuiteId = yield fetchCheckSuiteId(checkRunIdent.runId);
+                if (checkSuiteId < 0) {
+                    throw `Unable to resolve Check Suite ID`;
+                }
+                const checkSuiteRuns = yield fetchCheckSuiteRuns(checkSuiteId, checkRunIdent.runName);
+                if (checkSuiteRuns.length < 1) {
+                    throw `Unable to resolve Check Suite children`;
+                }
+                checkRunIdent.checkSuiteId = checkSuiteId;
+                if (checkSuiteRuns.length === 1) {
+                    checkRunIdent.checkRunId = checkSuiteRuns[0].id;
+                }
+                else {
+                    checkRunIdent.checkRunSearchToken = uuid_1.v4();
+                    core.info(`::warning::[golangci-lint-action] Tagging Current GitHub CheckRun ${checkRunIdent.runId}<${checkRunIdent.checkRunSearchToken}>`);
+                }
+            }
+            catch (e) {
+                core.info(`::error::Error resolving Run (${checkRunIdent.runId}): ${e}`);
+            }
+        }
+        else {
+            core.info(`Not in GitHub Action Context, Skipping Check Run Resolution`);
+        }
+        return checkRunIdent;
+    });
+}
+function resolveCheckRunId(checkRunIdent) {
+    var _a, _b;
+    return __awaiter(this, void 0, void 0, function* () {
+        let checkRunId = checkRunIdent.checkRunId;
+        if (checkRunIdent.runId > 0) {
+            if (checkRunId <= 0) {
+                try {
+                    const checkSuiteId = (_a = checkRunIdent === null || checkRunIdent === void 0 ? void 0 : checkRunIdent.checkSuiteId) !== null && _a !== void 0 ? _a : -1;
+                    if (checkSuiteId <= 0) {
+                        throw `No Check Suite ID`;
+                    }
+                    const checkRunSearchToken = (_b = checkRunIdent === null || checkRunIdent === void 0 ? void 0 : checkRunIdent.checkRunSearchToken) !== null && _b !== void 0 ? _b : ``;
+                    if (!checkRunSearchToken) {
+                        throw `No Check Run Search Token`;
+                    }
+                    const checkSuiteRuns = (yield fetchCheckSuiteRuns(checkSuiteId, checkRunIdent.runName)).filter((run) => run.output.annotations_count);
+                    if (checkSuiteRuns.length < 1) {
+                        throw `Unable to resolve Check Suite children`;
+                    }
+                    core.info(`resolveCheckRunId() Found ${checkSuiteRuns.length} Jobs:\n` + util_1.inspect(checkSuiteRuns));
+                    core.info(`Resolving current Check Run in Check Suite (${checkSuiteId})`);
+                    for (const run of checkSuiteRuns) {
+                        try {
+                            const { data: annotations } = yield github
+                                .getOctokit(core.getInput(`github-token`, { required: true }))
+                                .checks.listAnnotations(Object.assign(Object.assign({}, github.context.repo), { check_run_id: run.id }));
+                            core.info(`resolveCheckRunId() Found ${annotations.length} Annotations for Check Run '${run.id}':\n` + util_1.inspect(annotations));
+                            if (annotations.findIndex((annotation) => {
+                                core.info(`resolveCheckRunId() Looking for Search Token (${checkRunSearchToken}) in message: ${annotation.message}`);
+                                return annotation.message.indexOf(checkRunSearchToken) >= 0;
+                            }) !== -1) {
+                                core.info(`resolveCheckRunId() Found Search Token (${checkRunSearchToken}) in Check Run ${run.id}`);
+                                checkRunId = run.id;
+                                break;
+                            }
+                        }
+                        catch (e) {
+                            core.info(`resolveCheckRunId() Error Fetching Check Run (${run.id}): ${e}`);
+                        }
+                    }
+                }
+                catch (e) {
+                    core.info(`::error::Unable to resolve Check Run ID: ${e}`);
+                    core.info(`checkRunIdent = ` + util_1.inspect(checkRunIdent));
+                }
+            }
+        }
+        else {
+            core.info(`Not in GitHub Action Context, Skipping Check Run Resolution`);
+        }
+        return checkRunId;
+    });
+}
 function prepareEnv() {
     return __awaiter(this, void 0, void 0, function* () {
         const startedAt = Date.now();
         // Resolve Check Run ID
-        const resolveCheckRunIdPromise = resolveCheckRunId();
+        const prepareCheckRunIdentPromise = prepareCheckRunIdent();
         // Prepare cache, lint and go in parallel.
         const restoreCachePromise = cache_1.restoreCache();
         const prepareLintPromise = prepareLint();
         const installGoPromise = install_1.installGo();
         const patchPromise = fetchPatch();
-        const lintPath = yield prepareLintPromise;
+        core.saveState(constants_1.Env.LintPath, yield prepareLintPromise);
         yield installGoPromise;
         yield restoreCachePromise;
-        const patchPath = yield patchPromise;
-        const checkRunId = yield resolveCheckRunIdPromise;
+        core.saveState(constants_1.Env.PatchPath, yield patchPromise);
+        core.saveState(constants_1.Env.CheckRunIdent, JSON.stringify(yield prepareCheckRunIdentPromise));
         core.info(`Prepared env in ${Date.now() - startedAt}ms`);
+    });
+}
+function restoreEnv() {
+    return __awaiter(this, void 0, void 0, function* () {
+        const startedAt = Date.now();
+        const lintPath = core.getState(constants_1.Env.LintPath);
+        const patchPath = core.getState(constants_1.Env.PatchPath);
+        let checkRunId;
+        try {
+            const checkRunIdent = JSON.parse(core.getState(constants_1.Env.CheckRunIdent));
+            checkRunId = yield resolveCheckRunId(checkRunIdent);
+        }
+        catch (e) {
+            core.info(`::error::Error Resolving Check Run ID: ${e}`);
+            checkRunId = -1;
+        }
+        core.info(`Restored env in ${Date.now() - startedAt}ms`);
         return { lintPath, patchPath, checkRunId };
     });
 }
@@ -6834,78 +6997,41 @@ const logLintIssues = (issues) => {
             ` - ${issue.Text} (${issue.FromLinter})`);
     });
 };
-function resolveCheckRunId() {
-    return __awaiter(this, void 0, void 0, function* () {
-        let jobId = -1;
-        const ctx = github.context;
-        if (process.env.GITHUB_ACTIONS === `true` && ctx.runId) {
-            try {
-                const searchToken = uuid_1.v4();
-                core.info(`::warning::Attempting to resolve current GitHub Job ${ctx.runId}<${searchToken}>`);
-                const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }));
-                let workflowJobs = (yield octokit.actions
-                    .listJobsForWorkflowRun(Object.assign(Object.assign({}, ctx.repo), { run_id: ctx.runId }))
-                    .catch((e) => {
-                    throw `Unable to fetch Workflow Job List: ${e}`;
-                })).data.jobs.filter((job) => job.status === `in_progress`);
-                if (workflowJobs.length > 0) {
-                    core.info(`resolveCheckRunId() Found ${workflowJobs.length} Jobs:\n` + util_1.inspect(workflowJobs));
-                    if (workflowJobs.length > 1) {
-                        const searchRegExp = new RegExp(`^` + ctx.job.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + `(\\s+\\(|$)`);
-                        const jobs = workflowJobs.filter((job) => searchRegExp.test(job.name));
-                        core.info(`resolveCheckRunId() Found ${jobs.length} Jobs whose base name is '${ctx.job}'`);
-                        workflowJobs = jobs.length ? jobs : workflowJobs;
-                    }
-                    if (workflowJobs.length > 1) {
-                        const startedAt = Date.now();
-                        // Sleep for MS, to allow Annotation to be captured and populated
-                        yield ((ms) => new Promise((resolve) => setTimeout(resolve, ms)))(10 * 1000);
-                        core.info(`Paused for ${Date.now() - startedAt}ms`);
-                        for (const job of workflowJobs) {
-                            try {
-                                const { data: annotations } = yield octokit.checks.listAnnotations(Object.assign(Object.assign({}, ctx.repo), { check_run_id: job.id }));
-                                core.info(`resolveCheckRunId() Found ${annotations.length} Annotations for Job '${job.id}':\n` + util_1.inspect(annotations));
-                                if (annotations.findIndex((annotation) => {
-                                    core.info(`resolveCheckRunId() Looking for Search Token (${searchToken}) in message: ${annotation.message}`);
-                                    return annotation.message.includes(searchToken);
-                                }) !== -1) {
-                                    core.info(`resolveCheckRunId() Found Search Token (${searchToken}) in Job ${job.id}`);
-                                    jobId = job.id;
-                                    break;
-                                }
-                            }
-                            catch (e) {
-                                core.info(`resolveCheckRunId() Error Fetching Job ${job.id}: ${e}`);
-                            }
-                        }
-                        core.info(`resolveCheckRunId() Finished looking for Search Token`);
-                    }
-                    else if (workflowJobs[0]) {
-                        jobId = workflowJobs[0].id;
-                    }
-                    else {
-                        throw `Unable to resolve GitHub Job`;
-                    }
-                    core.info(`Current Job: ${jobId}`);
-                }
-                else {
-                    throw `Fetching octokit.actions.getWorkflowRun(${process.env.GITHUB_RUN_ID}) returned no results`;
-                }
-            }
-            catch (e) {
-                core.info(`::error::Unable to resolve GitHub Job: ${e}`);
-            }
+const annotationFromIssue = (issue) => {
+    const annotation = {
+        path: issue.Pos.Filename,
+        start_line: issue.Pos.Line,
+        end_line: issue.Pos.Line,
+        title: issue.FromLinter,
+        message: issue.Text,
+        annotation_level: issue.Severity,
+    };
+    if (issue.LineRange !== undefined) {
+        annotation.end_line = issue.LineRange.To;
+    }
+    else if (issue.Pos.Column) {
+        annotation.start_column = issue.Pos.Column;
+        annotation.end_column = issue.Pos.Column;
+    }
+    if (issue.Replacement !== null) {
+        let replacement = ``;
+        if (issue.Replacement.Inline) {
+            replacement =
+                issue.SourceLines[0].slice(0, issue.Replacement.Inline.StartCol) +
+                    issue.Replacement.Inline.NewString +
+                    issue.SourceLines[0].slice(issue.Replacement.Inline.StartCol + issue.Replacement.Inline.Length);
         }
-        else {
-            core.info(`Not in GitHub Action Context, Skipping Job Resolution`);
+        else if (issue.Replacement.NewLines) {
+            replacement = issue.Replacement.NewLines.join("\n");
         }
-        return jobId;
-    });
-}
+        annotation.raw_details = "```suggestion\n" + replacement + "\n```";
+    }
+    return annotation;
+};
 function annotateLintIssues(issues, checkRunId) {
     return __awaiter(this, void 0, void 0, function* () {
-        if (checkRunId === -1 || !issues.length) {
-            return;
+        if (checkRunId >= 0 || !issues.length) {
+            return false;
         }
         const chunkSize = 50;
         const issueCounts = {
@@ -6913,52 +7039,29 @@ function annotateLintIssues(issues, checkRunId) {
             warning: 0,
             failure: 0,
         };
-        const ctx = github.context;
-        const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }));
-        const title = `GolangCI-Lint`;
-        for (let i = 0; i < Math.ceil(issues.length / chunkSize); i++) {
-            octokit.checks
-                .update(Object.assign(Object.assign({}, ctx.repo), { check_run_id: checkRunId, output: {
-                    title: title,
-                    annotations: issues.slice(i * chunkSize, i * chunkSize + chunkSize).map((issue) => {
-                        // If/when we transition to comments, we would build the request structure here
-                        const annotation = {
-                            path: issue.Pos.Filename,
-                            start_line: issue.Pos.Line,
-                            end_line: issue.Pos.Line,
-                            title: issue.FromLinter,
-                            message: issue.Text,
-                            annotation_level: issue.Severity,
-                        };
-                        issueCounts[issue.Severity]++;
-                        if (issue.LineRange !== undefined) {
-                            annotation.end_line = issue.LineRange.To;
-                        }
-                        else if (issue.Pos.Column) {
-                            annotation.start_column = issue.Pos.Column;
-                            annotation.end_column = issue.Pos.Column;
-                        }
-                        if (issue.Replacement !== null) {
-                            let replacement = ``;
-                            if (issue.Replacement.Inline) {
-                                replacement =
-                                    issue.SourceLines[0].slice(0, issue.Replacement.Inline.StartCol) +
-                                        issue.Replacement.Inline.NewString +
-                                        issue.SourceLines[0].slice(issue.Replacement.Inline.StartCol + issue.Replacement.Inline.Length);
-                            }
-                            else if (issue.Replacement.NewLines) {
-                                replacement = issue.Replacement.NewLines.join("\n");
-                            }
-                            annotation.raw_details = "```suggestion\n" + replacement + "\n```";
-                        }
-                        return annotation;
-                    }),
-                    summary: `There are {issueCounts.failure} failures, {issueCounts.wairning} warnings, and {issueCounts.notice} notices.`,
-                } }))
-                .catch((e) => {
-                throw `Error patching Check Run Data (annotations): ${e}`;
-            });
+        try {
+            const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }));
+            const title = `GolangCI-Lint`;
+            for (let i = 0; i < Math.ceil(issues.length / chunkSize); i++) {
+                octokit.checks
+                    .update(Object.assign(Object.assign({}, github.context.repo), { check_run_id: checkRunId, output: {
+                        title: title,
+                        annotations: issues.slice(i * chunkSize, i * chunkSize + chunkSize).map((issue) => {
+                            ++issueCounts[issue.Severity];
+                            return annotationFromIssue(issue);
+                        }),
+                        summary: `There are {issueCounts.failure} failures, {issueCounts.wairning} warnings, and {issueCounts.notice} notices.`,
+                    } }))
+                    .catch((e) => {
+                    throw `Error patching Check Run Data (annotations): ${e}`;
+                });
+            }
         }
+        catch (e) {
+            core.info(`::error::Error Annotating Lint Issues: ${e}`);
+            return false;
+        }
+        return true;
     });
 }
 const printOutput = (res) => {
@@ -6979,19 +7082,23 @@ function processLintOutput(res, checkRunId) {
                 ;
                 ({ Issues: lintIssues } = parseOutput(res.stdout));
                 if (lintIssues.length) {
-                    logLintIssues(lintIssues);
-                    // We can only Annotate (or Comment) on Push or Pull Request
-                    switch (github.context.eventName) {
-                        case `pull_request`:
-                        // TODO: When we are ready to handle these as Comments, instead of Annotations, we would place that logic here
-                        /* falls through */
-                        case `push`:
-                            yield annotateLintIssues(lintIssues, checkRunId);
-                            break;
-                        default:
-                            // At this time, other events are not supported
-                            break;
+                    if (!(yield ((eventName) => __awaiter(this, void 0, void 0, function* () {
+                        // We can only Annotate (or Comment) on Push or Pull Request
+                        switch (eventName) {
+                            case `pull_request`:
+                            // TODO: When we are ready to handle these as Comments, instead of Annotations, we would place that logic here
+                            /* falls through */
+                            case `push`:
+                                return yield annotateLintIssues(lintIssues, checkRunId);
+                            default:
+                                // At this time, other events are not supported
+                                return false;
+                        }
+                    }))(github.context.eventName))) {
+                        core.info(`::add-matcher::matchers-golangci-lint-action.json`);
                     }
+                    // Log Issues at the end to allow failed GitHub Actions above to set the Problem Matcher
+                    logLintIssues(lintIssues);
                 }
             }
             catch (e) {
@@ -7090,10 +7197,22 @@ function runLint(lintPath, patchPath, checkRunId) {
         core.info(`Ran golangci-lint in ${Date.now() - startedAt}ms`);
     });
 }
+function setup() {
+    return __awaiter(this, void 0, void 0, function* () {
+        try {
+            yield core.group(`prepare environment`, prepareEnv);
+        }
+        catch (error) {
+            core.error(`Failed to prepare: ${error}, ${error.stack}`);
+            core.setFailed(error.message);
+        }
+    });
+}
+exports.setup = setup;
 function run() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
-            const { lintPath, patchPath, checkRunId } = yield core.group(`prepare environment`, prepareEnv);
+            const { lintPath, patchPath, checkRunId } = yield core.group(`restore environment`, restoreEnv);
             core.addPath(path.dirname(lintPath));
             yield core.group(`run golangci-lint`, () => runLint(lintPath, patchPath, checkRunId));
         }
@@ -7163,7 +7282,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 "use strict";
 
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.RefKey = exports.Events = exports.State = exports.Inputs = void 0;
+exports.RefKey = exports.Env = exports.Events = exports.State = exports.Inputs = void 0;
 var Inputs;
 (function (Inputs) {
     Inputs["Key"] = "key";
@@ -7181,6 +7300,12 @@ var Events;
     Events["Push"] = "push";
     Events["PullRequest"] = "pull_request";
 })(Events = exports.Events || (exports.Events = {}));
+var Env;
+(function (Env) {
+    Env["LintPath"] = "GOLANGCI_LINT_ACTION_LINT_PATH";
+    Env["PatchPath"] = "GOLANGCI_LINT_ACTION_PATCH_PATH";
+    Env["CheckRunIdent"] = "GOLANGCI_LINT_ACTION_CHECK_RUN_IDENT";
+})(Env = exports.Env || (exports.Env = {}));
 exports.RefKey = "GITHUB_REF";
 
 

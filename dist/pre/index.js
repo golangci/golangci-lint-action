@@ -40,7 +40,7 @@ module.exports =
 /******/ 	// the startup function
 /******/ 	function startup() {
 /******/ 		// Load entry module and return exports
-/******/ 		return __webpack_require__(131);
+/******/ 		return __webpack_require__(526);
 /******/ 	};
 /******/ 	// initialize runtime
 /******/ 	runtime(__webpack_require__);
@@ -4662,17 +4662,7 @@ module.exports = require("child_process");
 
 /***/ }),
 /* 130 */,
-/* 131 */
-/***/ (function(__unusedmodule, exports, __webpack_require__) {
-
-"use strict";
-
-Object.defineProperty(exports, "__esModule", { value: true });
-const run_1 = __webpack_require__(180);
-run_1.run();
-
-
-/***/ }),
+/* 131 */,
 /* 132 */,
 /* 133 */,
 /* 134 */,
@@ -44181,7 +44171,17 @@ module.exports.Collection = Hook.Collection
 
 /***/ }),
 /* 525 */,
-/* 526 */,
+/* 526 */
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+const run_1 = __webpack_require__(180);
+run_1.setup();
+
+
+/***/ }),
 /* 527 */,
 /* 528 */,
 /* 529 */,

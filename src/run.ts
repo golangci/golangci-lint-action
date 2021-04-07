@@ -9,6 +9,7 @@ import { inspect, promisify } from "util"
 import { v4 as uuidv4 } from "uuid"
 
 import { restoreCache, saveCache } from "./cache"
+import { Env as EnvKey } from "./constants"
 import { installGo, installLint } from "./install"
 import { findLintVersion } from "./version"
 
@@ -82,11 +83,198 @@ type Env = {
   checkRunId: number
 }
 
-async function prepareEnv(): Promise<Env> {
+type CheckRunIdent = {
+  runId: number
+  runName: string
+  checkRunId: number
+  checkSuiteId?: number
+  checkRunSearchToken?: string
+}
+
+type CheckRun = {
+  id: number
+  status: string
+  name: string
+  output: {
+    title: string | null
+    summary: string | null
+    text: string | null
+    annotations_count: number | null
+  }
+}
+
+async function fetchCheckSuiteId(runId: number): Promise<number> {
+  let currentCheckSuiteId = -1
+  if (runId > 0) {
+    try {
+      const { data: currentRun } = await github
+        .getOctokit(core.getInput(`github-token`, { required: true }))
+        .actions.getWorkflowRun({
+          ...github.context.repo,
+          run_id: runId,
+        })
+        .catch((e: string) => {
+          throw `Unable to fetch Workflow Run: ${e}`
+        })
+
+      if (currentRun.status === `in_progress`) {
+        // The GitHub API it's self does present the `check_suite_id` property, but it is not documented or present returned object's `type`
+        currentCheckSuiteId = parseInt(currentRun.check_suite_url.substr(1 + currentRun.check_suite_url.lastIndexOf(`/`))) ?? -1
+        // The following SHOULD work, but alas
+        // currentCheckSuiteId = currentRun.check_suite_id
+        if (currentCheckSuiteId <= 0) {
+          throw `Error extracting Check Suite ID from: ${currentRun.check_suite_url}`
+        }
+      }
+    } catch (e) {
+      core.info(`::error::Error Fetching Current Run: ${e}`)
+    }
+  }
+  return currentCheckSuiteId
+}
+
+async function fetchCheckSuiteRuns(checkSuiteId: number, name?: string): Promise<CheckRun[]> {
+  let checkSuiteRuns: CheckRun[] = []
+  if (checkSuiteId > 0) {
+    try {
+      checkSuiteRuns = (
+        await github
+          .getOctokit(core.getInput(`github-token`, { required: true }))
+          .checks.listForSuite({
+            ...github.context.repo,
+            check_suite_id: checkSuiteId,
+          })
+          .catch((e: string) => {
+            throw `Unable to fetch Check Suite Runs List: ${e}`
+          })
+      ).data.check_runs.filter((run) => run.status === `in_progress`)
+
+      if (checkSuiteRuns.length > 0 && name) {
+        const _checkSuiteRuns = checkSuiteRuns.filter(
+          (run) => run.name.indexOf(name) === 0 && (run.name.length === name.length || run.name[name.length] === ` `)
+        )
+        checkSuiteRuns = _checkSuiteRuns.length ? _checkSuiteRuns : checkSuiteRuns
+      }
+
+      if (checkSuiteRuns.length === 0) {
+        throw `Check Suite returned 0 runs`
+      }
+    } catch (e) {
+      core.info(`::error::Error Fetching Check Suite Runs (${checkSuiteId}): ${e}`)
+    }
+  }
+  return checkSuiteRuns
+}
+
+async function prepareCheckRunIdent(runId?: number, runName?: string): Promise<CheckRunIdent> {
+  const checkRunIdent: CheckRunIdent = {
+    runId: runId ?? github.context.runId,
+    runName: runName ?? github.context.job,
+    checkRunId: -1,
+  }
+
+  if (process.env.GITHUB_ACTIONS === `true` && checkRunIdent.runId > 0) {
+    core.info(`Resolving current GitHub Check Run ${checkRunIdent.runId}`)
+    try {
+      const checkSuiteId = await fetchCheckSuiteId(checkRunIdent.runId)
+      if (checkSuiteId < 0) {
+        throw `Unable to resolve Check Suite ID`
+      }
+
+      const checkSuiteRuns = await fetchCheckSuiteRuns(checkSuiteId, checkRunIdent.runName)
+      if (checkSuiteRuns.length < 1) {
+        throw `Unable to resolve Check Suite children`
+      }
+
+      checkRunIdent.checkSuiteId = checkSuiteId
+
+      if (checkSuiteRuns.length === 1) {
+        checkRunIdent.checkRunId = checkSuiteRuns[0].id
+      } else {
+        checkRunIdent.checkRunSearchToken = uuidv4()
+        core.info(
+          `::warning::[golangci-lint-action] Tagging Current GitHub CheckRun ${checkRunIdent.runId}<${checkRunIdent.checkRunSearchToken}>`
+        )
+      }
+    } catch (e) {
+      core.info(`::error::Error resolving Run (${checkRunIdent.runId}): ${e}`)
+    }
+  } else {
+    core.info(`Not in GitHub Action Context, Skipping Check Run Resolution`)
+  }
+
+  return checkRunIdent
+}
+
+async function resolveCheckRunId(checkRunIdent: CheckRunIdent): Promise<number> {
+  let checkRunId = checkRunIdent.checkRunId
+
+  if (checkRunIdent.runId > 0) {
+    if (checkRunId <= 0) {
+      try {
+        const checkSuiteId = checkRunIdent?.checkSuiteId ?? -1
+        if (checkSuiteId <= 0) {
+          throw `No Check Suite ID`
+        }
+
+        const checkRunSearchToken = checkRunIdent?.checkRunSearchToken ?? ``
+        if (!checkRunSearchToken) {
+          throw `No Check Run Search Token`
+        }
+
+        const checkSuiteRuns = (await fetchCheckSuiteRuns(checkSuiteId, checkRunIdent.runName)).filter(
+          (run) => run.output.annotations_count
+        )
+        if (checkSuiteRuns.length < 1) {
+          throw `Unable to resolve Check Suite children`
+        }
+
+        core.info(`resolveCheckRunId() Found ${checkSuiteRuns.length} Jobs:\n` + inspect(checkSuiteRuns))
+
+        core.info(`Resolving current Check Run in Check Suite (${checkSuiteId})`)
+
+        for (const run of checkSuiteRuns) {
+          try {
+            const { data: annotations } = await github
+              .getOctokit(core.getInput(`github-token`, { required: true }))
+              .checks.listAnnotations({
+                ...github.context.repo,
+                check_run_id: run.id,
+              })
+
+            core.info(`resolveCheckRunId() Found ${annotations.length} Annotations for Check Run '${run.id}':\n` + inspect(annotations))
+
+            if (
+              annotations.findIndex((annotation) => {
+                core.info(`resolveCheckRunId() Looking for Search Token (${checkRunSearchToken}) in message: ${annotation.message}`)
+                return annotation.message.indexOf(checkRunSearchToken) >= 0
+              }) !== -1
+            ) {
+              core.info(`resolveCheckRunId() Found Search Token (${checkRunSearchToken}) in Check Run ${run.id}`)
+              checkRunId = run.id
+              break
+            }
+          } catch (e) {
+            core.info(`resolveCheckRunId() Error Fetching Check Run (${run.id}): ${e}`)
+          }
+        }
+      } catch (e) {
+        core.info(`::error::Unable to resolve Check Run ID: ${e}`)
+        core.info(`checkRunIdent = ` + inspect(checkRunIdent))
+      }
+    }
+  } else {
+    core.info(`Not in GitHub Action Context, Skipping Check Run Resolution`)
+  }
+
+  return checkRunId
+}
+
+async function prepareEnv(): Promise<void> {
   const startedAt = Date.now()
 
   // Resolve Check Run ID
-  const resolveCheckRunIdPromise = resolveCheckRunId()
+  const prepareCheckRunIdentPromise = prepareCheckRunIdent()
 
   // Prepare cache, lint and go in parallel.
   const restoreCachePromise = restoreCache()
@@ -94,13 +282,31 @@ async function prepareEnv(): Promise<Env> {
   const installGoPromise = installGo()
   const patchPromise = fetchPatch()
 
-  const lintPath = await prepareLintPromise
+  core.saveState(EnvKey.LintPath, await prepareLintPromise)
   await installGoPromise
   await restoreCachePromise
-  const patchPath = await patchPromise
-  const checkRunId = await resolveCheckRunIdPromise
+  core.saveState(EnvKey.PatchPath, await patchPromise)
+  core.saveState(EnvKey.CheckRunIdent, JSON.stringify(await prepareCheckRunIdentPromise))
 
   core.info(`Prepared env in ${Date.now() - startedAt}ms`)
+}
+
+async function restoreEnv(): Promise<Env> {
+  const startedAt = Date.now()
+
+  const lintPath = core.getState(EnvKey.LintPath)
+  const patchPath = core.getState(EnvKey.PatchPath)
+  let checkRunId: number
+  try {
+    const checkRunIdent: CheckRunIdent = JSON.parse(core.getState(EnvKey.CheckRunIdent))
+    checkRunId = await resolveCheckRunId(checkRunIdent)
+  } catch (e) {
+    core.info(`::error::Error Resolving Check Run ID: ${e}`)
+    checkRunId = -1
+  }
+
+  core.info(`Restored env in ${Date.now() - startedAt}ms`)
+
   return { lintPath, patchPath, checkRunId }
 }
 
@@ -239,85 +445,42 @@ const logLintIssues = (issues: LintIssue[]): void => {
   })
 }
 
-async function resolveCheckRunId(): Promise<number> {
-  let jobId = -1
-  const ctx = github.context
-
-  if (process.env.GITHUB_ACTIONS === `true` && ctx.runId) {
-    try {
-      const searchToken = uuidv4()
-      core.info(`::warning::Attempting to resolve current GitHub Job ${ctx.runId}<${searchToken}>`)
-      const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }))
-      let workflowJobs = (
-        await octokit.actions
-          .listJobsForWorkflowRun({
-            ...ctx.repo,
-            run_id: ctx.runId,
-          })
-          .catch((e: string) => {
-            throw `Unable to fetch Workflow Job List: ${e}`
-          })
-      ).data.jobs.filter((job) => job.status === `in_progress`)
-
-      if (workflowJobs.length > 0) {
-        core.info(`resolveCheckRunId() Found ${workflowJobs.length} Jobs:\n` + inspect(workflowJobs))
-        if (workflowJobs.length > 1) {
-          const searchRegExp = new RegExp(`^` + ctx.job.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + `(\\s+\\(|$)`)
-          const jobs = workflowJobs.filter((job) => searchRegExp.test(job.name))
-          core.info(`resolveCheckRunId() Found ${jobs.length} Jobs whose base name is '${ctx.job}'`)
-          workflowJobs = jobs.length ? jobs : workflowJobs
-        }
-        if (workflowJobs.length > 1) {
-          const startedAt = Date.now()
-          // Sleep for MS, to allow Annotation to be captured and populated
-          await ((ms): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms)))(10 * 1000)
-          core.info(`Paused for ${Date.now() - startedAt}ms`)
-          for (const job of workflowJobs) {
-            try {
-              const { data: annotations } = await octokit.checks.listAnnotations({
-                ...ctx.repo,
-                check_run_id: job.id,
-              })
-
-              core.info(`resolveCheckRunId() Found ${annotations.length} Annotations for Job '${job.id}':\n` + inspect(annotations))
-
-              if (
-                annotations.findIndex((annotation) => {
-                  core.info(`resolveCheckRunId() Looking for Search Token (${searchToken}) in message: ${annotation.message}`)
-                  return annotation.message.includes(searchToken)
-                }) !== -1
-              ) {
-                core.info(`resolveCheckRunId() Found Search Token (${searchToken}) in Job ${job.id}`)
-                jobId = job.id
-                break
-              }
-            } catch (e) {
-              core.info(`resolveCheckRunId() Error Fetching Job ${job.id}: ${e}`)
-            }
-          }
-          core.info(`resolveCheckRunId() Finished looking for Search Token`)
-        } else if (workflowJobs[0]) {
-          jobId = workflowJobs[0].id
-        } else {
-          throw `Unable to resolve GitHub Job`
-        }
-        core.info(`Current Job: ${jobId}`)
-      } else {
-        throw `Fetching octokit.actions.getWorkflowRun(${process.env.GITHUB_RUN_ID}) returned no results`
-      }
-    } catch (e) {
-      core.info(`::error::Unable to resolve GitHub Job: ${e}`)
-    }
-  } else {
-    core.info(`Not in GitHub Action Context, Skipping Job Resolution`)
+const annotationFromIssue = (issue: LintIssue): GithubAnnotation => {
+  const annotation: GithubAnnotation = {
+    path: issue.Pos.Filename,
+    start_line: issue.Pos.Line,
+    end_line: issue.Pos.Line,
+    title: issue.FromLinter,
+    message: issue.Text,
+    annotation_level: issue.Severity,
   }
 
-  return jobId
+  if (issue.LineRange !== undefined) {
+    annotation.end_line = issue.LineRange.To
+  } else if (issue.Pos.Column) {
+    annotation.start_column = issue.Pos.Column
+    annotation.end_column = issue.Pos.Column
+  }
+
+  if (issue.Replacement !== null) {
+    let replacement = ``
+    if (issue.Replacement.Inline) {
+      replacement =
+        issue.SourceLines[0].slice(0, issue.Replacement.Inline.StartCol) +
+        issue.Replacement.Inline.NewString +
+        issue.SourceLines[0].slice(issue.Replacement.Inline.StartCol + issue.Replacement.Inline.Length)
+    } else if (issue.Replacement.NewLines) {
+      replacement = issue.Replacement.NewLines.join("\n")
+    }
+    annotation.raw_details = "```suggestion\n" + replacement + "\n```"
+  }
+
+  return annotation
 }
 
-async function annotateLintIssues(issues: LintIssue[], checkRunId: number): Promise<void> {
-  if (checkRunId === -1 || !issues.length) {
-    return
+async function annotateLintIssues(issues: LintIssue[], checkRunId: number): Promise<boolean> {
+  if (checkRunId >= 0 || !issues.length) {
+    return false
   }
   const chunkSize = 50
   const issueCounts = {
@@ -325,60 +488,34 @@ async function annotateLintIssues(issues: LintIssue[], checkRunId: number): Prom
     warning: 0,
     failure: 0,
   }
-  const ctx = github.context
-  const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }))
-  const title = `GolangCI-Lint`
-  for (let i = 0; i < Math.ceil(issues.length / chunkSize); i++) {
-    octokit.checks
-      .update({
-        ...ctx.repo,
-        check_run_id: checkRunId,
-        output: {
-          title: title,
-          annotations: issues.slice(i * chunkSize, i * chunkSize + chunkSize).map(
-            (issue: LintIssue): GithubAnnotation => {
-              // If/when we transition to comments, we would build the request structure here
-              const annotation: GithubAnnotation = {
-                path: issue.Pos.Filename,
-                start_line: issue.Pos.Line,
-                end_line: issue.Pos.Line,
-                title: issue.FromLinter,
-                message: issue.Text,
-                annotation_level: issue.Severity,
-              }
 
-              issueCounts[issue.Severity]++
-
-              if (issue.LineRange !== undefined) {
-                annotation.end_line = issue.LineRange.To
-              } else if (issue.Pos.Column) {
-                annotation.start_column = issue.Pos.Column
-                annotation.end_column = issue.Pos.Column
-              }
-
-              if (issue.Replacement !== null) {
-                let replacement = ``
-                if (issue.Replacement.Inline) {
-                  replacement =
-                    issue.SourceLines[0].slice(0, issue.Replacement.Inline.StartCol) +
-                    issue.Replacement.Inline.NewString +
-                    issue.SourceLines[0].slice(issue.Replacement.Inline.StartCol + issue.Replacement.Inline.Length)
-                } else if (issue.Replacement.NewLines) {
-                  replacement = issue.Replacement.NewLines.join("\n")
-                }
-                annotation.raw_details = "```suggestion\n" + replacement + "\n```"
-              }
-
-              return annotation as GithubAnnotation
-            }
-          ),
-          summary: `There are {issueCounts.failure} failures, {issueCounts.wairning} warnings, and {issueCounts.notice} notices.`,
-        },
-      })
-      .catch((e) => {
-        throw `Error patching Check Run Data (annotations): ${e}`
-      })
+  try {
+    const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }))
+    const title = `GolangCI-Lint`
+    for (let i = 0; i < Math.ceil(issues.length / chunkSize); i++) {
+      octokit.checks
+        .update({
+          ...github.context.repo,
+          check_run_id: checkRunId,
+          output: {
+            title: title,
+            annotations: issues.slice(i * chunkSize, i * chunkSize + chunkSize).map((issue: LintIssue) => {
+              ++issueCounts[issue.Severity]
+              return annotationFromIssue(issue)
+            }),
+            summary: `There are {issueCounts.failure} failures, {issueCounts.wairning} warnings, and {issueCounts.notice} notices.`,
+          },
+        })
+        .catch((e) => {
+          throw `Error patching Check Run Data (annotations): ${e}`
+        })
+    }
+  } catch (e) {
+    core.info(`::error::Error Annotating Lint Issues: ${e}`)
+    return false
   }
+
+  return true
 }
 
 const printOutput = (res: ExecRes): void => {
@@ -399,20 +536,26 @@ async function processLintOutput(res: ExecRes, checkRunId: number): Promise<Lint
       ;({ Issues: lintIssues } = parseOutput(res.stdout))
 
       if (lintIssues.length) {
-        logLintIssues(lintIssues)
-
-        // We can only Annotate (or Comment) on Push or Pull Request
-        switch (github.context.eventName) {
-          case `pull_request`:
-          // TODO: When we are ready to handle these as Comments, instead of Annotations, we would place that logic here
-          /* falls through */
-          case `push`:
-            await annotateLintIssues(lintIssues, checkRunId)
-            break
-          default:
-            // At this time, other events are not supported
-            break
+        if (
+          !(await (async (eventName: string): Promise<boolean> => {
+            // We can only Annotate (or Comment) on Push or Pull Request
+            switch (eventName) {
+              case `pull_request`:
+              // TODO: When we are ready to handle these as Comments, instead of Annotations, we would place that logic here
+              /* falls through */
+              case `push`:
+                return await annotateLintIssues(lintIssues, checkRunId)
+              default:
+                // At this time, other events are not supported
+                return false
+            }
+          })(github.context.eventName))
+        ) {
+          core.info(`::add-matcher::matchers-golangci-lint-action.json`)
         }
+
+        // Log Issues at the end to allow failed GitHub Actions above to set the Problem Matcher
+        logLintIssues(lintIssues)
       }
     } catch (e) {
       core.setFailed(`Error processing golangci-lint output: ${e}`)
@@ -519,9 +662,18 @@ async function runLint(lintPath: string, patchPath: string, checkRunId: number):
   core.info(`Ran golangci-lint in ${Date.now() - startedAt}ms`)
 }
 
+export async function setup(): Promise<void> {
+  try {
+    await core.group(`prepare environment`, prepareEnv)
+  } catch (error) {
+    core.error(`Failed to prepare: ${error}, ${error.stack}`)
+    core.setFailed(error.message)
+  }
+}
+
 export async function run(): Promise<void> {
   try {
-    const { lintPath, patchPath, checkRunId } = await core.group(`prepare environment`, prepareEnv)
+    const { lintPath, patchPath, checkRunId } = await core.group(`restore environment`, restoreEnv)
     core.addPath(path.dirname(lintPath))
     await core.group(`run golangci-lint`, () => runLint(lintPath, patchPath, checkRunId))
   } catch (error) {

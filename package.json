@@ -7,7 +7,11 @@
   "scripts": {
     "prepare-setup-go": "cd node_modules/setup-go && npm run build",
     "prepare-deps": "npm run prepare-setup-go",
-    "build": "tsc && ncc build -o dist/run/ src/main.ts && ncc build -o dist/post_run/ src/post_main.ts",
+    "build": "tsc && npm run build_pre && npm run build_main && npm run build_post_main",
+    "build_pre": "ncc build -o dist/pre/ src/setup.ts",
+    "build_main": "ncc build -o dist/run/ src/main.ts",
+    "build_post_main": "ncc build -o dist/post_run/ src/post_main.ts",
+    "watched_build_pre": "tsc && ncc build -w -o dist/pre/ src/setup.ts",
     "watched_build_main": "tsc && ncc build -w -o dist/run/ src/main.ts",
     "watched_build_post_main": "tsc && ncc build -w -o dist/post_run/ src/post_main.ts",
     "type-check": "tsc",
@@ -15,7 +19,8 @@
     "lint-fix": "eslint **/*.ts --cache --fix",
     "format": "prettier --write **/*.ts",
     "format-check": "prettier --check **/*.ts",
-    "all": "npm run prepare-deps && npm run build && npm run format-check && npm run lint",
+    "all": "npm run prepare-deps && npm run format-check && npm run build && npm run lint",
+    "all-format": "npm run format && npm run all",
     "local": "npm run build && act -j test -b",
     "local-full-version": "npm run build && act -j test-full-version -b"
   },

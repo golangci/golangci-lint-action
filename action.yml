@@ -38,6 +38,7 @@ inputs:
     required: false
 runs:
   using: "node12"
+  pre: "dist/pre/index.js"
   main: "dist/run/index.js"
   post: "dist/post_run/index.js"
 branding:

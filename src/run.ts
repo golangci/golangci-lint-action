@@ -121,8 +121,8 @@ async function fetchCheckSuiteId(runId: number): Promise<number> {
         throw `Unexpected error: No run returned`
       }
 
-      if (currentRun.status !== `in_progress`) {
-        throw `Unexpected error: Expected status of 'in_progress', got '${currentRun.status}': ` + inspect(currentRun)
+      if (currentRun.conclusion) {
+        throw `Unexpected error: Expected Check Suite with no conclusion, got: ` + inspect(currentRun)
       }
 
       // The GitHub API it's self does present the `check_suite_id` property, but it is not documented or present returned object's `type`

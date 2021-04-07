@@ -6780,8 +6780,8 @@ function fetchCheckSuiteId(runId) {
                 if (!currentRun) {
                     throw `Unexpected error: No run returned`;
                 }
-                if (currentRun.status !== `in_progress`) {
-                    throw `Unexpected error: Expected status of 'in_progress', got '${currentRun.status}': ` + util_1.inspect(currentRun);
+                if (currentRun.conclusion) {
+                    throw `Unexpected error: Expected Check Suite with no conclusion, got: ` + util_1.inspect(currentRun);
                 }
                 // The GitHub API it's self does present the `check_suite_id` property, but it is not documented or present returned object's `type`
                 currentCheckSuiteId = (_a = parseInt(currentRun.check_suite_url.substr(1 + currentRun.check_suite_url.lastIndexOf(`/`)))) !== null && _a !== void 0 ? _a : -1;

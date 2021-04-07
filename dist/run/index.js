@@ -6850,7 +6850,8 @@ function resolveCheckRunId() {
         const ctx = github.context;
         if (process.env.GITHUB_ACTIONS === `true` && ctx.runId) {
             try {
-                core.info(`Attempting to resolve current GitHub Job (${ctx.runId})`);
+                const searchToken = uuid_1.v4();
+                core.info(`::warning::Attempting to resolve current GitHub Job ${ctx.runId}<${searchToken}>`);
                 const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }));
                 let workflowJobs = (yield octokit.actions
                     .listJobsForWorkflowRun(Object.assign(Object.assign({}, ctx.repo), { run_id: ctx.runId }))
@@ -6866,12 +6867,10 @@ function resolveCheckRunId() {
                         workflowJobs = jobs.length ? jobs : workflowJobs;
                     }
                     if (workflowJobs.length > 1) {
-                        const searchToken = uuid_1.v4();
-                        core.info(`::warning::[ignore] Resolving GitHub Job with Search Token: ${searchToken}`);
                         const startedAt = Date.now();
                         // Sleep for MS, to allow Annotation to be captured and populated
                         yield ((ms) => new Promise((resolve) => setTimeout(resolve, ms)))(10 * 1000);
-                        core.info(`Slept for ${Date.now() - startedAt}ms`);
+                        core.info(`Paused for ${Date.now() - startedAt}ms`);
                         for (const job of workflowJobs) {
                             try {
                                 const { data: annotations } = yield octokit.checks.listAnnotations(Object.assign(Object.assign({}, ctx.repo), { check_run_id: job.id }));

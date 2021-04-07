@@ -117,17 +117,23 @@ async function fetchCheckSuiteId(runId: number): Promise<number> {
           throw `Unable to fetch Workflow Run: ${e}`
         })
 
-      if (currentRun.status === `in_progress`) {
-        // The GitHub API it's self does present the `check_suite_id` property, but it is not documented or present returned object's `type`
-        currentCheckSuiteId = parseInt(currentRun.check_suite_url.substr(1 + currentRun.check_suite_url.lastIndexOf(`/`))) ?? -1
-        // The following SHOULD work, but alas
-        // currentCheckSuiteId = currentRun.check_suite_id
-        if (currentCheckSuiteId <= 0) {
-          throw `Error extracting Check Suite ID from: ${currentRun.check_suite_url}`
-        }
+      if (!currentRun) {
+        throw `Unexpected error: No run returned`
+      }
+
+      if (currentRun.status !== `in_progress`) {
+        throw `Unexpected error: Expected status of 'in_progress', got '${currentRun.status}': ` + inspect(currentRun)
+      }
+
+      // The GitHub API it's self does present the `check_suite_id` property, but it is not documented or present returned object's `type`
+      currentCheckSuiteId = parseInt(currentRun.check_suite_url.substr(1 + currentRun.check_suite_url.lastIndexOf(`/`))) ?? -1
+      // The following SHOULD work, but alas
+      // currentCheckSuiteId = currentRun.check_suite_id
+      if (currentCheckSuiteId <= 0) {
+        throw `Error extracting Check Suite ID from: ${currentRun.check_suite_url}`
       }
     } catch (e) {
-      core.info(`::error::Error Fetching Current Run: ${e}`)
+      core.info(`::error::Error Fetching Current Run (${runId}): ${e}`)
     }
   }
   return currentCheckSuiteId
@@ -260,7 +266,6 @@ async function resolveCheckRunId(checkRunIdent: CheckRunIdent): Promise<number> 
         }
       } catch (e) {
         core.info(`::error::Unable to resolve Check Run ID: ${e}`)
-        core.info(`checkRunIdent = ` + inspect(checkRunIdent))
       }
     }
   } else {

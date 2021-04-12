@@ -26,7 +26,7 @@
   "author": "golangci",
   "license": "MIT",
   "dependencies": {
-    "@actions/cache": "^1.0.6",
+    "@actions/cache": "^1.0.7",
     "@actions/core": "^1.2.6",
     "@actions/exec": "^1.0.1",
     "@actions/github": "^4.0.0",

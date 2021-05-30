@@ -34,7 +34,7 @@ jobs:
         uses: github/codeql-action/init@v1
         # Override language selection by uncommenting this and choosing your languages
         with:
-          language: 'javascript'
+          languages: 'javascript'
 
       - run: |
           npm install

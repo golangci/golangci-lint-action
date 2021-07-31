@@ -28,6 +28,9 @@ jobs:
           - "v1.37"
           - "v1.37.1"
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v2
       - uses: ./
@@ -44,6 +47,8 @@ jobs:
           - macos-latest
           - windows-latest
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v2
       - uses: ./

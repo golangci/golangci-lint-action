@@ -37,14 +37,14 @@
     "tmp": "^0.2.1"
   },
   "devDependencies": {
-    "@types/node": "^16.7.1",
+    "@types/node": "^16.7.6",
     "@types/uuid": "^8.3.1",
     "@typescript-eslint/eslint-plugin": "^4.29.2",
     "@typescript-eslint/parser": "^4.29.2",
     "@zeit/ncc": "^0.22.3",
     "eslint": "^7.32.0",
     "eslint-config-prettier": "^8.3.0",
-    "eslint-plugin-import": "^2.24.1",
+    "eslint-plugin-import": "^2.24.2",
     "eslint-plugin-prettier": "^3.4.1",
     "eslint-plugin-simple-import-sort": "^7.0.0",
     "prettier": "^2.3.2",

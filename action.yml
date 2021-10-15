@@ -28,6 +28,10 @@ inputs:
     description: "if set to true then the action doesn't cache or restore ~/.cache/go-build."
     default: false
     required: true
+  skip-cache:
+    description: "if set to true then the all caching functionality willl be complete disabled."
+    default: false
+    required: true
 runs:
   using: "node16"
   main: "dist/run/index.js"

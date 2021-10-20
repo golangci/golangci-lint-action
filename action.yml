@@ -25,11 +25,11 @@ inputs:
     default: false
     required: true
   skip-pkg-cache:
-    description: "if set to true then the action don't cache or restore ~/go/pkg."
+    description: "if set to true then the action doesn't cache or restore ~/go/pkg."
     default: false
     required: true
   skip-build-cache:
-    description: "if set to true then the action don't cache or restore ~/.cache/go-build."
+    description: "if set to true then the action doesn't cache or restore ~/.cache/go-build."
     default: false
     required: true
 runs:

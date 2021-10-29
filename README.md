@@ -27,6 +27,10 @@ on:
       - master
       - main
   pull_request:
+permissions:
+  contents: read
+  # Optional: allow read access to pull request. Use with `only-new-issues` option.
+  # pull-requests: read
 jobs:
   golangci:
     name: lint
@@ -75,6 +79,10 @@ on:
       - master
       - main
   pull_request:
+permissions:
+  contents: read
+  # Optional: allow read access to pull request. Use with `only-new-issues` option.
+  # pull-requests: read
 jobs:
   golangci:
     strategy:

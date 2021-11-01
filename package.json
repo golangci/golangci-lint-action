@@ -27,7 +27,7 @@
   "license": "MIT",
   "dependencies": {
     "@actions/cache": "^1.0.7",
-    "@actions/core": "^1.5.0",
+    "@actions/core": "^1.6.0",
     "@actions/exec": "^1.1.0",
     "@actions/github": "^4.0.0",
     "@actions/tool-cache": "^1.7.1",
@@ -39,9 +39,9 @@
   "devDependencies": {
     "@types/node": "^16.11.6",
     "@types/uuid": "^8.3.1",
-    "@typescript-eslint/eslint-plugin": "^4.33.0",
-    "@typescript-eslint/parser": "^4.33.0",
-    "@zeit/ncc": "^0.22.3",
+    "@typescript-eslint/eslint-plugin": "^5.2.0",
+    "@typescript-eslint/parser": "^5.2.0",
+    "@vercel/ncc": "^0.31.1",
     "eslint": "^8.1.0",
     "eslint-config-prettier": "^8.3.0",
     "eslint-plugin-import": "^2.25.2",

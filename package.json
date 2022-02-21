@@ -32,7 +32,7 @@
     "@actions/github": "^4.0.0",
     "@actions/tool-cache": "^1.7.1",
     "@types/semver": "^7.3.9",
-    "@types/tmp": "^0.2.2",
+    "@types/tmp": "^0.2.3",
     "setup-go": "git+https://github.com/actions/setup-go.git#v2.1.4",
     "tmp": "^0.2.1"
   },

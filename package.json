@@ -32,13 +32,13 @@
     "@actions/github": "^4.0.0",
     "@actions/tool-cache": "^1.7.1",
     "@types/semver": "^7.3.9",
-    "@types/tmp": "^0.2.2",
+    "@types/tmp": "^0.2.3",
     "setup-go": "git+https://github.com/actions/setup-go.git#v2.1.4",
     "tmp": "^0.2.1"
   },
   "devDependencies": {
     "@types/node": "^16.11.10",
-    "@types/uuid": "^8.3.3",
+    "@types/uuid": "^8.3.4",
     "@typescript-eslint/eslint-plugin": "^4.33.0",
     "@typescript-eslint/parser": "^4.33.0",
     "@zeit/ncc": "^0.22.3",

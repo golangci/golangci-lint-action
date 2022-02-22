@@ -33,7 +33,7 @@
     "@actions/tool-cache": "^1.7.1",
     "@types/semver": "^7.3.9",
     "@types/tmp": "^0.2.3",
-    "setup-go": "git+https://github.com/actions/setup-go.git#v2.1.4",
+    "setup-go": "git+https://github.com/actions/setup-go.git#v2.2.0",
     "tmp": "^0.2.1"
   },
   "devDependencies": {
@@ -44,7 +44,7 @@
     "@zeit/ncc": "^0.22.3",
     "eslint": "^7.32.0",
     "eslint-config-prettier": "^8.4.0",
-    "eslint-plugin-import": "^2.25.3",
+    "eslint-plugin-import": "^2.25.4",
     "eslint-plugin-prettier": "^4.0.0",
     "eslint-plugin-simple-import-sort": "^7.0.0",
     "prettier": "^2.5.1",

@@ -25,26 +25,24 @@
   "license": "MIT",
   "dependencies": {
     "@actions/cache": "^1.0.9",
-    "@actions/core": "^1.5.0",
+    "@actions/core": "^1.6.0",
     "@actions/exec": "^1.1.0",
-    "@actions/github": "^4.0.0",
+    "@actions/github": "^5.0.0",
     "@actions/tool-cache": "^1.7.1",
     "@types/semver": "^7.3.9",
     "@types/tmp": "^0.2.3",
     "tmp": "^0.2.1"
   },
   "devDependencies": {
-    "@types/node": "^17.0.19",
-    "@types/uuid": "^8.3.4",
-    "@typescript-eslint/eslint-plugin": "^4.33.0",
-    "@typescript-eslint/parser": "^4.33.0",
-    "@zeit/ncc": "^0.22.3",
-    "eslint": "^7.32.0",
+    "@typescript-eslint/eslint-plugin": "^5.12.1",
+    "@typescript-eslint/parser": "^5.12.1",
+    "@vercel/ncc": "^0.33.3",
+    "eslint": "^8.9.0",
     "eslint-config-prettier": "^8.4.0",
     "eslint-plugin-import": "^2.25.4",
     "eslint-plugin-prettier": "^4.0.0",
     "eslint-plugin-simple-import-sort": "^7.0.0",
     "prettier": "^2.5.1",
-    "typescript": "^4.3.5"
+    "typescript": "^4.5.5"
   }
 }

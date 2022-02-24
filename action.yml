@@ -29,7 +29,7 @@ inputs:
     default: false
     required: true
 runs:
-  using: "node12"
+  using: "node16"
   main: "dist/run/index.js"
   post: "dist/post_run/index.js"
 branding:

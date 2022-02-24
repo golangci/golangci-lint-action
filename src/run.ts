@@ -41,7 +41,7 @@ async function fetchPatch(): Promise<string> {
   const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }))
   let patch: string
   try {
-    const patchResp = await octokit.pulls.get({
+    const patchResp = await octokit.rest.pulls.get({
       owner: ctx.repo.owner,
       repo: ctx.repo.repo,
       [`pull_number`]: pull.number,

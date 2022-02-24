@@ -5,8 +5,6 @@
   "description": "golangci-lint github action",
   "main": "dist/main.js",
   "scripts": {
-    "prepare-setup-go": "cd node_modules/setup-go && npm run build",
-    "prepare-deps": "npm run prepare-setup-go",
     "build": "tsc && ncc build -o dist/run/ src/main.ts && ncc build -o dist/post_run/ src/post_main.ts",
     "watched_build_main": "tsc && ncc build -w -o dist/run/ src/main.ts",
     "watched_build_post_main": "tsc && ncc build -w -o dist/post_run/ src/post_main.ts",
@@ -15,7 +13,7 @@
     "lint-fix": "eslint **/*.ts --cache --fix",
     "format": "prettier --write **/*.ts",
     "format-check": "prettier --check **/*.ts",
-    "all": "npm run prepare-deps && npm run build && npm run format-check && npm run lint",
+    "all": "npm run build && npm run format-check && npm run lint",
     "local": "npm run build && act -j test -b",
     "local-full-version": "npm run build && act -j test-full-version -b"
   },
@@ -33,7 +31,6 @@
     "@actions/tool-cache": "^1.7.1",
     "@types/semver": "^7.3.9",
     "@types/tmp": "^0.2.3",
-    "setup-go": "git+https://github.com/actions/setup-go.git#v2.2.0",
     "tmp": "^0.2.1"
   },
   "devDependencies": {

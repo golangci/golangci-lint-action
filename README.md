@@ -153,7 +153,6 @@ Inside our action we perform 3 steps:
   * restore [cache](https://github.com/actions/cache) of previous analyzes
   * fetch [action config](https://github.com/golangci/golangci-lint/blob/master/assets/github-action-config.json) and find the latest `golangci-lint` patch version
     for needed version (users of this action can specify only minor version of `golangci-lint`). After that install [golangci-lint](https://github.com/golangci/golangci-lint) using [@actions/tool-cache](https://github.com/actions/toolkit/tree/master/packages/tool-cache)
-  * install the latest Go 1.x version using [@actions/setup-go](https://github.com/actions/setup-go)
 2. Run `golangci-lint` with specified by user `args`
 3. Save cache for later builds
 

@@ -2,7 +2,6 @@ import * as core from "@actions/core"
 import * as tc from "@actions/tool-cache"
 import os from "os"
 import path from "path"
-import { run as setupGo } from "setup-go/lib/main"
 
 import { VersionConfig } from "./version"
 
@@ -58,17 +57,4 @@ export async function installLint(versionConfig: VersionConfig): Promise<string>
   const lintPath = path.join(extractedDir, dirName, `golangci-lint`)
   core.info(`Installed golangci-lint into ${lintPath} in ${Date.now() - startedAt}ms`)
   return lintPath
-}
-
-export async function installGo(): Promise<void> {
-  const skipGoInstallation = core.getInput(`skip-go-installation`, { required: true }).trim()
-  if (skipGoInstallation.toLowerCase() == "true") {
-    core.info(`Skipping the installation of Go`)
-    return
-  }
-
-  const startedAt = Date.now()
-  process.env[`INPUT_GO-VERSION`] = `1`
-  await setupGo()
-  core.info(`Installed Go in ${Date.now() - startedAt}ms`)
 }

@@ -7,7 +7,7 @@ import { dir } from "tmp"
 import { promisify } from "util"
 
 import { restoreCache, saveCache } from "./cache"
-import { installGo, installLint } from "./install"
+import { installLint } from "./install"
 import { findLintVersion } from "./version"
 
 const execShellCommand = promisify(exec)
@@ -85,11 +85,9 @@ async function prepareEnv(): Promise<Env> {
   // Prepare cache, lint and go in parallel.
   const restoreCachePromise = restoreCache()
   const prepareLintPromise = prepareLint()
-  const installGoPromise = installGo()
   const patchPromise = fetchPatch()
 
   const lintPath = await prepareLintPromise
-  await installGoPromise
   await restoreCachePromise
   const patchPath = await patchPromise
 

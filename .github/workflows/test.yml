@@ -38,7 +38,7 @@ jobs:
       - uses: ./
         with:
           version: ${{ matrix.version }}
-          args: --issues-exit-code=0 ./sample/...
+          args: --timeout=3m --issues-exit-code=0 ./sample/...
           only-new-issues: true
 
   test-go-mod-version:
@@ -57,4 +57,4 @@ jobs:
       - uses: ./
         with:
           working-directory: sample-go-mod
-          args: --issues-exit-code=0 ./...
+          args: --timeout=3m --issues-exit-code=0 ./...

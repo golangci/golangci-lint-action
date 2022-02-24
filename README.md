@@ -36,6 +36,7 @@ jobs:
     name: lint
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/setup-go@v2
       - uses: actions/checkout@v2
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v2
@@ -51,9 +52,6 @@ jobs:
 
           # Optional: show only new issues if it's a pull request. The default value is `false`.
           # only-new-issues: true
-
-          # Optional: if set to true then the action will use pre-installed Go.
-          # skip-go-installation: true
 
           # Optional: if set to true then the action don't cache or restore ~/go/pkg.
           # skip-pkg-cache: true
@@ -92,6 +90,7 @@ jobs:
     name: lint
     runs-on: ${{ matrix.os }}
     steps:
+      - uses: actions/setup-go@v2
       - uses: actions/checkout@v2
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v2
@@ -133,7 +132,6 @@ The action was implemented with performance in mind:
 
 For example, in a repository of [golangci-lint](https://github.com/golangci/golangci-lint) running this action without the cache takes 50s, but with cache takes 14s:
   * in parallel:
-    * 13s to download Go
     * 4s to restore 50 MB of cache
     * 1s to find and install `golangci-lint`
   * 1s to run `golangci-lint` (it takes 35s without cache)
@@ -153,7 +151,6 @@ Inside our action we perform 3 steps:
   * restore [cache](https://github.com/actions/cache) of previous analyzes
   * fetch [action config](https://github.com/golangci/golangci-lint/blob/master/assets/github-action-config.json) and find the latest `golangci-lint` patch version
     for needed version (users of this action can specify only minor version of `golangci-lint`). After that install [golangci-lint](https://github.com/golangci/golangci-lint) using [@actions/tool-cache](https://github.com/actions/toolkit/tree/master/packages/tool-cache)
-  * install the latest Go 1.x version using [@actions/setup-go](https://github.com/actions/setup-go)
 2. Run `golangci-lint` with specified by user `args`
 3. Save cache for later builds
 

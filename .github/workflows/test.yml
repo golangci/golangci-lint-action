@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
       - run: |
           npm install
           npm run all
@@ -33,6 +34,7 @@ jobs:
       pull-requests: read
     steps:
       - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
       - uses: ./
         with:
           version: ${{ matrix.version }}
@@ -51,6 +53,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
       - uses: ./
         with:
           working-directory: sample-go-mod

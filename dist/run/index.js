@@ -65066,6 +65066,8 @@ function buildCacheKeys() {
 }
 function restoreCache() {
     return __awaiter(this, void 0, void 0, function* () {
+        if (core.getInput(`skip-cache`, { required: true }).trim() == "true")
+            return;
         if (!utils.isValidEvent()) {
             utils.logWarning(`Event Validation Error: The event type ${process.env[constants_1.Events.Key]} is not supported because it's not tied to a branch or tag ref.`);
             return;
@@ -65104,6 +65106,8 @@ function restoreCache() {
 exports.restoreCache = restoreCache;
 function saveCache() {
     return __awaiter(this, void 0, void 0, function* () {
+        if (core.getInput(`skip-cache`, { required: true }).trim() == "true")
+            return;
         // Validate inputs, this can cause task failure
         if (!utils.isValidEvent()) {
             utils.logWarning(`Event Validation Error: The event type ${process.env[constants_1.Events.Key]} is not supported because it's not tied to a branch or tag ref.`);

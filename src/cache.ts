@@ -72,6 +72,8 @@ async function buildCacheKeys(): Promise<string[]> {
 }
 
 export async function restoreCache(): Promise<void> {
+  if (core.getInput(`skip-cache`, { required: true }).trim() == "true") return
+
   if (!utils.isValidEvent()) {
     utils.logWarning(
       `Event Validation Error: The event type ${process.env[Events.Key]} is not supported because it's not tied to a branch or tag ref.`
@@ -112,6 +114,8 @@ export async function restoreCache(): Promise<void> {
 }
 
 export async function saveCache(): Promise<void> {
+  if (core.getInput(`skip-cache`, { required: true }).trim() == "true") return
+
   // Validate inputs, this can cause task failure
   if (!utils.isValidEvent()) {
     utils.logWarning(

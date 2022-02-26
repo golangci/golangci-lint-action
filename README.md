@@ -55,6 +55,10 @@ jobs:
           # Optional: show only new issues if it's a pull request. The default value is `false`.
           # only-new-issues: true
 
+          # Optional: if set to true then the all caching functionality will be complete disabled,
+          #           takes precedence over all other caching options.
+          # skip-cache: true
+
           # Optional: if set to true then the action don't cache or restore ~/go/pkg.
           # skip-pkg-cache: true
 

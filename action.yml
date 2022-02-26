@@ -20,6 +20,12 @@ inputs:
     description: "if set to true and the action runs on a pull request - the action outputs only newly found issues"
     default: false
     required: true
+  skip-cache:
+    description: |
+      if set to true then the all caching functionality will be complete disabled,
+      takes precedence over all other caching options.
+    default: false
+    required: true
   skip-pkg-cache:
     description: "if set to true then the action doesn't cache or restore ~/go/pkg."
     default: false

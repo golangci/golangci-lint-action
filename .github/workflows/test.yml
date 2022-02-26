@@ -11,12 +11,31 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - uses: actions/setup-go@v2
       - run: |
           npm install
           npm run all
 
+      # Update dist files if there is label dependencies
+      - name: Update dist files
+        if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'dependencies')
+        run: |
+          if [[ -z $(git status -s) ]]
+          then
+            echo "No change is required"
+          else
+            echo "Updating dist directory"
+            git config --local user.name "dependabot[bot]"
+            git config --local user.email "49699333+dependabot[bot]@users.noreply.github.com"
+            git add --update
+            git commit --message="Update dist files"
+            git push
+          fi
+
+      # Fail the build if there is dirty change
+      - run: git diff --exit-code
+
   test: # make sure the action works on a clean machine without building
+    needs: [ build ]
     strategy:
       matrix:
         os:
@@ -42,6 +61,7 @@ jobs:
           only-new-issues: true
 
   test-go-mod-version:
+    needs: [ build ]
     strategy:
       matrix:
         os:

@@ -59,6 +59,15 @@ function checkKey(key) {
     }
 }
 /**
+ * isFeatureAvailable to check the presence of Actions cache service
+ *
+ * @returns boolean return true if Actions cache service feature is available, otherwise false
+ */
+function isFeatureAvailable() {
+    return !!process.env['ACTIONS_CACHE_URL'];
+}
+exports.isFeatureAvailable = isFeatureAvailable;
+/**
  * Restores cache from keys
  *
  * @param paths a list of file paths to restore from the cache
@@ -208,10 +217,7 @@ const options_1 = __nccwpck_require__(6215);
 const requestUtils_1 = __nccwpck_require__(3981);
 const versionSalt = '1.0';
 function getCacheApiUrl(resource) {
-    // Ideally we just use ACTIONS_CACHE_URL
-    const baseUrl = (process.env['ACTIONS_CACHE_URL'] ||
-        process.env['ACTIONS_RUNTIME_URL'] ||
-        '').replace('pipelines', 'artifactcache');
+    const baseUrl = process.env['ACTIONS_CACHE_URL'] || '';
     if (!baseUrl) {
         throw new Error('Cache Service Url not found, unable to restore cache.');
     }

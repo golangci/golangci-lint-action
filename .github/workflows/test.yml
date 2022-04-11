@@ -53,7 +53,7 @@ jobs:
       pull-requests: read
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v3
       - uses: ./
         with:
           version: ${{ matrix.version }}
@@ -73,7 +73,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v3
       - uses: ./
         with:
           working-directory: sample-go-mod

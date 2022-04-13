@@ -9,7 +9,7 @@ The action runs [golangci-lint](https://github.com/golangci/golangci-lint) and r
 
 ## Compatibility
 
-* `v3.0.0+` requires explicit setup-go installation step prior to using this action: `uses: actions/setup-go@v2`.  
+* `v3.0.0+` requires explicit setup-go installation step prior to using this action: `uses: actions/setup-go@v3`.
   The `skip-go-installation` option has been removed.
 * `v2.0.0+` works with `golangci-lint` version >= `v1.28.3`
 * `v1.2.2` is deprecated due to we forgot to change the minimum version of `golangci-lint` to `v1.28.3` ([issue](https://github.com/golangci/golangci-lint-action/issues/39))
@@ -38,10 +38,10 @@ jobs:
     name: lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-go@v2
-      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v3
+      - uses: actions/checkout@v3
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v2
+        uses: golangci/golangci-lint-action@v3
         with:
           # Optional: version of golangci-lint to use in form of v1.2 or v1.2.3 or `latest` to use the latest version
           version: v1.29
@@ -96,10 +96,10 @@ jobs:
     name: lint
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/setup-go@v2
-      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v3
+      - uses: actions/checkout@v3
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v2
+        uses: golangci/golangci-lint-action@v3
         with:
           # Required: the version of golangci-lint is required and must be specified without patch version: we always use the latest patch version.
           version: v1.29

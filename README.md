@@ -39,6 +39,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/setup-go@v3
+        with:
+          go-version: 1.15
       - uses: actions/checkout@v3
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v3
@@ -91,12 +93,14 @@ jobs:
   golangci:
     strategy:
       matrix:
-        go-version: [1.15.x]
+        go: [1.15]
         os: [macos-latest, windows-latest]
     name: lint
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/setup-go@v3
+        with:
+          go-version: ${{ matrix.go }}
       - uses: actions/checkout@v3
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v3

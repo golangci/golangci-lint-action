@@ -66447,11 +66447,9 @@ const getIntervalKey = (invalidationIntervalDays) => {
 function buildCacheKeys() {
     return __awaiter(this, void 0, void 0, function* () {
         const keys = [];
-        let cacheKey = `golangci-lint.cache-`;
-        keys.push(cacheKey);
         // Periodically invalidate a cache because a new code being added.
         // TODO: configure it via inputs.
-        cacheKey += `${getIntervalKey(7)}-`;
+        let cacheKey = `golangci-lint.cache-${getIntervalKey(7)}-`;
         keys.push(cacheKey);
         if (yield pathExists(`go.mod`)) {
             // Add checksum to key to invalidate a cache when dependencies change.

@@ -15,9 +15,9 @@ jobs:
           npm install
           npm run all
 
-      # Update dist files if there is label dependencies
+      # Update dist files if there is label dependencies or pull request' author is dependabot[bot] (id = 49699333)
       - name: Update dist files
-        if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'dependencies')
+        if: github.event_name == 'pull_request' && (github.event.pull_request.user.id == 49699333 || contains(github.event.pull_request.labels.*.name, 'dependencies'))
         run: |
           if [[ -z $(git status -s) ]]
           then

@@ -68277,7 +68277,8 @@ function runLint(lintPath, patchPath) {
         if (userArgNames.has(`out-format`)) {
             throw new Error(`please, don't change out-format for golangci-lint: it can be broken in a future`);
         }
-        addedArgs.push(`--out-format=github-actions`);
+        const outputFile = core.getInput(`output-file`, { required: false }).trim();
+        addedArgs.push(`--out-format=github-actions${outputFile ? "," + outputFile : ""}`);
         if (patchPath) {
             if (userArgNames.has(`new`) || userArgNames.has(`new-from-rev`) || userArgNames.has(`new-from-patch`)) {
                 throw new Error(`please, don't specify manually --new* args when requesting only new issues`);

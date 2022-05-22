@@ -132,7 +132,7 @@ async function runLint(lintPath: string, patchPath: string): Promise<void> {
   }
 
   const outputFile = core.getInput(`output-file`, { required: false }).trim()
-  addedArgs.push(`--out-format=github-actions${outputFile ? ',' + outputFile : ''}`)
+  addedArgs.push(`--out-format=github-actions${outputFile ? "," + outputFile : ""}`)
 
   if (patchPath) {
     if (userArgNames.has(`new`) || userArgNames.has(`new-from-rev`) || userArgNames.has(`new-from-patch`)) {

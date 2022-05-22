@@ -20,6 +20,9 @@ inputs:
     description: "if set to true and the action runs on a pull request - the action outputs only newly found issues"
     default: false
     required: true
+  output-file:
+    description: "render results of golangci-lint additionally into a file; syntax: <format>:<file_path> (see also https://golangci-lint.run/usage/configuration/#output-configuration)"
+    required: false
   skip-cache:
     description: |
       if set to true then the all caching functionality will be complete disabled,

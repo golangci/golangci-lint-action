@@ -57,6 +57,9 @@ jobs:
           # Optional: show only new issues if it's a pull request. The default value is `false`.
           # only-new-issues: true
 
+          # Optional: render results of golangci-lint additionally into a file; syntax: <format>:<file_path> (see also https://golangci-lint.run/usage/configuration/#output-configuration)
+          # output-file: checkstyle:golangci_lint.xml
+
           # Optional: if set to true then the all caching functionality will be complete disabled,
           #           takes precedence over all other caching options.
           # skip-cache: true
@@ -115,6 +118,9 @@ jobs:
 
           # Optional: show only new issues if it's a pull request. The default value is `false`.
           # only-new-issues: true
+
+          # Optional: render results of golangci-lint additionally into a file; syntax: <format>:<file_path> (see also https://golangci-lint.run/usage/configuration/#output-configuration)
+          # output-file: checkstyle:golangci_lint.xml
 ```
 
 You will also likely need to add the following `.gitattributes` file to ensure that line endings for windows builds are properly formatted:

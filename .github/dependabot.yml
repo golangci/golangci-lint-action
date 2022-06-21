@@ -4,11 +4,7 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
-    reviewers:
-      - "golangci/team"
   - package-ecosystem: npm
     directory: "/"
     schedule:
       interval: weekly
-    reviewers:
-      - "golangci/team"

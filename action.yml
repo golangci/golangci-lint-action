@@ -15,25 +15,25 @@ inputs:
   github-token:
     description: "the token is used for fetching patch of a pull request to show only new issues"
     default: ${{ github.token }}
-    required: true
+    required: false
   only-new-issues:
     description: "if set to true and the action runs on a pull request - the action outputs only newly found issues"
     default: false
-    required: true
+    required: false
   skip-cache:
     description: |
       if set to true then the all caching functionality will be complete disabled,
       takes precedence over all other caching options.
     default: false
-    required: true
+    required: false
   skip-pkg-cache:
     description: "if set to true then the action doesn't cache or restore ~/go/pkg."
     default: false
-    required: true
+    required: false
   skip-build-cache:
     description: "if set to true then the action doesn't cache or restore ~/.cache/go-build."
     default: false
-    required: true
+    required: false
 runs:
   using: "node16"
   main: "dist/run/index.js"

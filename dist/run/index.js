@@ -67782,17 +67782,42 @@ function fetchPatch() {
             return ``;
         }
         const ctx = github.context;
-        if (ctx.eventName !== `pull_request`) {
-            core.info(`Not fetching patch for showing only new issues because it's not a pull request context: event name is ${ctx.eventName}`);
+        let patch;
+        if (ctx.eventName === `pull_request`) {
+            patch = yield patchFromPR(ctx);
+        }
+        else if (ctx.eventName === `push`) {
+            patch = yield patchFromPush(ctx);
+        }
+        else {
+            core.info(`Not fetching patch for showing only new issues because it's not a pull request or push context: event name is ${ctx.eventName}`);
             return ``;
         }
+        if (!patch) {
+            core.info(`Not using patch for showing only new issues because it's empty`);
+            return ``;
+        }
+        try {
+            const tempDir = yield createTempDir();
+            const patchPath = path.join(tempDir, "pull.patch");
+            core.info(`Writing patch to ${patchPath}`);
+            yield writeFile(patchPath, patch);
+            return patchPath;
+        }
+        catch (err) {
+            console.warn(`failed to save pull request patch:`, err);
+            return ``; // don't fail the action, but analyze without patch
+        }
+    });
+}
+function patchFromPR(ctx) {
+    return __awaiter(this, void 0, void 0, function* () {
         const pull = ctx.payload.pull_request;
         if (!pull) {
             core.warning(`No pull request in context`);
             return ``;
         }
         const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }));
-        let patch;
         try {
             const patchResp = yield octokit.rest.pulls.get({
                 owner: ctx.repo.owner,
@@ -67807,21 +67832,45 @@ function fetchPatch() {
                 return ``; // don't fail the action, but analyze without patch
             }
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            patch = patchResp.data;
+            return patchResp.data;
         }
         catch (err) {
             console.warn(`failed to fetch pull request patch:`, err);
             return ``; // don't fail the action, but analyze without patch
         }
+    });
+}
+function patchFromPush(ctx) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }));
         try {
-            const tempDir = yield createTempDir();
-            const patchPath = path.join(tempDir, "pull.patch");
-            core.info(`Writing patch to ${patchPath}`);
-            yield writeFile(patchPath, patch);
-            return patchPath;
+            const repoResp = yield octokit.rest.repos.get({
+                owner: ctx.repo.owner,
+                repo: ctx.repo.repo,
+            });
+            if (repoResp.status !== 200) {
+                core.warning(`failed to fetch repo: response status is ${repoResp.status}`);
+                return ``;
+            }
+            const defaultBranch = repoResp.data.default_branch;
+            const patchResp = yield octokit.rest.repos.compareCommits({
+                owner: ctx.repo.owner,
+                repo: ctx.repo.repo,
+                base: defaultBranch,
+                head: ctx.sha,
+                mediaType: {
+                    format: `diff`,
+                }
+            });
+            if (patchResp.status !== 200) {
+                core.warning(`failed to fetch pull request patch: response status is ${patchResp.status}`);
+                return ``; // don't fail the action, but analyze without patch
+            }
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            return patchResp.data;
         }
         catch (err) {
-            console.warn(`failed to save pull request patch:`, err);
+            console.warn(`failed to fetch push patch:`, err);
             return ``; // don't fail the action, but analyze without patch
         }
     });

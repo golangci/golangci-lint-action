@@ -1,6 +1,6 @@
 import * as core from "@actions/core"
 import * as github from "@actions/github"
-import { Context } from '@actions/github/lib/context'
+import { Context } from "@actions/github/lib/context"
 import { exec, ExecOptions } from "child_process"
 import * as fs from "fs"
 import * as path from "path"
@@ -36,7 +36,9 @@ async function fetchPatch(): Promise<string> {
   } else if (ctx.eventName === `push`) {
     patch = await patchFromPush(ctx)
   } else {
-    core.info(`Not fetching patch for showing only new issues because it's not a pull request or push context: event name is ${ctx.eventName}`)
+    core.info(
+      `Not fetching patch for showing only new issues because it's not a pull request or push context: event name is ${ctx.eventName}`
+    )
     return ``
   }
 
@@ -104,7 +106,7 @@ async function patchFromPush(ctx: Context): Promise<string> {
       head: ctx.sha,
       mediaType: {
         format: `diff`,
-      }
+      },
     })
 
     if (patchResp.status !== 200) {

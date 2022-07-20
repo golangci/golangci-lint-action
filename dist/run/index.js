@@ -67856,7 +67856,7 @@ function patchFromPush(ctx) {
                 head: ctx.sha,
                 mediaType: {
                     format: `diff`,
-                }
+                },
             });
             if (patchResp.status !== 200) {
                 core.warning(`failed to fetch pull request patch: response status is ${patchResp.status}`);

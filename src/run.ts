@@ -40,11 +40,6 @@ async function fetchPatch(): Promise<string> {
     return ``
   }
 
-  if (!patch) {
-    core.info(`Not using patch for showing only new issues because it's empty`)
-    return ``
-  }
-
   try {
     const tempDir = await createTempDir()
     const patchPath = path.join(tempDir, "pull.patch")

@@ -67793,10 +67793,6 @@ function fetchPatch() {
             core.info(`Not fetching patch for showing only new issues because it's not a pull request or push context: event name is ${ctx.eventName}`);
             return ``;
         }
-        if (!patch) {
-            core.info(`Not using patch for showing only new issues because it's empty`);
-            return ``;
-        }
         try {
             const tempDir = yield createTempDir();
             const patchPath = path.join(tempDir, "pull.patch");

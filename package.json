@@ -36,7 +36,7 @@
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^5.35.1",
-    "@typescript-eslint/parser": "^5.35.1",
+    "@typescript-eslint/parser": "^5.36.1",
     "@vercel/ncc": "^0.34.0",
     "eslint": "^8.23.0",
     "eslint-config-prettier": "^8.5.0",

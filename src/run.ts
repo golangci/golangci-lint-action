@@ -109,6 +109,8 @@ const printOutput = (res: ExecRes): void => {
   }
 }
 
+const defaultTimeout = `5m`
+
 async function runLint(lintPath: string, patchPath: string): Promise<void> {
   const debug = core.getInput(`debug`)
   if (debug.split(`,`).includes(`cache`)) {
@@ -131,6 +133,9 @@ async function runLint(lintPath: string, patchPath: string): Promise<void> {
     throw new Error(`please, don't change out-format for golangci-lint: it can be broken in a future`)
   }
   addedArgs.push(`--out-format=github-actions`)
+  if (!userArgNames.has(`timeout`)) {
+    addedArgs.push(`--timeout=${defaultTimeout}`)
+  }
 
   if (patchPath) {
     if (userArgNames.has(`new`) || userArgNames.has(`new-from-rev`) || userArgNames.has(`new-from-patch`)) {

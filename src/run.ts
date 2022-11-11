@@ -24,7 +24,7 @@ async function fetchPatch(): Promise<string> {
   if (onlyNewIssues !== `false` && onlyNewIssues !== `true`) {
     throw new Error(`invalid value of "only-new-issues": "${onlyNewIssues}", expected "true" or "false"`)
   }
-  if (onlyNewIssues === `false`) {
+  if (onlyNewIssues === `true`) {
     return ``
   }
 

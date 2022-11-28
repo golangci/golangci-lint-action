@@ -30,6 +30,7 @@
     "@actions/github": "^5.1.1",
     "@actions/http-client": "^2.0.1",
     "@actions/tool-cache": "^2.0.1",
+    "@types/node": "^18.11.9",
     "@types/semver": "^7.3.13",
     "@types/tmp": "^0.2.3",
     "tmp": "^0.2.1"
@@ -44,6 +45,6 @@
     "eslint-plugin-prettier": "^4.2.1",
     "eslint-plugin-simple-import-sort": "^8.0.0",
     "prettier": "^2.8.0",
-    "typescript": "^4.8.4"
+    "typescript": "^4.9.3"
   }
 }

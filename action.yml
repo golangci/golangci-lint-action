@@ -34,6 +34,10 @@ inputs:
     description: "if set to true then the action doesn't cache or restore ~/.cache/go-build."
     default: false
     required: false
+  allow-extra-out-format-args:
+    description: "if set to true then the action allows additional --out-format args (default of --out-format=github-actions remains)"
+    default: false
+    required: false
 runs:
   using: "node16"
   main: "dist/run/index.js"

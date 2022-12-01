@@ -117,6 +117,7 @@ async function runLint(lintPath: string, patchPath: string): Promise<void> {
   }
 
   const userArgs = core.getInput(`args`)
+  const allowExtraOutFormatArgs = core.getInput(`allow-extra-out-format-args`)
   const addedArgs: string[] = []
 
   const userArgNames = new Set<string>(
@@ -127,8 +128,9 @@ async function runLint(lintPath: string, patchPath: string): Promise<void> {
       .filter((arg) => arg.startsWith(`-`))
       .map((arg) => arg.replace(/^-+/, ``))
   )
-  if (userArgNames.has(`out-format`)) {
-    throw new Error(`please, don't change out-format for golangci-lint: it can be broken in a future`)
+  if (userArgNames.has(`out-format`) && !allowExtraOutFormatArgs) {
+    throw new Error(`please, don't change out-format for golangci-lint: it can be broken in a
+      future version (set 'allow-extra-out-format-args' input to true to override)`)
   }
   addedArgs.push(`--out-format=github-actions`)
 

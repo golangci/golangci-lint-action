@@ -66574,6 +66574,7 @@ function runLint(lintPath, patchPath) {
             printOutput(res);
         }
         const userArgs = core.getInput(`args`);
+        const allowExtraOutFormatArgs = core.getInput(`allow-extra-out-format-args`);
         const addedArgs = [];
         const userArgNames = new Set(userArgs
             .trim()
@@ -66581,8 +66582,9 @@ function runLint(lintPath, patchPath) {
             .map((arg) => arg.split(`=`)[0])
             .filter((arg) => arg.startsWith(`-`))
             .map((arg) => arg.replace(/^-+/, ``)));
-        if (userArgNames.has(`out-format`)) {
-            throw new Error(`please, don't change out-format for golangci-lint: it can be broken in a future`);
+        if (userArgNames.has(`out-format`) && !allowExtraOutFormatArgs) {
+            throw new Error(`please, don't change out-format for golangci-lint: it can be broken in a
+      future version (set 'allow-extra-out-format-args' input to true to override)`);
         }
         addedArgs.push(`--out-format=github-actions`);
         if (patchPath) {

@@ -56,10 +56,14 @@ async function buildCacheKeys(): Promise<string[]> {
   // TODO: configure it via inputs.
   let cacheKey = `golangci-lint.cache-${getIntervalKey(7)}-`
   keys.push(cacheKey)
-
-  if (await pathExists(`go.mod`)) {
+  // Get working directory from input
+  const workingDirectory = core.getInput(`working-directory`)
+  // create path to go.mod prepending the workingDirectory if it exists
+  const goModPath = path.join(workingDirectory, `go.mod`)
+  core.info(`Checking for go.mod: ${goModPath}`)
+  if (await pathExists(goModPath)) {
     // Add checksum to key to invalidate a cache when dependencies change.
-    cacheKey += await checksumFile(`sha1`, `go.mod`)
+    cacheKey += await checksumFile(`sha1`, goModPath)
   } else {
     cacheKey += `nogomod`
   }

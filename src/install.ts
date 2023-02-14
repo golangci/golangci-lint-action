@@ -35,7 +35,7 @@ const getAssetURL = (versionConfig: VersionConfig): string => {
 export async function installLint(versionConfig: VersionConfig): Promise<string> {
   core.info(`Installing golangci-lint ${versionConfig.TargetVersion}...`)
   const startedAt = Date.now()
-  const assetURL = = core.getInput('asset-url') ?? getAssetURL(versionConfig)
+  const assetURL = = core.getInput('asset-url') || getAssetURL(versionConfig)
   core.info(`Downloading ${assetURL} ...`)
   const archivePath = await tc.downloadTool(assetURL)
   let extractedDir = ""

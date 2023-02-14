@@ -5,6 +5,9 @@ inputs:
   version:
     description: "version of golangci-lint to use in form of v1.2 or v1.2.3 or `latest` to use the latest version"
     required: false
+  asset-url:
+    description: "custom URL for a golangci-lint archive to download and install. Must match the OS/arch of the build agent."
+    required: false
   args:
     description: "golangci-lint command line arguments"
     default: ""

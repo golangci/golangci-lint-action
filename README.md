@@ -48,6 +48,9 @@ jobs:
           # Optional: version of golangci-lint to use in form of v1.2 or v1.2.3 or `latest` to use the latest version
           version: v1.29
 
+          # Optional: URL of a custom golangci-lint build to use. If not provided, an asset will be automatically chosen from the official repo.
+          asset-url: https://example.com/golangci-lint/release.tgz
+
           # Optional: working directory, useful for monorepos
           # working-directory: somedir
 

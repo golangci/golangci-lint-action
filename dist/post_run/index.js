@@ -67685,7 +67685,6 @@ function installLint(versionConfig) {
     return __awaiter(this, void 0, void 0, function* () {
         core.info(`Installing golangci-lint ${versionConfig.TargetVersion}...`);
         const startedAt = Date.now();
-        core.info(`asset-url: ${core.getInput('asset-url')}`);
         const assetURL = core.getInput('asset-url') || getAssetURL(versionConfig);
         core.info(`Downloading ${assetURL} ...`);
         const archivePath = yield tc.downloadTool(assetURL);

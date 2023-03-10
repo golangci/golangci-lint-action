@@ -54,10 +54,16 @@ async function buildCacheKeys(): Promise<string[]> {
   const keys = []
   // Periodically invalidate a cache because a new code being added.
   // TODO: configure it via inputs.
-  let cacheKey = `golangci-lint.cache-${getIntervalKey(7)}-`
-  keys.push(cacheKey)
+  let cacheKey = `golangci-lint.cache-`
   // Get working directory from input
   const workingDirectory = core.getInput(`working-directory`)
+  if (workingDirectory) {
+    cacheKey += `${workingDirectory}-`
+  }
+  cacheKey += `${getIntervalKey(7)}-`
+
+  keys.push(cacheKey)
+
   // create path to go.mod prepending the workingDirectory if it exists
   const goModPath = path.join(workingDirectory, `go.mod`)
   core.info(`Checking for go.mod: ${goModPath}`)

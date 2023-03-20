@@ -38,9 +38,10 @@ jobs:
     name: lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-go@v3
+      - uses: actions/setup-go@v4
         with:
           go-version: '1.17'
+          cache: false
       - uses: actions/checkout@v3
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v3
@@ -98,10 +99,11 @@ jobs:
     name: lint
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/setup-go@v3
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v4
         with:
           go-version: ${{ matrix.go }}
-      - uses: actions/checkout@v3
+          cache: false
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v3
         with:

@@ -60,7 +60,9 @@ jobs:
       pull-requests: read
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/setup-go@v3
+      - uses: actions/setup-go@v4
+        with:
+          cache: false # setup-go v4 caches by default
       - uses: ./
         with:
           version: ${{ matrix.version }}
@@ -80,7 +82,9 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/setup-go@v3
+      - uses: actions/setup-go@v4
+        with:
+          cache: false # setup-go v4 caches by default
       - uses: ./
         with:
           working-directory: sample-go-mod

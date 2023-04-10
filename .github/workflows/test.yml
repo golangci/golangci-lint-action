@@ -52,8 +52,8 @@ jobs:
         version:
           - ""
           - "latest"
-          - "v1.49"
-          - "v1.49.0"
+          - "v1.51"
+          - "v1.51.2"
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read

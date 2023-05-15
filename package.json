@@ -31,7 +31,7 @@
     "@actions/http-client": "^2.1.0",
     "@actions/tool-cache": "^2.0.1",
     "@types/node": "^20.1.4",
-    "@types/semver": "^7.3.13",
+    "@types/semver": "^7.5.0",
     "@types/tmp": "^0.2.3",
     "tmp": "^0.2.1"
   },

@@ -52,8 +52,11 @@ jobs:
           # Optional: working directory, useful for monorepos
           # working-directory: somedir
 
-          # Optional: golangci-lint command line arguments. Note that the `.golangci.yml` file should be in the root of the repository.
-          # args: --config=.golangci.yml --issues-exit-code=0
+          # Optional: golangci-lint command line arguments.
+          # 
+          # Note: by default the `.golangci.yml` file should be at the root of the repository.
+          # The location of the configuration file can be changed by using `--config=`
+          # args: --config=/my/path/.golangci.yml --issues-exit-code=0
 
           # Optional: show only new issues if it's a pull request. The default value is `false`.
           # only-new-issues: true

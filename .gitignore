@@ -97,3 +97,6 @@ typings/
 
 # Text editor files
 .vscode/
+
+# IntelliJ/WebStorm files
+.idea

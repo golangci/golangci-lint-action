@@ -41,13 +41,13 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v4
         with:
-          go-version: '1.17'
+          go-version: '1.20'
           cache: false
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v3
         with:
-          # Optional: version of golangci-lint to use in form of v1.2 or v1.2.3 or `latest` to use the latest version
-          version: v1.29
+          # Require: version of golangci-lint to use in form of v1.2 or v1.2.3 or `latest` to use the latest version
+          version: v1.53
 
           # Optional: working directory, useful for monorepos
           # working-directory: somedir
@@ -89,15 +89,17 @@ on:
       - master
       - main
   pull_request:
+
 permissions:
   contents: read
   # Optional: allow read access to pull request. Use with `only-new-issues` option.
   # pull-requests: read
+
 jobs:
   golangci:
     strategy:
       matrix:
-        go: [1.17]
+        go: ['1.20']
         os: [macos-latest, windows-latest]
     name: lint
     runs-on: ${{ matrix.os }}
@@ -110,8 +112,9 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v3
         with:
-          # Required: the version of golangci-lint is required and must be specified without patch version: we always use the latest patch version.
-          version: v1.29
+          # Require: version of golangci-lint to use in form of v1.2 or v1.2.3 or `latest` to use the latest version
+          version: v1.53
+
           # Optional: working directory, useful for monorepos
           # working-directory: somedir
 

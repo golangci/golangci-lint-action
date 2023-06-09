@@ -58,6 +58,9 @@ jobs:
           # The location of the configuration file can be changed by using `--config=`
           # args: --config=/my/path/.golangci.yml --issues-exit-code=0
 
+          # Optional: if set to true then the action allows additional --out-format args (default of --out-format=github-actions remains)
+          # allow-extra-out-format-args: true
+
           # Optional: show only new issues if it's a pull request. The default value is `false`.
           # only-new-issues: true
 
@@ -120,6 +123,9 @@ jobs:
           # Note: by default the `.golangci.yml` file should be at the root of the repository.
           # The location of the configuration file can be changed by using `--config=`
           # args: --config=/my/path/.golangci.yml --issues-exit-code=0
+
+          # Optional: if set to true then the action allows additional --out-format args (default of --out-format=github-actions remains)
+          # allow-extra-out-format-args: true
 
           # Optional: show only new issues if it's a pull request. The default value is `false`.
           # only-new-issues: true

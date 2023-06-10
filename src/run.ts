@@ -7,7 +7,7 @@ import { dir } from "tmp"
 import { promisify } from "util"
 
 import { restoreCache, saveCache } from "./cache"
-import { installLint } from "./install"
+import { installLint, InstallMode } from "./install"
 import { findLintVersion } from "./version"
 
 const execShellCommand = promisify(exec)
@@ -15,8 +15,10 @@ const writeFile = promisify(fs.writeFile)
 const createTempDir = promisify(dir)
 
 async function prepareLint(): Promise<string> {
-  const versionConfig = await findLintVersion()
-  return await installLint(versionConfig)
+  const mode = core.getInput("install-mode").toLowerCase()
+  const versionConfig = await findLintVersion(<InstallMode>mode)
+
+  return await installLint(versionConfig, <InstallMode>mode)
 }
 
 async function fetchPatch(): Promise<string> {
@@ -83,15 +85,15 @@ async function prepareEnv(): Promise<Env> {
   const startedAt = Date.now()
 
   // Prepare cache, lint and go in parallel.
-  const restoreCachePromise = restoreCache()
+  await restoreCache()
   const prepareLintPromise = prepareLint()
   const patchPromise = fetchPatch()
 
   const lintPath = await prepareLintPromise
-  await restoreCachePromise
   const patchPath = await patchPromise
 
   core.info(`Prepared env in ${Date.now() - startedAt}ms`)
+
   return { lintPath, patchPath }
 }
 
@@ -159,8 +161,10 @@ async function runLint(lintPath: string, patchPath: string): Promise<void> {
     cmdArgs.cwd = path.resolve(workingDirectory)
   }
 
-  const cmd = `${lintPath} run ${addedArgs.join(` `)} ${userArgs}`.trimRight()
+  const cmd = `${lintPath} run ${addedArgs.join(` `)} ${userArgs}`.trimEnd()
+
   core.info(`Running [${cmd}] in [${cmdArgs.cwd || ``}] ...`)
+
   const startedAt = Date.now()
   try {
     const res = await execShellCommand(cmd, cmdArgs)

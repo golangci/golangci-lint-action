@@ -70,6 +70,9 @@ jobs:
 
           # Optional: if set to true then the action don't cache or restore ~/.cache/go-build.
           # skip-build-cache: true
+          
+          # Optional:The mode to install golangci-lint. It can be 'binary' or 'goinstall'.
+          # install-mode: "goinstall"
 ```
 
 We recommend running this action in a job separate from other jobs (`go test`, etc)
@@ -126,6 +129,9 @@ jobs:
 
           # Optional: show only new issues if it's a pull request. The default value is `false`.
           # only-new-issues: true
+
+          # Optional:The mode to install golangci-lint. It can be 'binary' or 'goinstall'.
+          # install-mode: "goinstall"
 ```
 
 You will also likely need to add the following `.gitattributes` file to ensure that line endings for windows builds are properly formatted:

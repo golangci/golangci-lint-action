@@ -3,6 +3,8 @@ import * as httpm from "@actions/http-client"
 import * as fs from "fs"
 import path from "path"
 
+import { InstallMode } from "./install"
+
 // TODO: make a class
 export type Version = {
   major: number
@@ -17,6 +19,7 @@ const parseVersion = (s: string): Version => {
   if (s == "latest" || s == "") {
     return null
   }
+
   const match = s.match(versionRe)
   if (!match) {
     throw new Error(`invalid version string '${s}', expected format v1.2 or v1.2.3`)
@@ -61,6 +64,7 @@ const isLessVersion = (a: Version, b: Version): boolean => {
 const getRequestedLintVersion = (): Version => {
   let requestedLintVersion = core.getInput(`version`)
   const workingDirectory = core.getInput(`working-directory`)
+
   let goMod = "go.mod"
   if (workingDirectory) {
     goMod = path.join(workingDirectory, goMod)
@@ -79,6 +83,7 @@ const getRequestedLintVersion = (): Version => {
   if (parsedRequestedLintVersion == null) {
     return null
   }
+
   if (isLessVersion(parsedRequestedLintVersion, minVersion)) {
     throw new Error(
       `requested golangci-lint version '${requestedLintVersion}' isn't supported: we support only ${stringifyVersion(
@@ -86,6 +91,7 @@ const getRequestedLintVersion = (): Version => {
       )} and later versions`
     )
   }
+
   return parsedRequestedLintVersion
 }
 
@@ -120,9 +126,16 @@ const getConfig = async (): Promise<Config> => {
   }
 }
 
-export async function findLintVersion(): Promise<VersionConfig> {
+export async function findLintVersion(mode: InstallMode): Promise<VersionConfig> {
   core.info(`Finding needed golangci-lint version...`)
+
+  if (mode == InstallMode.GoInstall) {
+    const v: string = core.getInput(`version`)
+    return { TargetVersion: v ? v : "latest", AssetURL: "github.com/golangci/golangci-lint" }
+  }
+
   const reqLintVersion = getRequestedLintVersion()
+
   // if the patched version is passed, just use it
   if (reqLintVersion?.major !== null && reqLintVersion?.minor != null && reqLintVersion?.patch !== null) {
     return new Promise((resolve) => {
@@ -133,6 +146,7 @@ export async function findLintVersion(): Promise<VersionConfig> {
       })
     })
   }
+
   const startedAt = Date.now()
 
   const config = await getConfig()
@@ -155,5 +169,6 @@ export async function findLintVersion(): Promise<VersionConfig> {
       Date.now() - startedAt
     }ms`
   )
+
   return versionConfig
 }

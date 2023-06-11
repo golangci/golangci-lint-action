@@ -23,16 +23,16 @@ Add `.github/workflows/golangci-lint.yml` with the following contents:
 name: golangci-lint
 on:
   push:
-    tags:
-      - v*
     branches:
       - master
       - main
   pull_request:
+
 permissions:
   contents: read
   # Optional: allow read access to pull request. Use with `only-new-issues` option.
   # pull-requests: read
+
 jobs:
   golangci:
     name: lint
@@ -56,7 +56,7 @@ jobs:
           # 
           # Note: by default the `.golangci.yml` file should be at the root of the repository.
           # The location of the configuration file can be changed by using `--config=`
-          # args: --config=/my/path/.golangci.yml --issues-exit-code=0
+          # args: --timeout=30m --config=/my/path/.golangci.yml --issues-exit-code=0 
 
           # Optional: show only new issues if it's a pull request. The default value is `false`.
           # only-new-issues: true
@@ -83,8 +83,6 @@ If you need to run linters for specific operating systems, you will need to use 
 name: golangci-lint
 on:
   push:
-    tags:
-      - v*
     branches:
       - master
       - main
@@ -122,7 +120,7 @@ jobs:
           # 
           # Note: by default the `.golangci.yml` file should be at the root of the repository.
           # The location of the configuration file can be changed by using `--config=`
-          # args: --config=/my/path/.golangci.yml --issues-exit-code=0
+          # args: --timeout=30m --config=/my/path/.golangci.yml --issues-exit-code=0
 
           # Optional: show only new issues if it's a pull request. The default value is `false`.
           # only-new-issues: true

@@ -66581,12 +66581,12 @@ function runLint(lintPath, patchPath) {
             .filter((arg) => arg.startsWith(`-`))
             .map((arg) => arg.replace(/^-+/, ``))
             .map((arg) => arg.split(/=(.*)/, 2))
-            .map(([key, value]) => [key, value !== null && value !== void 0 ? value : '']);
+            .map(([key, value]) => [key, value !== null && value !== void 0 ? value : ""]);
         const userArgsMap = new Map(userArgsList);
         const userArgNames = new Set(userArgsList.map(([key, value]) => key));
-        const formats = userArgsMap.get('out-format');
+        const formats = userArgsMap.get("out-format");
         if (formats) {
-            if (formats.includes('github-actions')) {
+            if (formats.includes("github-actions")) {
                 addedArgs.push(`--out-format=${formats}`);
             }
             else {

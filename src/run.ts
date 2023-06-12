@@ -125,15 +125,15 @@ async function runLint(lintPath: string, patchPath: string): Promise<void> {
     .filter((arg) => arg.startsWith(`-`))
     .map((arg) => arg.replace(/^-+/, ``))
     .map((arg) => arg.split(/=(.*)/, 2))
-    .map<[string, string]>(([key, value]) => [key, value ?? ''])
-  
-  const userArgsMap = new Map<string, string>(userArgsList)
-  const userArgNames = new Set<string>(userArgsList.map(([key, value]) => key));
+    .map<[string, string]>(([key, value]) => [key, value ?? ""])
 
-  const formats = userArgsMap.get('out-format')
+  const userArgsMap = new Map<string, string>(userArgsList)
+  const userArgNames = new Set<string>(userArgsList.map(([key, value]) => key))
+
+  const formats = userArgsMap.get("out-format")
   if (formats) {
-    if (formats.includes('github-actions')) {
-      addedArgs.push(`--out-format=${formats}`);
+    if (formats.includes("github-actions")) {
+      addedArgs.push(`--out-format=${formats}`)
     } else {
       addedArgs.push(`--out-format=github-actions,${formats}`)
     }

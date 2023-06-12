@@ -66637,7 +66637,7 @@ function runLint(lintPath, patchPath) {
             const res = yield execShellCommand(`${lintPath} cache status`);
             printOutput(res);
         }
-        const userArgs = core.getInput(`args`);
+        let userArgs = core.getInput(`args`);
         const addedArgs = [];
         const userArgsList = userArgs
             .trim()
@@ -66656,6 +66656,7 @@ function runLint(lintPath, patchPath) {
             .concat("github-actions")
             .join(",");
         addedArgs.push(`--out-format=${formats}`);
+        userArgs = userArgs.replace(/--out-format=\S*/gi, "").trim();
         if (patchPath) {
             if (userArgNames.has(`new`) || userArgNames.has(`new-from-rev`) || userArgNames.has(`new-from-patch`)) {
                 throw new Error(`please, don't specify manually --new* args when requesting only new issues`);

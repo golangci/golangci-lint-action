@@ -118,7 +118,7 @@ async function runLint(lintPath: string, patchPath: string): Promise<void> {
     printOutput(res)
   }
 
-  const userArgs = core.getInput(`args`)
+  let userArgs = core.getInput(`args`)
   const addedArgs: string[] = []
 
   const userArgsList = userArgs
@@ -141,6 +141,7 @@ async function runLint(lintPath: string, patchPath: string): Promise<void> {
     .join(",")
 
   addedArgs.push(`--out-format=${formats}`)
+  userArgs = userArgs.replace(/--out-format=\S*/gi, "").trim()
 
   if (patchPath) {
     if (userArgNames.has(`new`) || userArgNames.has(`new-from-rev`) || userArgNames.has(`new-from-patch`)) {

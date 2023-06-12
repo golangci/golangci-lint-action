@@ -21,21 +21,21 @@ inputs:
     required: false
   only-new-issues:
     description: "if set to true and the action runs on a pull request - the action outputs only newly found issues"
-    default: false
+    default: 'false'
     required: false
   skip-cache:
     description: |
       if set to true then the all caching functionality will be complete disabled,
       takes precedence over all other caching options.
-    default: false
+    default: 'false'
     required: false
   skip-pkg-cache:
     description: "if set to true then the action doesn't cache or restore ~/go/pkg."
-    default: false
+    default: 'false'
     required: false
   skip-build-cache:
     description: "if set to true then the action doesn't cache or restore ~/.cache/go-build."
-    default: false
+    default: 'false'
     required: false
   install-mode:
     description: "The mode to install golangci-lint. It can be 'binary' or 'goinstall'."

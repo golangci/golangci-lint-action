@@ -66639,16 +66639,23 @@ function runLint(lintPath, patchPath) {
         }
         const userArgs = core.getInput(`args`);
         const addedArgs = [];
-        const userArgNames = new Set(userArgs
+        const userArgsList = userArgs
             .trim()
             .split(/\s+/)
-            .map((arg) => arg.split(`=`)[0])
             .filter((arg) => arg.startsWith(`-`))
-            .map((arg) => arg.replace(/^-+/, ``)));
-        if (userArgNames.has(`out-format`)) {
-            throw new Error(`please, don't change out-format for golangci-lint: it can be broken in a future`);
-        }
-        addedArgs.push(`--out-format=github-actions`);
+            .map((arg) => arg.replace(/^-+/, ``))
+            .map((arg) => arg.split(/=(.*)/, 2))
+            .map(([key, value]) => [key.toLowerCase(), value !== null && value !== void 0 ? value : ""]);
+        const userArgsMap = new Map(userArgsList);
+        const userArgNames = new Set(userArgsList.map(([key]) => key));
+        const formats = (userArgsMap.get("out-format") || "")
+            .trim()
+            .split(",")
+            .filter((f) => f.length > 0)
+            .filter((f) => !f.startsWith(`github-actions`))
+            .concat("github-actions")
+            .join(",");
+        addedArgs.push(`--out-format=${formats}`);
         if (patchPath) {
             if (userArgNames.has(`new`) || userArgNames.has(`new-from-rev`) || userArgNames.has(`new-from-patch`)) {
                 throw new Error(`please, don't specify manually --new* args when requesting only new issues`);

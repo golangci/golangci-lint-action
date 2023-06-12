@@ -66581,21 +66581,17 @@ function runLint(lintPath, patchPath) {
             .filter((arg) => arg.startsWith(`-`))
             .map((arg) => arg.replace(/^-+/, ``))
             .map((arg) => arg.split(/=(.*)/, 2))
-            .map(([key, value]) => [key, value !== null && value !== void 0 ? value : ""]);
+            .map(([key, value]) => [key.toLowerCase(), value !== null && value !== void 0 ? value : ""]);
         const userArgsMap = new Map(userArgsList);
-        const userArgNames = new Set(userArgsList.map(([key, value]) => key));
-        const formats = userArgsMap.get("out-format");
-        if (formats) {
-            if (formats.includes("github-actions")) {
-                addedArgs.push(`--out-format=${formats}`);
-            }
-            else {
-                addedArgs.push(`--out-format=github-actions,${formats}`);
-            }
-        }
-        else {
-            addedArgs.push(`--out-format=github-actions`);
-        }
+        const userArgNames = new Set(userArgsList.map(([key]) => key));
+        const formats = (userArgsMap.get("out-format") || "")
+            .trim()
+            .split(",")
+            .filter((f) => f.length > 0)
+            .filter((f) => !f.startsWith(`github-actions`))
+            .concat("github-actions")
+            .join(",");
+        addedArgs.push(`--out-format=${formats}`);
         if (patchPath) {
             if (userArgNames.has(`new`) || userArgNames.has(`new-from-rev`) || userArgNames.has(`new-from-patch`)) {
                 throw new Error(`please, don't specify manually --new* args when requesting only new issues`);

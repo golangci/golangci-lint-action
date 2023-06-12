@@ -125,21 +125,20 @@ async function runLint(lintPath: string, patchPath: string): Promise<void> {
     .filter((arg) => arg.startsWith(`-`))
     .map((arg) => arg.replace(/^-+/, ``))
     .map((arg) => arg.split(/=(.*)/, 2))
-    .map<[string, string]>(([key, value]) => [key, value ?? ""])
+    .map<[string, string]>(([key, value]) => [key.toLowerCase(), value ?? ""])
 
   const userArgsMap = new Map<string, string>(userArgsList)
-  const userArgNames = new Set<string>(userArgsList.map(([key, value]) => key))
+  const userArgNames = new Set<string>(userArgsList.map(([key]) => key))
 
-  const formats = userArgsMap.get("out-format")
-  if (formats) {
-    if (formats.includes("github-actions")) {
-      addedArgs.push(`--out-format=${formats}`)
-    } else {
-      addedArgs.push(`--out-format=github-actions,${formats}`)
-    }
-  } else {
-    addedArgs.push(`--out-format=github-actions`)
-  }
+  const formats = (userArgsMap.get("out-format") || "")
+    .trim()
+    .split(",")
+    .filter((f) => f.length > 0)
+    .filter((f) => !f.startsWith(`github-actions`))
+    .concat("github-actions")
+    .join(",")
+
+  addedArgs.push(`--out-format=${formats}`)
 
   if (patchPath) {
     if (userArgNames.has(`new`) || userArgNames.has(`new-from-rev`) || userArgNames.has(`new-from-patch`)) {

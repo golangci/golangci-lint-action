@@ -66312,18 +66312,18 @@ var Inputs;
     Inputs["Key"] = "key";
     Inputs["Path"] = "path";
     Inputs["RestoreKeys"] = "restore-keys";
-})(Inputs = exports.Inputs || (exports.Inputs = {}));
+})(Inputs || (exports.Inputs = Inputs = {}));
 var State;
 (function (State) {
     State["CachePrimaryKey"] = "CACHE_KEY";
     State["CacheMatchedKey"] = "CACHE_RESULT";
-})(State = exports.State || (exports.State = {}));
+})(State || (exports.State = State = {}));
 var Events;
 (function (Events) {
     Events["Key"] = "GITHUB_EVENT_NAME";
     Events["Push"] = "push";
     Events["PullRequest"] = "pull_request";
-})(Events = exports.Events || (exports.Events = {}));
+})(Events || (exports.Events = Events = {}));
 exports.RefKey = "GITHUB_REF";
 
 
@@ -66405,7 +66405,7 @@ var InstallMode;
 (function (InstallMode) {
     InstallMode["Binary"] = "binary";
     InstallMode["GoInstall"] = "goinstall";
-})(InstallMode = exports.InstallMode || (exports.InstallMode = {}));
+})(InstallMode || (exports.InstallMode = InstallMode = {}));
 const printOutput = (res) => {
     if (res.stdout) {
         core.info(res.stdout);

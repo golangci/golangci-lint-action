@@ -8,6 +8,7 @@ import { promisify } from "util"
 
 import { restoreCache, saveCache } from "./cache"
 import { installLint, InstallMode } from "./install"
+import { alterDiffFile } from "./utils/diffUtils"
 import { findLintVersion } from "./version"
 
 const execShellCommand = promisify(exec)
@@ -68,7 +69,7 @@ async function fetchPatch(): Promise<string> {
     const tempDir = await createTempDir()
     const patchPath = path.join(tempDir, "pull.patch")
     core.info(`Writing patch to ${patchPath}`)
-    await writeFile(patchPath, patch)
+    await writeFile(patchPath, alterDiffFile(patch))
     return patchPath
   } catch (err) {
     console.warn(`failed to save pull request patch:`, err)
@@ -157,10 +158,6 @@ async function runLint(lintPath: string, patchPath: string): Promise<void> {
   const workingDirectory = core.getInput(`working-directory`)
   const cmdArgs: ExecOptions = {}
   if (workingDirectory) {
-    if (patchPath) {
-      // TODO: make them compatible
-      throw new Error(`options working-directory and only-new-issues aren't compatible`)
-    }
     if (!fs.existsSync(workingDirectory) || !fs.lstatSync(workingDirectory).isDirectory()) {
       throw new Error(`working-directory (${workingDirectory}) was not a path`)
     }

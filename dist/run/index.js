@@ -66733,6 +66733,7 @@ const tmp_1 = __nccwpck_require__(8517);
 const util_1 = __nccwpck_require__(3837);
 const cache_1 = __nccwpck_require__(4810);
 const install_1 = __nccwpck_require__(1649);
+const diffUtils_1 = __nccwpck_require__(3617);
 const version_1 = __nccwpck_require__(1946);
 const execShellCommand = (0, util_1.promisify)(child_process_1.exec);
 const writeFile = (0, util_1.promisify)(fs.writeFile);
@@ -66789,7 +66790,7 @@ function fetchPatch() {
             const tempDir = yield createTempDir();
             const patchPath = path.join(tempDir, "pull.patch");
             core.info(`Writing patch to ${patchPath}`);
-            yield writeFile(patchPath, patch);
+            yield writeFile(patchPath, (0, diffUtils_1.alterDiffFile)(patch));
             return patchPath;
         }
         catch (err) {
@@ -66858,10 +66859,6 @@ function runLint(lintPath, patchPath) {
         const workingDirectory = core.getInput(`working-directory`);
         const cmdArgs = {};
         if (workingDirectory) {
-            if (patchPath) {
-                // TODO: make them compatible
-                throw new Error(`options working-directory and only-new-issues aren't compatible`);
-            }
             if (!fs.existsSync(workingDirectory) || !fs.lstatSync(workingDirectory).isDirectory()) {
                 throw new Error(`working-directory (${workingDirectory}) was not a path`);
             }
@@ -66985,6 +66982,88 @@ function isValidEvent() {
     return constants_1.RefKey in process.env && Boolean(process.env[constants_1.RefKey]);
 }
 exports.isValidEvent = isValidEvent;
+
+
+/***/ }),
+
+/***/ 3617:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.alterDiffFile = void 0;
+const core = __importStar(__nccwpck_require__(2186));
+const path = __importStar(__nccwpck_require__(1017));
+// If needed alter diff file to be compatible with working directory
+function alterDiffFile(diffFile) {
+    let workingDirectory = core.getInput(`working-directory`);
+    if (workingDirectory) {
+        const workspace = process.env["GITHUB_WORKSPACE"] || "";
+        const relativeFile = path.relative(workspace, workingDirectory);
+        workingDirectory = relativeFile;
+        const diffLines = diffFile.split("\n");
+        let ignore = false;
+        const filteredDiffLines = [];
+        for (const line of diffLines) {
+            if (line.startsWith("diff --git")) {
+                if (line.includes(`a/${workingDirectory}/`)) {
+                    ignore = false;
+                    filteredDiffLines.push(line.replace(` a/${workingDirectory}/`, " a/").replace(` b/${workingDirectory}/`, " b/"));
+                }
+                else {
+                    ignore = true;
+                }
+            }
+            else {
+                if (!ignore) {
+                    if (line.startsWith(`--- a/${workingDirectory}/`)) {
+                        filteredDiffLines.push(line.replace(`--- a/${workingDirectory}/`, "--- a/"));
+                    }
+                    else if (line.startsWith(`+++ a/${workingDirectory}/`)) {
+                        filteredDiffLines.push(line.replace(`+++ a/${workingDirectory}/`, "+++ a/"));
+                    }
+                    else if (line.startsWith(`--- b/${workingDirectory}/`)) {
+                        filteredDiffLines.push(line.replace(`--- b/${workingDirectory}/`, "--- b/"));
+                    }
+                    else if (line.startsWith(`+++ b/${workingDirectory}/`)) {
+                        filteredDiffLines.push(line.replace(`+++ b/${workingDirectory}/`, "+++ b/"));
+                    }
+                    else {
+                        filteredDiffLines.push(line);
+                    }
+                }
+            }
+        }
+        // Join the modified lines back into a diff string
+        diffFile = filteredDiffLines.join("\n");
+    }
+    return diffFile;
+}
+exports.alterDiffFile = alterDiffFile;
 
 
 /***/ }),

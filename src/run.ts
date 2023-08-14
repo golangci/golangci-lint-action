@@ -8,7 +8,7 @@ import { promisify } from "util"
 
 import { restoreCache, saveCache } from "./cache"
 import { installLint, InstallMode } from "./install"
-import { alterDiffFile } from "./utils/diffUtils"
+import { alterDiffPatch } from "./utils/diffUtils"
 import { findLintVersion } from "./version"
 
 const execShellCommand = promisify(exec)
@@ -69,7 +69,7 @@ async function fetchPatch(): Promise<string> {
     const tempDir = await createTempDir()
     const patchPath = path.join(tempDir, "pull.patch")
     core.info(`Writing patch to ${patchPath}`)
-    await writeFile(patchPath, alterDiffFile(patch))
+    await writeFile(patchPath, alterDiffPatch(patch))
     return patchPath
   } catch (err) {
     console.warn(`failed to save pull request patch:`, err)

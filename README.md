@@ -41,7 +41,7 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v4
         with:
-          go-version: '1.20'
+          go-version: '1.21'
           cache: false
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v3
@@ -49,7 +49,7 @@ jobs:
           # Require: The version of golangci-lint to use.
           # When `install-mode` is `binary` (default) the value can be v1.2 or v1.2.3 or `latest` to use the latest version.
           # When `install-mode` is `goinstall` the value can be v1.2.3, `latest`, or the hash of a commit.
-          version: v1.53
+          version: v1.54
 
           # Optional: working directory, useful for monorepos
           # working-directory: somedir
@@ -102,7 +102,7 @@ jobs:
   golangci:
     strategy:
       matrix:
-        go: ['1.20']
+        go: ['1.21']
         os: [macos-latest, windows-latest]
     name: lint
     runs-on: ${{ matrix.os }}
@@ -118,7 +118,7 @@ jobs:
           # Require: The version of golangci-lint to use.
           # When `install-mode` is `binary` (default) the value can be v1.2 or v1.2.3 or `latest` to use the latest version.
           # When `install-mode` is `goinstall` the value can be v1.2.3, `latest`, or the hash of a commit.
-          version: v1.53
+          version: v1.54
 
           # Optional: working directory, useful for monorepos
           # working-directory: somedir

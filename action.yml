@@ -42,7 +42,7 @@ inputs:
     default: "binary"
     required: false
 runs:
-  using: "node16"
+  using: "node20"
   main: "dist/run/index.js"
   post: "dist/post_run/index.js"
 branding:

@@ -88900,6 +88900,8 @@ exports.restoreCache = restoreCache;
 async function saveCache() {
     if (core.getInput(`skip-cache`, { required: true }).trim() == "true")
         return;
+    if (core.getInput(`skip-save-cache`, { required: true }).trim() == "true")
+        return;
     // Validate inputs, this can cause task failure
     if (!utils.isValidEvent()) {
         utils.logWarning(`Event Validation Error: The event type ${process.env[constants_1.Events.Key]} is not supported because it's not tied to a branch or tag ref.`);

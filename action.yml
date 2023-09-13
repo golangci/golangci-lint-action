@@ -29,6 +29,12 @@ inputs:
       takes precedence over all other caching options.
     default: 'false'
     required: false
+  skip-save-cache:
+    description: |
+      if set to true then the action will not save any caches, but it may still
+      restore existing caches, subject to other options.
+    default: 'false'
+    required: false
   skip-pkg-cache:
     description: "if set to true then the action doesn't cache or restore ~/go/pkg."
     default: 'false'

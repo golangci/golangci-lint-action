@@ -30,7 +30,7 @@
     "@actions/github": "^6.0.0",
     "@actions/http-client": "^2.2.0",
     "@actions/tool-cache": "^2.0.1",
-    "@types/node": "^20.8.9",
+    "@types/node": "^20.8.10",
     "@types/semver": "^7.5.4",
     "@types/tmp": "^0.2.5",
     "tmp": "^0.2.1"

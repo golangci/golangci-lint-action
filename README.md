@@ -82,7 +82,7 @@ because different jobs [run in parallel](https://help.github.com/en/actions/gett
 
 ### Multiple OS Support
 
-If you need to run linters for specific operating systems, you will need to use `v2` of the action.  Here is a sample configuration file:
+If you need to run linters for specific operating systems, you will need to use the action `>=v2`.  Here is a sample configuration file:
 
 ```yaml
 name: golangci-lint
@@ -136,7 +136,7 @@ jobs:
           # install-mode: "goinstall"
 ```
 
-You will also likely need to add the following `.gitattributes` file to ensure that line endings for windows builds are properly formatted:
+You will also likely need to add the following `.gitattributes` file to ensure that line endings for Windows builds are properly formatted:
 
 ```.gitattributes
 *.go text eol=lf
@@ -149,7 +149,7 @@ Currently, GitHub parses the action's output and creates [annotations](https://g
 The restrictions of annotations are the following:
 
 1. Currently, they don't support markdown formatting (see the [feature request](https://github.community/t5/GitHub-API-Development-and/Checks-Ability-to-include-Markdown-in-line-annotations/m-p/56704))
-2. They aren't shown in list of comments like it was with [golangci.com](https://golangci.com). If you would like to have comments - please, up-vote [the issue](https://github.com/golangci/golangci-lint-action/issues/5).
+2. They aren't shown in the list of comments like it was with [golangci.com](https://golangci.com). If you would like to have comments - please, up-vote [the issue](https://github.com/golangci/golangci-lint-action/issues/5).
 
 ## Performance
 
@@ -157,7 +157,7 @@ The action was implemented with performance in mind:
 
 1. We cache data by [@actions/cache](https://github.com/actions/toolkit/tree/master/packages/cache) between builds: Go build cache, Go modules cache, golangci-lint analysis cache.
 2. We don't use Docker because image pulling is slow.
-3. We do as much as we can in parallel, e.g. we download cache, go and golangci-lint binary in parallel.
+3. We do as much as we can in parallel, e.g. we download cache, go, and golangci-lint binary in parallel.
 
 For example, in a repository of [golangci-lint](https://github.com/golangci/golangci-lint) running this action without the cache takes 50s, but with cache takes 14s:
   * in parallel:
@@ -172,12 +172,12 @@ We use JavaScript-based action. We don't use Docker-based action because:
 1. docker pulling is slow currently
 2. it's easier to use caching from [@actions/cache](https://github.com/actions/toolkit/tree/master/packages/cache)
 
-We support different platforms, such as `ubuntu`, `macos` and `windows` with `x32` and `x64` archs.
+We support different platforms, such as `ubuntu`, `macos`, and `windows` with `x32` and `x64` archs.
 
-Inside our action we perform 3 steps:
+Inside our action, we perform 3 steps:
 
 1. Setup environment running in parallel:
-  * restore [cache](https://github.com/actions/cache) of previous analyzes
+  * restore [cache](https://github.com/actions/cache) of previous analyses
   * fetch [action config](https://github.com/golangci/golangci-lint/blob/master/assets/github-action-config.json) and find the latest `golangci-lint` patch version
     for needed version (users of this action can specify only minor version of `golangci-lint`). After that install [golangci-lint](https://github.com/golangci/golangci-lint) using [@actions/tool-cache](https://github.com/actions/toolkit/tree/master/packages/tool-cache)
 2. Run `golangci-lint` with specified by user `args`

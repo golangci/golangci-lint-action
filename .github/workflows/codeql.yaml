@@ -31,7 +31,7 @@ jobs:
 
       # Initializes the CodeQL tools for scanning.
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v2
+        uses: github/codeql-action/init@v3
         # Override language selection by uncommenting this and choosing your languages
         with:
           language: 'javascript'
@@ -41,4 +41,4 @@ jobs:
           npm run all
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v2
+        uses: github/codeql-action/analyze@v3

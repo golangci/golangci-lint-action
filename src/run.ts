@@ -103,7 +103,7 @@ type ExecRes = {
   stderr: string
 }
 
-const printJSONLines = (s: string): void => {
+const printOutputAndForwardJSON = (s: string): void => {
   const lines = s.split(`\n`).filter((line) => line.length > 0)
   for (const line of lines) {
     if (line.startsWith(`::`)) {
@@ -112,7 +112,7 @@ const printJSONLines = (s: string): void => {
 
     try {
       const obj = JSON.parse(line)
-      core.setOutput('json', JSON.stringify(obj, null, 2))
+      core.setOutput("JSON", JSON.stringify(obj, null, 2))
     } catch (err) {
       core.info(line)
     }
@@ -121,10 +121,10 @@ const printJSONLines = (s: string): void => {
 
 const printOutput = (res: ExecRes): void => {
   if (res.stdout) {
-    printJSONLines(res.stdout)
+    printOutputAndForwardJSON(res.stdout)
   }
   if (res.stderr) {
-    printJSONLines(res.stderr)
+    printOutputAndForwardJSON(res.stderr)
   }
 }
 

@@ -90897,12 +90897,27 @@ async function prepareEnv() {
     core.info(`Prepared env in ${Date.now() - startedAt}ms`);
     return { lintPath, patchPath };
 }
+const printOutputAndForwardJSON = (s) => {
+    const lines = s.split(`\n`).filter((line) => line.length > 0);
+    for (const line of lines) {
+        if (line.startsWith(`::`)) {
+            core.info(line);
+        }
+        try {
+            const obj = JSON.parse(line);
+            core.setOutput("JSON", JSON.stringify(obj, null, 2));
+        }
+        catch (err) {
+            core.info(line);
+        }
+    }
+};
 const printOutput = (res) => {
     if (res.stdout) {
-        core.info(res.stdout);
+        printOutputAndForwardJSON(res.stdout);
     }
     if (res.stderr) {
-        core.info(res.stderr);
+        printOutputAndForwardJSON(res.stderr);
     }
 };
 async function runLint(lintPath, patchPath) {
@@ -90926,8 +90941,9 @@ async function runLint(lintPath, patchPath) {
         .trim()
         .split(",")
         .filter((f) => f.length > 0)
-        .filter((f) => !f.startsWith(`github-actions`))
+        .filter((f) => !f.startsWith(`github-actions`) && !f.startsWith(`json`))
         .concat("github-actions")
+        .concat("json")
         .join(",");
     addedArgs.push(`--out-format=${formats}`);
     userArgs = userArgs.replace(/--out-format=\S*/gi, "").trim();

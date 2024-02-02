@@ -90902,6 +90902,7 @@ const printOutputAndForwardJSON = (s) => {
     for (const line of lines) {
         if (line.startsWith(`::`)) {
             core.info(line);
+            continue;
         }
         try {
             JSON.parse(line);

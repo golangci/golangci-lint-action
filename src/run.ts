@@ -108,6 +108,7 @@ const printOutputAndForwardJSON = (s: string): void => {
   for (const line of lines) {
     if (line.startsWith(`::`)) {
       core.info(line)
+      continue
     }
 
     try {

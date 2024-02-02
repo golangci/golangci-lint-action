@@ -90904,8 +90904,8 @@ const printOutputAndForwardJSON = (s) => {
             core.info(line);
         }
         try {
-            const obj = JSON.parse(line);
-            core.setOutput("JSON", JSON.stringify(obj, null, 2));
+            JSON.parse(line);
+            core.setOutput("JSON", line);
         }
         catch (err) {
             core.info(line);

@@ -52,8 +52,8 @@ jobs:
         version:
           - ""
           - "latest"
-          - "v1.53"
-          - "v1.53.2"
+          - "v1.56"
+          - "v1.56.1"
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -80,8 +80,8 @@ jobs:
         version:
           - ""
           - "latest"
-          - "v1.53.2"
-          - "b5093688c0d3008eaacd6066773a1a52e689252f"
+          - "v1.56.1"
+          - "bf5008a11acf2da5fe76716eb21d808499e079fa"
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read

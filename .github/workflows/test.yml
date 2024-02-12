@@ -62,6 +62,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
+          go-version: oldstable
           cache: false # setup-go v4 caches by default
       - uses: ./
         with:
@@ -90,6 +91,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
+          go-version: oldstable
           cache: false # setup-go v4 caches by default
       - uses: ./
         with:
@@ -113,6 +115,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
+          go-version: oldstable
           cache: false # setup-go v4 caches by default
       - uses: ./
         with:

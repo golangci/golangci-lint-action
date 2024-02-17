@@ -9,7 +9,7 @@ The action runs [golangci-lint](https://github.com/golangci/golangci-lint) and r
 
 ## Compatibility
 
-* `v3.0.0+` requires explicit setup-go installation step prior to using this action: `uses: actions/setup-go@v5`.
+* `v4.0.0+` requires an explicit setup-go installation step before using this action: `uses: actions/setup-go@v5`.
   The `skip-go-installation` option has been removed.
 * `v2.0.0+` works with `golangci-lint` version >= `v1.28.3`
 * `v1.2.2` is deprecated due to we forgot to change the minimum version of `golangci-lint` to `v1.28.3` ([issue](https://github.com/golangci/golangci-lint-action/issues/39))

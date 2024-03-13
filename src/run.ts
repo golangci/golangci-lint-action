@@ -32,22 +32,43 @@ async function fetchPatch(): Promise<string> {
   }
 
   const ctx = github.context
-  if (ctx.eventName !== `pull_request` && ctx.eventName !== `pull_request_target`) {
+  if (ctx.eventName !== `pull_request` && ctx.eventName !== `pull_request_target` && ctx.eventName !== `merge_group`) {
     core.info(`Not fetching patch for showing only new issues because it's not a pull request context: event name is ${ctx.eventName}`)
     return ``
   }
-  const pull = ctx.payload.pull_request
-  if (!pull) {
-    core.warning(`No pull request in context`)
+
+  let pullNumber: number | undefined;
+
+  if (ctx.eventName === `merge_group`) {
+    const result = ctx.payload.merge_group.head_ref.match(/pr-(\d+)-/);
+    if (result === null) {
+      core.warning(`No pull request number in merge_group context`)
+      return ``
+    }
+    pullNumber = parseInt(result[1], 10)
+  }
+
+
+  if (ctx.eventName === `pull_request`) {
+    if (!ctx.payload.pull_request) {
+      core.warning(`No pull request in context`)
+      return ``
+    }
+    pullNumber = ctx.payload.pull_request.number
+  }
+
+  if (pullNumber === undefined) {
+    core.warning(`No pull request number in context`)
     return ``
   }
+
   const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }))
   let patch: string
   try {
     const patchResp = await octokit.rest.pulls.get({
       owner: ctx.repo.owner,
       repo: ctx.repo.repo,
-      [`pull_number`]: pull.number,
+      [`pull_number`]: pullNumber,
       mediaType: {
         format: `diff`,
       },

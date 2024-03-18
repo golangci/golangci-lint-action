@@ -67,6 +67,10 @@ jobs:
           #           takes precedence over all other caching options.
           # skip-cache: true
 
+          # Optional: if set to true, caches will not be saved, but they may still be restored,
+          #           subject to other options
+          # skip-save-cache: true
+
           # Optional: if set to true, then the action won't cache or restore ~/go/pkg.
           # skip-pkg-cache: true
 

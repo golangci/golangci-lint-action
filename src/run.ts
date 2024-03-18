@@ -103,12 +103,29 @@ type ExecRes = {
   stderr: string
 }
 
+const printOutputAndForwardJSON = (s: string): void => {
+  const lines = s.split(`\n`).filter((line) => line.length > 0)
+  for (const line of lines) {
+    if (line.startsWith(`::`)) {
+      core.info(line)
+      continue
+    }
+
+    try {
+      JSON.parse(line)
+      core.setOutput("JSON", line)
+    } catch (err) {
+      core.info(line)
+    }
+  }
+}
+
 const printOutput = (res: ExecRes): void => {
   if (res.stdout) {
-    core.info(res.stdout)
+    printOutputAndForwardJSON(res.stdout)
   }
   if (res.stderr) {
-    core.info(res.stderr)
+    printOutputAndForwardJSON(res.stderr)
   }
 }
 
@@ -137,8 +154,9 @@ async function runLint(lintPath: string, patchPath: string): Promise<void> {
     .trim()
     .split(",")
     .filter((f) => f.length > 0)
-    .filter((f) => !f.startsWith(`github-actions`))
+    .filter((f) => !f.startsWith(`github-actions`) && !f.startsWith(`json`))
     .concat("github-actions")
+    .concat("json")
     .join(",")
 
   addedArgs.push(`--out-format=${formats}`)

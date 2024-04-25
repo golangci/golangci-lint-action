@@ -23,26 +23,6 @@ const getLintCacheDir = (): string => {
   return path.resolve(`${process.env.HOME}/.cache/golangci-lint`)
 }
 
-const getCacheDirs = (): string[] => {
-  // Not existing dirs are ok here: it works.
-  const skipPkgCache = core.getInput(`skip-pkg-cache`, { required: true }).trim()
-  const skipBuildCache = core.getInput(`skip-build-cache`, { required: true }).trim()
-  const dirs = [getLintCacheDir()]
-
-  if (skipBuildCache.toLowerCase() == "true") {
-    core.info(`Omitting ~/.cache/go-build from cache directories`)
-  } else {
-    dirs.push(path.resolve(`${process.env.HOME}/.cache/go-build`))
-  }
-  if (skipPkgCache.toLowerCase() == "true") {
-    core.info(`Omitting ~/go/pkg from cache directories`)
-  } else {
-    dirs.push(path.resolve(`${process.env.HOME}/go/pkg`))
-  }
-
-  return dirs
-}
-
 const getIntervalKey = (invalidationIntervalDays: number): string => {
   const now = new Date()
   const secondsSinceEpoch = now.getTime() / 1000
@@ -97,7 +77,7 @@ export async function restoreCache(): Promise<void> {
   }
   core.saveState(State.CachePrimaryKey, primaryKey)
   try {
-    const cacheKey = await cache.restoreCache(getCacheDirs(), primaryKey, restoreKeys)
+    const cacheKey = await cache.restoreCache([getLintCacheDir()], primaryKey, restoreKeys)
     if (!cacheKey) {
       core.info(`Cache not found for input keys: ${[primaryKey, ...restoreKeys].join(", ")}`)
       return
@@ -128,7 +108,7 @@ export async function saveCache(): Promise<void> {
 
   const startedAt = Date.now()
 
-  const cacheDirs = getCacheDirs()
+  const cacheDirs = [getLintCacheDir()]
   const primaryKey = core.getState(State.CachePrimaryKey)
   if (!primaryKey) {
     utils.logWarning(`Error retrieving key from state.`)

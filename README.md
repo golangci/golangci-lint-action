@@ -166,9 +166,9 @@ permissions:
 
 The action was implemented with performance in mind:
 
-1. We cache data by [@actions/cache](https://github.com/actions/toolkit/tree/master/packages/cache) between builds: Go build cache, Go modules cache, golangci-lint analysis cache.
+1. We cache data by [@actions/cache](https://github.com/actions/toolkit/tree/master/packages/cache) between builds: golangci-lint analysis cache.
 2. We don't use Docker because image pulling is slow.
-3. We do as much as we can in parallel, e.g. we download cache, go, and golangci-lint binary in parallel.
+3. We do as much as we can in parallel, e.g. we download cache, and golangci-lint binary in parallel.
 
 For example, in a repository of [golangci-lint](https://github.com/golangci/golangci-lint) running this action without the cache takes 50s, but with cache takes 14s:
   * in parallel:

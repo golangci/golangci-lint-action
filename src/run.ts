@@ -32,7 +32,7 @@ async function fetchPatch(): Promise<string> {
   }
 
   const ctx = github.context
-  if (ctx.eventName !== `pull_request`) {
+  if (ctx.eventName !== `pull_request` && ctx.eventName !== `pull_request_target`) {
     core.info(`Not fetching patch for showing only new issues because it's not a pull request context: event name is ${ctx.eventName}`)
     return ``
   }

@@ -3,6 +3,7 @@
 [![Build Status](https://github.com/golangci/golangci-lint-action/workflows/build-and-test/badge.svg)](https://github.com/golangci/golangci-lint-action/actions)
 
 It's the official GitHub action for [golangci-lint](https://github.com/golangci/golangci-lint) from its authors.
+
 The action runs [golangci-lint](https://github.com/golangci/golangci-lint) and reports issues from linters.
 
 ![GitHub Annotations](./static/annotations.png)
@@ -25,8 +26,8 @@ name: golangci-lint
 on:
   push:
     branches:
-      - master
       - main
+      - master
   pull_request:
 
 permissions:
@@ -76,20 +77,22 @@ jobs:
           # install-mode: "goinstall"
 ```
 
-We recommend running this action in a job separate from other jobs (`go test`, etc)
+We recommend running this action in a job separate from other jobs (`go test`, etc.)
 because different jobs [run in parallel](https://help.github.com/en/actions/getting-started-with-github-actions/core-concepts-for-github-actions#job).
 
 ### Multiple OS Support
 
-If you need to run linters for specific operating systems, you will need to use the action `>=v2`.  Here is a sample configuration file:
+If you need to run linters for specific operating systems, you will need to use the action `>=v2`.
+
+Here is a sample configuration file:
 
 ```yaml
 name: golangci-lint
 on:
   push:
     branches:
-      - master
       - main
+      - master
   pull_request:
 
 permissions:
@@ -117,7 +120,7 @@ jobs:
           # Require: The version of golangci-lint to use.
           # When `install-mode` is `binary` (default) the value can be v1.2 or v1.2.3 or `latest` to use the latest version.
           # When `install-mode` is `goinstall` the value can be v1.2.3, `latest`, or the hash of a commit.
-          version: v1.54
+          version: v1.57
 
           # Optional: working directory, useful for monorepos
           # working-directory: somedir
@@ -147,8 +150,9 @@ Currently, GitHub parses the action's output and creates [annotations](https://g
 
 The restrictions of annotations are the following:
 
-1. Currently, they don't support markdown formatting (see the [feature request](https://github.community/t5/GitHub-API-Development-and/Checks-Ability-to-include-Markdown-in-line-annotations/m-p/56704))
-2. They aren't shown in the list of comments like it was with [golangci.com](https://golangci.com). If you would like to have comments - please, up-vote [the issue](https://github.com/golangci/golangci-lint-action/issues/5).
+1. Currently, they don't support Markdown formatting (see the [feature request](https://github.community/t5/GitHub-API-Development-and/Checks-Ability-to-include-Markdown-in-line-annotations/m-p/56704))
+2. They aren't shown in the list of comments.
+   If you would like to have comments - please, up-vote [the issue](https://github.com/golangci/golangci-lint-action/issues/5).
 
 To enable annotations, you need to add the `checks' permission to your action.
 
@@ -166,7 +170,7 @@ permissions:
 
 The action was implemented with performance in mind:
 
-1. We cache data by [@actions/cache](https://github.com/actions/toolkit/tree/master/packages/cache) between builds: golangci-lint analysis cache.
+1. We cache data from golangci-lint analysis between builds by using [@actions/cache](https://github.com/actions/toolkit/tree/master/packages/cache). 
 2. We don't use Docker because image pulling is slow.
 3. We do as much as we can in parallel, e.g. we download cache, and golangci-lint binary in parallel.
 
@@ -178,9 +182,10 @@ For example, in a repository of [golangci-lint](https://github.com/golangci/gola
 
 ## Internals
 
-We use JavaScript-based action. We don't use Docker-based action because:
+We use JavaScript-based action.
+We don't use Docker-based action because:
 
-1. docker pulling is slow currently
+1. Docker pulling is slow currently
 2. it's easier to use caching from [@actions/cache](https://github.com/actions/toolkit/tree/master/packages/cache)
 
 We support different platforms, such as `ubuntu`, `macos`, and `windows` with `x32` and `x64` archs.
@@ -188,18 +193,21 @@ We support different platforms, such as `ubuntu`, `macos`, and `windows` with `x
 Inside our action, we perform 3 steps:
 
 1. Setup environment running in parallel:
-  * restore [cache](https://github.com/actions/cache) of previous analyses
-  * fetch [action config](https://github.com/golangci/golangci-lint/blob/master/assets/github-action-config.json) and find the latest `golangci-lint` patch version
-    for needed version (users of this action can specify only minor version of `golangci-lint`). After that install [golangci-lint](https://github.com/golangci/golangci-lint) using [@actions/tool-cache](https://github.com/actions/toolkit/tree/master/packages/tool-cache)
+   * restore [cache](https://github.com/actions/cache) of previous analyses
+   * fetch [action config](https://github.com/golangci/golangci-lint/blob/master/assets/github-action-config.json) and find the latest `golangci-lint` patch version for needed version
+     (users of this action can specify only minor version of `golangci-lint`).
+     After that install [golangci-lint](https://github.com/golangci/golangci-lint) using [@actions/tool-cache](https://github.com/actions/toolkit/tree/master/packages/tool-cache)
 2. Run `golangci-lint` with specified by user `args`
 3. Save cache for later builds
 
 ### Caching internals
 
-1. We save and restore the following directories: `~/.cache/golangci-lint`, `~/.cache/go-build`, `~/go/pkg`.
-2. The primary caching key looks like `golangci-lint.cache-{interval_number}-{go.mod_hash}`. Interval number ensures that we periodically invalidate
-   our cache (every 7 days). `go.mod` hash ensures that we invalidate the cache early - as soon as dependencies have changed.
-3. We use [restore keys](https://help.github.com/en/actions/configuring-and-managing-workflows/caching-dependencies-to-speed-up-workflows#matching-a-cache-key): `golangci-lint.cache-{interval_number}-`. GitHub matches keys by prefix if we have no exact match for the primary cache.
+1. We save and restore the following directory: `~/.cache/golangci-lint`.
+2. The primary caching key looks like `golangci-lint.cache-{interval_number}-{go.mod_hash}`.
+   Interval number ensures that we periodically invalidate our cache (every 7 days).
+   `go.mod` hash ensures that we invalidate the cache early - as soon as dependencies have changed.
+3. We use [restore keys](https://help.github.com/en/actions/configuring-and-managing-workflows/caching-dependencies-to-speed-up-workflows#matching-a-cache-key): `golangci-lint.cache-{interval_number}-`. 
+   GitHub matches keys by prefix if we have no exact match for the primary cache.
 
 This scheme is basic and needs improvements. Pull requests and ideas are welcome.
 

@@ -44,7 +44,6 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.21'
-          cache: false
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v5
         with:
@@ -113,7 +112,6 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go }}
-          cache: false
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v5
         with:

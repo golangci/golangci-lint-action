@@ -62,7 +62,7 @@ jobs:
           # The location of the configuration file can be changed by using `--config=`
           # args: --timeout=30m --config=/my/path/.golangci.yml --issues-exit-code=0 
 
-          # Optional: show only new issues if it's a pull request. The default value is `false`.
+          # Optional: For pull request only, show only new issues. The default value is `false`.
           # only-new-issues: true
 
           # Optional: if set to true, then all caching functionality will be completely disabled,
@@ -126,15 +126,23 @@ jobs:
           # working-directory: somedir
 
           # Optional: golangci-lint command line arguments.
-          # 
-          # Note: by default the `.golangci.yml` file should be at the root of the repository.
+          #
+          # Note: By default, the `.golangci.yml` file should be at the root of the repository.
           # The location of the configuration file can be changed by using `--config=`
-          # args: --timeout=30m --config=/my/path/.golangci.yml --issues-exit-code=0
+          # args: --timeout=30m --config=/my/path/.golangci.yml --issues-exit-code=0 
 
-          # Optional: show only new issues if it's a pull request. The default value is `false`.
+          # Optional: For pull request only, show only new issues. The default value is `false`.
           # only-new-issues: true
 
-          # Optional:The mode to install golangci-lint. It can be 'binary' or 'goinstall'.
+          # Optional: if set to true, then all caching functionality will be completely disabled,
+          #           takes precedence over all other caching options.
+          # skip-cache: true
+
+          # Optional: if set to true, caches will not be saved, but they may still be restored,
+          #           subject to other options
+          # skip-save-cache: true
+
+          # Optional: The mode to install golangci-lint. It can be 'binary' or 'goinstall'.
           # install-mode: "goinstall"
 ```
 

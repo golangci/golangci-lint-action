@@ -46,6 +46,9 @@ async function fetchPatch(): Promise<string> {
       return await fetchPullRequestPatch(ctx)
     case `push`:
       return await fetchPushPatch(ctx)
+    case `merge_group`:
+      core.info(JSON.stringify(ctx.payload))
+      return ``
     default:
       core.info(`Not fetching patch for showing only new issues because it's not a pull request context: event name is ${ctx.eventName}`)
       return ``
@@ -220,6 +223,13 @@ async function runLint(lintPath: string, patchPath: string): Promise<void> {
           addedArgs.push(`--new=false`)
           addedArgs.push(`--new-from-rev=`)
         }
+        break
+      case `merge_group`:
+        addedArgs.push(`--new-from-rev=${ctx.payload.merge_group.base_sha}`)
+
+        // Override config values.
+        addedArgs.push(`--new=false`)
+        addedArgs.push(`--new-from-patch=`)
         break
       default:
         break

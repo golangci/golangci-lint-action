@@ -61,7 +61,9 @@ jobs:
           # The location of the configuration file can be changed by using `--config=`
           # args: --timeout=30m --config=/my/path/.golangci.yml --issues-exit-code=0 
 
-          # Optional: For pull request only, show only new issues. The default value is `false`.
+          # Optional: Show only new issues.
+          # If you are using `merge_group` event (merge queue) you should add the option `fetch-depth: 0` to `actions/checkout` step.
+          # The default value is `false`.
           # only-new-issues: true
 
           # Optional: if set to true, then all caching functionality will be completely disabled,
@@ -104,7 +106,7 @@ jobs:
     strategy:
       matrix:
         go: ['1.21']
-        os: [macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     name: lint
     runs-on: ${{ matrix.os }}
     steps:
@@ -129,7 +131,9 @@ jobs:
           # The location of the configuration file can be changed by using `--config=`
           # args: --timeout=30m --config=/my/path/.golangci.yml --issues-exit-code=0 
 
-          # Optional: For pull request only, show only new issues. The default value is `false`.
+          # Optional: Show only new issues.
+          # If you are using `merge_group` event (merge queue) you should add the option `fetch-depth: 0` to `actions/checkout` step.
+          # The default value is `false`.
           # only-new-issues: true
 
           # Optional: if set to true, then all caching functionality will be completely disabled,

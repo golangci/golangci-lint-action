@@ -1,5 +1,6 @@
 import * as core from "@actions/core"
 import * as github from "@actions/github"
+import { Context } from "@actions/github/lib/context"
 import { exec, ExecOptions } from "child_process"
 import * as fs from "fs"
 import * as path from "path"
@@ -24,6 +25,7 @@ async function prepareLint(): Promise<string> {
 
 async function fetchPatch(): Promise<string> {
   const onlyNewIssues = core.getInput(`only-new-issues`, { required: true }).trim()
+
   if (onlyNewIssues !== `false` && onlyNewIssues !== `true`) {
     throw new Error(`invalid value of "only-new-issues": "${onlyNewIssues}", expected "true" or "false"`)
   }
@@ -32,22 +34,33 @@ async function fetchPatch(): Promise<string> {
   }
 
   const ctx = github.context
-  if (ctx.eventName !== `pull_request` && ctx.eventName !== `pull_request_target`) {
-    core.info(`Not fetching patch for showing only new issues because it's not a pull request context: event name is ${ctx.eventName}`)
-    return ``
+
+  switch (ctx.eventName) {
+    case `pull_request`:
+    case `pull_request_target`:
+      return await fetchPullRequestPatch(ctx)
+
+    default:
+      core.info(`Not fetching patch for showing only new issues because it's not a pull request context: event name is ${ctx.eventName}`)
+      return ``
   }
-  const pull = ctx.payload.pull_request
-  if (!pull) {
+}
+
+async function fetchPullRequestPatch(ctx: Context): Promise<string> {
+  const pr = ctx.payload.pull_request
+  if (!pr) {
     core.warning(`No pull request in context`)
     return ``
   }
+
   const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }))
+
   let patch: string
   try {
     const patchResp = await octokit.rest.pulls.get({
       owner: ctx.repo.owner,
       repo: ctx.repo.repo,
-      [`pull_number`]: pull.number,
+      [`pull_number`]: pr.number,
       mediaType: {
         format: `diff`,
       },

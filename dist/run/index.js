@@ -89146,26 +89146,40 @@ const version_1 = __nccwpck_require__(1946);
 const execShellCommand = (0, util_1.promisify)(child_process_1.exec);
 const writeFile = (0, util_1.promisify)(fs.writeFile);
 const createTempDir = (0, util_1.promisify)(tmp_1.dir);
+function isOnlyNewIssues() {
+    const onlyNewIssues = core.getInput(`only-new-issues`, { required: true }).trim();
+    if (onlyNewIssues !== `false` && onlyNewIssues !== `true`) {
+        throw new Error(`invalid value of "only-new-issues": "${onlyNewIssues}", expected "true" or "false"`);
+    }
+    return onlyNewIssues === `true`;
+}
 async function prepareLint() {
     const mode = core.getInput("install-mode").toLowerCase();
     const versionConfig = await (0, version_1.findLintVersion)(mode);
     return await (0, install_1.installLint)(versionConfig, mode);
 }
 async function fetchPatch() {
-    const onlyNewIssues = core.getInput(`only-new-issues`, { required: true }).trim();
-    if (onlyNewIssues !== `false` && onlyNewIssues !== `true`) {
-        throw new Error(`invalid value of "only-new-issues": "${onlyNewIssues}", expected "true" or "false"`);
-    }
-    if (onlyNewIssues === `false`) {
+    if (!isOnlyNewIssues()) {
         return ``;
     }
     const ctx = github.context;
-    if (ctx.eventName !== `pull_request` && ctx.eventName !== `pull_request_target`) {
-        core.info(`Not fetching patch for showing only new issues because it's not a pull request context: event name is ${ctx.eventName}`);
-        return ``;
+    switch (ctx.eventName) {
+        case `pull_request`:
+        case `pull_request_target`:
+            return await fetchPullRequestPatch(ctx);
+        case `push`:
+            return await fetchPushPatch(ctx);
+        case `merge_group`:
+            core.info(JSON.stringify(ctx.payload));
+            return ``;
+        default:
+            core.info(`Not fetching patch for showing only new issues because it's not a pull request context: event name is ${ctx.eventName}`);
+            return ``;
     }
-    const pull = ctx.payload.pull_request;
-    if (!pull) {
+}
+async function fetchPullRequestPatch(ctx) {
+    const pr = ctx.payload.pull_request;
+    if (!pr) {
         core.warning(`No pull request in context`);
         return ``;
     }
@@ -89175,7 +89189,7 @@ async function fetchPatch() {
         const patchResp = await octokit.rest.pulls.get({
             owner: ctx.repo.owner,
             repo: ctx.repo.repo,
-            [`pull_number`]: pull.number,
+            [`pull_number`]: pr.number,
             mediaType: {
                 format: `diff`,
             },
@@ -89203,14 +89217,48 @@ async function fetchPatch() {
         return ``; // don't fail the action, but analyze without patch
     }
 }
+async function fetchPushPatch(ctx) {
+    const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }));
+    let patch;
+    try {
+        const patchResp = await octokit.rest.repos.compareCommits({
+            owner: ctx.repo.owner,
+            repo: ctx.repo.repo,
+            base: ctx.payload.before,
+            head: ctx.payload.after,
+            mediaType: {
+                format: `diff`,
+            },
+        });
+        if (patchResp.status !== 200) {
+            core.warning(`failed to fetch push patch: response status is ${patchResp.status}`);
+            return ``; // don't fail the action, but analyze without patch
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        patch = patchResp.data;
+    }
+    catch (err) {
+        console.warn(`failed to fetch push patch:`, err);
+        return ``; // don't fail the action, but analyze without patch
+    }
+    try {
+        const tempDir = await createTempDir();
+        const patchPath = path.join(tempDir, "push.patch");
+        core.info(`Writing patch to ${patchPath}`);
+        await writeFile(patchPath, (0, diffUtils_1.alterDiffPatch)(patch));
+        return patchPath;
+    }
+    catch (err) {
+        console.warn(`failed to save pull request patch:`, err);
+        return ``; // don't fail the action, but analyze without patch
+    }
+}
 async function prepareEnv() {
     const startedAt = Date.now();
     // Prepare cache, lint and go in parallel.
     await (0, cache_1.restoreCache)();
-    const prepareLintPromise = prepareLint();
-    const patchPromise = fetchPatch();
-    const lintPath = await prepareLintPromise;
-    const patchPath = await patchPromise;
+    const lintPath = await prepareLint();
+    const patchPath = await fetchPatch();
     core.info(`Prepared env in ${Date.now() - startedAt}ms`);
     return { lintPath, patchPath };
 }
@@ -89248,14 +89296,32 @@ async function runLint(lintPath, patchPath) {
         .join(",");
     addedArgs.push(`--out-format=${formats}`);
     userArgs = userArgs.replace(/--out-format=\S*/gi, "").trim();
-    if (patchPath) {
+    if (isOnlyNewIssues()) {
         if (userArgNames.has(`new`) || userArgNames.has(`new-from-rev`) || userArgNames.has(`new-from-patch`)) {
             throw new Error(`please, don't specify manually --new* args when requesting only new issues`);
         }
-        addedArgs.push(`--new-from-patch=${patchPath}`);
-        // Override config values.
-        addedArgs.push(`--new=false`);
-        addedArgs.push(`--new-from-rev=`);
+        const ctx = github.context;
+        core.info(`only new issues on ${ctx.eventName}: ${patchPath}`);
+        switch (ctx.eventName) {
+            case `pull_request`:
+            case `pull_request_target`:
+            case `push`:
+                if (patchPath) {
+                    addedArgs.push(`--new-from-patch=${patchPath}`);
+                    // Override config values.
+                    addedArgs.push(`--new=false`);
+                    addedArgs.push(`--new-from-rev=`);
+                }
+                break;
+            case `merge_group`:
+                addedArgs.push(`--new-from-rev=${ctx.payload.merge_group.base_sha}`);
+                // Override config values.
+                addedArgs.push(`--new=false`);
+                addedArgs.push(`--new-from-patch=`);
+                break;
+            default:
+                break;
+        }
     }
     const workingDirectory = core.getInput(`working-directory`);
     const cmdArgs = {};

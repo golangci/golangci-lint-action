@@ -16,6 +16,16 @@ const execShellCommand = promisify(exec)
 const writeFile = promisify(fs.writeFile)
 const createTempDir = promisify(dir)
 
+function isOnlyNewIssues(): boolean {
+  const onlyNewIssues = core.getInput(`only-new-issues`, { required: true }).trim()
+
+  if (onlyNewIssues !== `false` && onlyNewIssues !== `true`) {
+    throw new Error(`invalid value of "only-new-issues": "${onlyNewIssues}", expected "true" or "false"`)
+  }
+
+  return onlyNewIssues === `true`
+}
+
 async function prepareLint(): Promise<string> {
   const mode = core.getInput("install-mode").toLowerCase()
   const versionConfig = await findLintVersion(<InstallMode>mode)
@@ -24,12 +34,7 @@ async function prepareLint(): Promise<string> {
 }
 
 async function fetchPatch(): Promise<string> {
-  const onlyNewIssues = core.getInput(`only-new-issues`, { required: true }).trim()
-
-  if (onlyNewIssues !== `false` && onlyNewIssues !== `true`) {
-    throw new Error(`invalid value of "only-new-issues": "${onlyNewIssues}", expected "true" or "false"`)
-  }
-  if (onlyNewIssues === `false`) {
+  if (!isOnlyNewIssues()) {
     return ``
   }
 
@@ -39,7 +44,8 @@ async function fetchPatch(): Promise<string> {
     case `pull_request`:
     case `pull_request_target`:
       return await fetchPullRequestPatch(ctx)
-
+    case `push`:
+      return await fetchPushPatch(ctx)
     default:
       core.info(`Not fetching patch for showing only new issues because it's not a pull request context: event name is ${ctx.eventName}`)
       return ``
@@ -90,6 +96,45 @@ async function fetchPullRequestPatch(ctx: Context): Promise<string> {
   }
 }
 
+async function fetchPushPatch(ctx: Context): Promise<string> {
+  const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }))
+
+  let patch: string
+  try {
+    const patchResp = await octokit.rest.repos.compareCommits({
+      owner: ctx.repo.owner,
+      repo: ctx.repo.repo,
+      base: ctx.payload.before,
+      head: ctx.payload.after,
+      mediaType: {
+        format: `diff`,
+      },
+    })
+
+    if (patchResp.status !== 200) {
+      core.warning(`failed to fetch push patch: response status is ${patchResp.status}`)
+      return `` // don't fail the action, but analyze without patch
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    patch = patchResp.data as any
+  } catch (err) {
+    console.warn(`failed to fetch push patch:`, err)
+    return `` // don't fail the action, but analyze without patch
+  }
+
+  try {
+    const tempDir = await createTempDir()
+    const patchPath = path.join(tempDir, "push.patch")
+    core.info(`Writing patch to ${patchPath}`)
+    await writeFile(patchPath, alterDiffPatch(patch))
+    return patchPath
+  } catch (err) {
+    console.warn(`failed to save pull request patch:`, err)
+    return `` // don't fail the action, but analyze without patch
+  }
+}
+
 type Env = {
   lintPath: string
   patchPath: string
@@ -100,11 +145,9 @@ async function prepareEnv(): Promise<Env> {
 
   // Prepare cache, lint and go in parallel.
   await restoreCache()
-  const prepareLintPromise = prepareLint()
-  const patchPromise = fetchPatch()
 
-  const lintPath = await prepareLintPromise
-  const patchPath = await patchPromise
+  const lintPath = await prepareLint()
+  const patchPath = await fetchPatch()
 
   core.info(`Prepared env in ${Date.now() - startedAt}ms`)
 
@@ -157,15 +200,30 @@ async function runLint(lintPath: string, patchPath: string): Promise<void> {
   addedArgs.push(`--out-format=${formats}`)
   userArgs = userArgs.replace(/--out-format=\S*/gi, "").trim()
 
-  if (patchPath) {
+  if (isOnlyNewIssues()) {
     if (userArgNames.has(`new`) || userArgNames.has(`new-from-rev`) || userArgNames.has(`new-from-patch`)) {
       throw new Error(`please, don't specify manually --new* args when requesting only new issues`)
     }
-    addedArgs.push(`--new-from-patch=${patchPath}`)
 
-    // Override config values.
-    addedArgs.push(`--new=false`)
-    addedArgs.push(`--new-from-rev=`)
+    const ctx = github.context
+
+    core.info(`only new issues on ${ctx.eventName}: ${patchPath}`)
+
+    switch (ctx.eventName) {
+      case `pull_request`:
+      case `pull_request_target`:
+      case `push`:
+        if (patchPath) {
+          addedArgs.push(`--new-from-patch=${patchPath}`)
+
+          // Override config values.
+          addedArgs.push(`--new=false`)
+          addedArgs.push(`--new-from-rev=`)
+        }
+        break
+      default:
+        break
+    }
   }
 
   const workingDirectory = core.getInput(`working-directory`)

@@ -154,7 +154,7 @@ You will also likely need to add the following `.gitattributes` file to ensure t
 *.go text eol=lf
 ```
 
-## Comments and Annotations
+## Annotations
 
 Currently, GitHub parses the action's output and creates [annotations](https://github.blog/2018-12-14-introducing-check-runs-and-annotations/).
 
@@ -163,6 +163,7 @@ The restrictions of annotations are the following:
 1. Currently, they don't support Markdown formatting (see the [feature request](https://github.community/t5/GitHub-API-Development-and/Checks-Ability-to-include-Markdown-in-line-annotations/m-p/56704))
 2. They aren't shown in the list of comments.
    If you would like to have comments - please, up-vote [the issue](https://github.com/golangci/golangci-lint-action/issues/5).
+3. The number of annotations is [limited](https://github.com/actions/toolkit/blob/main/docs/problem-matchers.md#limitations).
 
 To enable annotations, you need to add the `checks' permission to your action.
 

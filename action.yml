@@ -35,6 +35,10 @@ inputs:
       restore existing caches, subject to other options.
     default: 'false'
     required: false
+  annotations:
+    description: "To Enable/disable GitHub Action annotations"
+    default: 'true'
+    required: false
   args:
     description: "golangci-lint command line arguments"
     default: ""

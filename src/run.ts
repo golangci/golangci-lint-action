@@ -192,16 +192,20 @@ async function runLint(lintPath: string, patchPath: string): Promise<void> {
   const userArgsMap = new Map<string, string>(userArgsList)
   const userArgNames = new Set<string>(userArgsList.map(([key]) => key))
 
-  const formats = (userArgsMap.get("out-format") || "")
-    .trim()
-    .split(",")
-    .filter((f) => f.length > 0)
-    .filter((f) => !f.startsWith(`github-actions`))
-    .concat("github-actions")
-    .join(",")
+  const annotations = core.getInput(`annotations`).trim() !== "false"
 
-  addedArgs.push(`--out-format=${formats}`)
-  userArgs = userArgs.replace(/--out-format=\S*/gi, "").trim()
+  if (annotations) {
+    const formats = (userArgsMap.get("out-format") || "")
+      .trim()
+      .split(",")
+      .filter((f) => f.length > 0)
+      .filter((f) => !f.startsWith(`github-actions`))
+      .concat("github-actions")
+      .join(",")
+
+    addedArgs.push(`--out-format=${formats}`)
+    userArgs = userArgs.replace(/--out-format=\S*/gi, "").trim()
+  }
 
   if (isOnlyNewIssues()) {
     if (userArgNames.has(`new`) || userArgNames.has(`new-from-rev`) || userArgNames.has(`new-from-patch`)) {

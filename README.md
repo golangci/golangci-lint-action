@@ -163,6 +163,18 @@ with:
   # ...
 ```
 
+`annotations`: (optional) To enable/disable GitHub Action annotations.
+If disabled (`false`), the output format(s) will follow the golangci-lint configuration file and use the same default as golangci-lint (i.e. `colored-line-number`).
+https://golangci-lint.run/usage/configuration/#output-configuration
+The default value is `true`.
+
+```yml
+uses: golangci/golangci-lint-action@v5
+with:
+  annotations: false
+  # ...
+```
+
 `args`: (optional) golangci-lint command line arguments.
 Note: By default, the `.golangci.yml` file should be at the root of the repository.
 The location of the configuration file can be changed by using `--config=`

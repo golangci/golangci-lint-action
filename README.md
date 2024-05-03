@@ -43,14 +43,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version: '1.22'
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v5
         with:
           # Require: The version of golangci-lint to use.
           # When `install-mode` is `binary` (default) the value can be v1.2 or v1.2.3 or `latest` to use the latest version.
           # When `install-mode` is `goinstall` the value can be v1.2.3, `latest`, or the hash of a commit.
-          version: v1.57
+          version: v1.58
 
           # Optional: working directory, useful for monorepos
           # working-directory: somedir
@@ -105,7 +105,7 @@ jobs:
   golangci:
     strategy:
       matrix:
-        go: ['1.21']
+        go: ['1.22']
         os: [ubuntu-latest, macos-latest, windows-latest]
     name: lint
     runs-on: ${{ matrix.os }}
@@ -120,7 +120,7 @@ jobs:
           # Require: The version of golangci-lint to use.
           # When `install-mode` is `binary` (default) the value can be v1.2 or v1.2.3 or `latest` to use the latest version.
           # When `install-mode` is `goinstall` the value can be v1.2.3, `latest`, or the hash of a commit.
-          version: v1.57
+          version: v1.58
 
           # Optional: working directory, useful for monorepos
           # working-directory: somedir
@@ -165,7 +165,7 @@ The restrictions of annotations are the following:
    If you would like to have comments - please, up-vote [the issue](https://github.com/golangci/golangci-lint-action/issues/5).
 3. The number of annotations is [limited](https://github.com/actions/toolkit/blob/main/docs/problem-matchers.md#limitations).
 
-To enable annotations, you need to add the `checks' permission to your action.
+To enable annotations, you need to add the `checks` permission to your action.
 
 ```yaml annotate
 permissions:
@@ -173,7 +173,7 @@ permissions:
   contents: read
   # Optional: allow read access to pull request. Use with `only-new-issues` option.
   pull-requests: read
-  # Optional: Allow write access to checks to allow the action to annotate code in the PR.
+  # Optional: allow write access to checks to allow the action to annotate code in the PR.
   checks: write
 ```
 

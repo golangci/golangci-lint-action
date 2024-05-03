@@ -1,4 +1,5 @@
-name: "Run golangci-lint"
+# https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions
+name: "Golangci-lint"
 description: "Official golangci-lint action with line-attached annotations for found issues, caching and parallel execution."
 author: "golangci"
 inputs:
@@ -49,4 +50,4 @@ runs:
   post: "dist/post_run/index.js"
 branding:
   icon: "shield"
-  color: "yellow"
+  color: "white"

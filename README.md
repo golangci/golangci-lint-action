@@ -47,35 +47,7 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v5
         with:
-          # Require: The version of golangci-lint to use.
-          # When `install-mode` is `binary` (default) the value can be v1.2 or v1.2.3 or `latest` to use the latest version.
-          # When `install-mode` is `goinstall` the value can be v1.2.3, `latest`, or the hash of a commit.
-          version: v1.58
-
-          # Optional: working directory, useful for monorepos
-          # working-directory: somedir
-
-          # Optional: golangci-lint command line arguments.
-          #
-          # Note: By default, the `.golangci.yml` file should be at the root of the repository.
-          # The location of the configuration file can be changed by using `--config=`
-          # args: --timeout=30m --config=/my/path/.golangci.yml --issues-exit-code=0 
-
-          # Optional: Show only new issues.
-          # If you are using `merge_group` event (merge queue) you should add the option `fetch-depth: 0` to `actions/checkout` step.
-          # The default value is `false`.
-          # only-new-issues: true
-
-          # Optional: if set to true, then all caching functionality will be completely disabled,
-          #           takes precedence over all other caching options.
-          # skip-cache: true
-
-          # Optional: if set to true, caches will not be saved, but they may still be restored,
-          #           subject to other options
-          # skip-save-cache: true
-
-          # Optional: The mode to install golangci-lint. It can be 'binary' or 'goinstall'.
-          # install-mode: "goinstall"
+          version: latest
 ```
 
 We recommend running this action in a job separate from other jobs (`go test`, etc.)
@@ -117,41 +89,89 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v5
         with:
-          # Require: The version of golangci-lint to use.
-          # When `install-mode` is `binary` (default) the value can be v1.2 or v1.2.3 or `latest` to use the latest version.
-          # When `install-mode` is `goinstall` the value can be v1.2.3, `latest`, or the hash of a commit.
-          version: v1.58
-
-          # Optional: working directory, useful for monorepos
-          # working-directory: somedir
-
-          # Optional: golangci-lint command line arguments.
-          #
-          # Note: By default, the `.golangci.yml` file should be at the root of the repository.
-          # The location of the configuration file can be changed by using `--config=`
-          # args: --timeout=30m --config=/my/path/.golangci.yml --issues-exit-code=0 
-
-          # Optional: Show only new issues.
-          # If you are using `merge_group` event (merge queue) you should add the option `fetch-depth: 0` to `actions/checkout` step.
-          # The default value is `false`.
-          # only-new-issues: true
-
-          # Optional: if set to true, then all caching functionality will be completely disabled,
-          #           takes precedence over all other caching options.
-          # skip-cache: true
-
-          # Optional: if set to true, caches will not be saved, but they may still be restored,
-          #           subject to other options
-          # skip-save-cache: true
-
-          # Optional: The mode to install golangci-lint. It can be 'binary' or 'goinstall'.
-          # install-mode: "goinstall"
+          version: latest
 ```
 
 You will also likely need to add the following `.gitattributes` file to ensure that line endings for Windows builds are properly formatted:
 
 ```.gitattributes
 *.go text eol=lf
+```
+
+## Options
+
+`version`: (required) The version of golangci-lint to use.
+* When `install-mode` is `binary` (default) the value can be v1.2 or v1.2.3 or `latest` to use the latest version.
+* When `install-mode` is `goinstall` the value can be v1.2.3, `latest`, or the hash of a commit.
+
+```yml
+uses: golangci/golangci-lint-action@v5
+with:
+  version: v1.58
+  # ...
+```
+
+`install-mode`: (optional) The mode to install golangci-lint.
+It can be `binary` or `goinstall`.
+The default value is `binary`.
+
+```yml
+uses: golangci/golangci-lint-action@v5
+with:
+  install-mode: "goinstall"
+  # ...
+```
+
+`only-new-issues`: (optional) Show only new issues.
+If you are using `merge_group` event (merge queue) you should add the option `fetch-depth: 0` to `actions/checkout` step.
+The default value is `false`.
+
+```yml
+uses: golangci/golangci-lint-action@v5
+with:
+  only-new-issues: true
+  # ...
+```
+
+`working-directory`: (optional) working directory, useful for monorepos.
+
+```yml
+uses: golangci/golangci-lint-action@v5
+with:
+  working-directory: somedir
+  # ...
+```
+
+`skip-cache`: (optional) If set to `true`, then all caching functionality will be completely disabled,
+takes precedence over all other caching options.
+The default value is `false`.
+
+```yml
+uses: golangci/golangci-lint-action@v5
+with:
+  skip-cache: true
+  # ...
+```
+
+`skip-save-cache`: (optional) If set to `true`, caches will not be saved, but they may still be restored, required `skip-cache: false`.
+The default value is `false`.
+
+```yml
+uses: golangci/golangci-lint-action@v5
+with:
+  skip-save-cache: true
+  # ...
+```
+
+`args`: (optional) golangci-lint command line arguments.
+Note: By default, the `.golangci.yml` file should be at the root of the repository.
+The location of the configuration file can be changed by using `--config=`
+
+```yml
+uses: golangci/golangci-lint-action@v5
+with:
+  args: --timeout=30m --config=/my/path/.golangci.yml --issues-exit-code=0
+  # ...
 ```
 
 ## Annotations

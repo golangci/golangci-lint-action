@@ -8,9 +8,9 @@ inputs:
       When `install-mode` is `binary` (default) the value can be v1.2 or v1.2.3 or `latest` to use the latest version.
       When `install-mode` is `goinstall` the value can be v1.2.3, `latest`, or the hash of a commit.
     required: false
-  args:
-    description: "golangci-lint command line arguments"
-    default: ""
+  install-mode:
+    description: "The mode to install golangci-lint. It can be 'binary' or 'goinstall'."
+    default: "binary"
     required: false
   working-directory:
     description: "golangci-lint working directory, default is project root"
@@ -35,9 +35,9 @@ inputs:
       restore existing caches, subject to other options.
     default: 'false'
     required: false
-  install-mode:
-    description: "The mode to install golangci-lint. It can be 'binary' or 'goinstall'."
-    default: "binary"
+  args:
+    description: "golangci-lint command line arguments"
+    default: ""
     required: false
 runs:
   using: "node20"

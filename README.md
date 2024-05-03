@@ -107,7 +107,7 @@ You will also likely need to add the following `.gitattributes` file to ensure t
 ```yml
 uses: golangci/golangci-lint-action@v5
 with:
-  version: v1.58
+  version: latest
   # ...
 ```
 

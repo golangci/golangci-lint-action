@@ -89221,11 +89221,10 @@ async function fetchPushPatch(ctx) {
     const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }));
     let patch;
     try {
-        const patchResp = await octokit.rest.repos.compareCommits({
+        const patchResp = await octokit.rest.repos.compareCommitsWithBasehead({
             owner: ctx.repo.owner,
             repo: ctx.repo.repo,
-            base: ctx.payload.before,
-            head: ctx.payload.after,
+            basehead: `${ctx.payload.before}..${ctx.payload.after}`,
             mediaType: {
                 format: `diff`,
             },

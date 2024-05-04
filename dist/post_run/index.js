@@ -89329,8 +89329,8 @@ async function runLint(lintPath, patchPath) {
                 break;
         }
     }
-    const workingDirectory = core.getInput(`working-directory`);
     const cmdArgs = {};
+    const workingDirectory = core.getInput(`working-directory`);
     if (workingDirectory) {
         if (!fs.existsSync(workingDirectory) || !fs.lstatSync(workingDirectory).isDirectory()) {
             throw new Error(`working-directory (${workingDirectory}) was not a path`);
@@ -89341,7 +89341,7 @@ async function runLint(lintPath, patchPath) {
         cmdArgs.cwd = path.resolve(workingDirectory);
     }
     const cmd = `${lintPath} run ${addedArgs.join(` `)} ${userArgs}`.trimEnd();
-    core.info(`Running [${cmd}] in [${cmdArgs.cwd || ``}] ...`);
+    core.info(`Running [${cmd}] in [${cmdArgs.cwd || process.cwd()}] ...`);
     const startedAt = Date.now();
     try {
         const res = await execShellCommand(cmd, cmdArgs);

@@ -17,13 +17,7 @@ const writeFile = promisify(fs.writeFile)
 const createTempDir = promisify(dir)
 
 function isOnlyNewIssues(): boolean {
-  const onlyNewIssues = core.getInput(`only-new-issues`, { required: true }).trim()
-
-  if (onlyNewIssues !== `false` && onlyNewIssues !== `true`) {
-    throw new Error(`invalid value of "only-new-issues": "${onlyNewIssues}", expected "true" or "false"`)
-  }
-
-  return onlyNewIssues === `true`
+  return core.getBooleanInput(`only-new-issues`, { required: true })
 }
 
 async function prepareLint(): Promise<string> {
@@ -191,7 +185,7 @@ async function runLint(lintPath: string, patchPath: string): Promise<void> {
   const userArgsMap = new Map<string, string>(userArgsList)
   const userArgNames = new Set<string>(userArgsList.map(([key]) => key))
 
-  const annotations = core.getInput(`annotations`).trim() !== "false"
+  const annotations = core.getBooleanInput(`annotations`)
 
   if (annotations) {
     const formats = (userArgsMap.get("out-format") || "")

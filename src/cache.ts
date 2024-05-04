@@ -65,7 +65,7 @@ async function buildCacheKeys(): Promise<string[]> {
 }
 
 export async function restoreCache(): Promise<void> {
-  if (core.getInput(`skip-cache`, { required: true }).trim() == "true") return
+  if (core.getBooleanInput(`skip-cache`, { required: true })) return
 
   if (!utils.isValidEvent()) {
     utils.logWarning(
@@ -107,8 +107,8 @@ export async function restoreCache(): Promise<void> {
 }
 
 export async function saveCache(): Promise<void> {
-  if (core.getInput(`skip-cache`, { required: true }).trim() == "true") return
-  if (core.getInput(`skip-save-cache`, { required: true }).trim() == "true") return
+  if (core.getBooleanInput(`skip-cache`, { required: true })) return
+  if (core.getBooleanInput(`skip-save-cache`, { required: true })) return
 
   // Validate inputs, this can cause task failure
   if (!utils.isValidEvent()) {

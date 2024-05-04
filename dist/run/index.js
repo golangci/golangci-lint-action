@@ -88844,7 +88844,7 @@ async function buildCacheKeys() {
     return keys;
 }
 async function restoreCache() {
-    if (core.getInput(`skip-cache`, { required: true }).trim() == "true")
+    if (core.getBooleanInput(`skip-cache`, { required: true }))
         return;
     if (!utils.isValidEvent()) {
         utils.logWarning(`Event Validation Error: The event type ${process.env[constants_1.Events.Key]} is not supported because it's not tied to a branch or tag ref.`);
@@ -88882,9 +88882,9 @@ async function restoreCache() {
 }
 exports.restoreCache = restoreCache;
 async function saveCache() {
-    if (core.getInput(`skip-cache`, { required: true }).trim() == "true")
+    if (core.getBooleanInput(`skip-cache`, { required: true }))
         return;
-    if (core.getInput(`skip-save-cache`, { required: true }).trim() == "true")
+    if (core.getBooleanInput(`skip-save-cache`, { required: true }))
         return;
     // Validate inputs, this can cause task failure
     if (!utils.isValidEvent()) {
@@ -89150,11 +89150,7 @@ const execShellCommand = (0, util_1.promisify)(child_process_1.exec);
 const writeFile = (0, util_1.promisify)(fs.writeFile);
 const createTempDir = (0, util_1.promisify)(tmp_1.dir);
 function isOnlyNewIssues() {
-    const onlyNewIssues = core.getInput(`only-new-issues`, { required: true }).trim();
-    if (onlyNewIssues !== `false` && onlyNewIssues !== `true`) {
-        throw new Error(`invalid value of "only-new-issues": "${onlyNewIssues}", expected "true" or "false"`);
-    }
-    return onlyNewIssues === `true`;
+    return core.getBooleanInput(`only-new-issues`, { required: true });
 }
 async function prepareLint() {
     const mode = core.getInput("install-mode").toLowerCase();
@@ -89289,7 +89285,7 @@ async function runLint(lintPath, patchPath) {
         .map(([key, value]) => [key.toLowerCase(), value ?? ""]);
     const userArgsMap = new Map(userArgsList);
     const userArgNames = new Set(userArgsList.map(([key]) => key));
-    const annotations = core.getInput(`annotations`).trim() !== "false";
+    const annotations = core.getBooleanInput(`annotations`);
     if (annotations) {
         const formats = (userArgsMap.get("out-format") || "")
             .trim()

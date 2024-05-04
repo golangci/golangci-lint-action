@@ -195,6 +195,23 @@ with:
   # ...
 ```
 
+### `cache-invalidation-interval`
+
+(optional)
+
+Periodically invalidate the cache every `cache-invalidation-interval` days to ensure that outdated data is removed and fresh data is loaded.
+
+The default value is `7`.
+
+```yml
+uses: golangci/golangci-lint-action@v5
+with:
+  cache-invalidation-interval: 15
+  # ...
+```
+
+If set the number is `<= 0`, the cache will be always invalidate (Not recommended).
+
 ### `annotations`
 
 (optional)

@@ -44,6 +44,10 @@ inputs:
     description: "golangci-lint command line arguments"
     default: ""
     required: false
+  cache-invalidation-interval:
+    description: "Periodically invalidate a cache because a new code being added. (number of days)"
+    default: '7'
+    required: false
 runs:
   using: "node20"
   main: "dist/run/index.js"

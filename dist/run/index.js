@@ -88815,15 +88815,18 @@ const getLintCacheDir = () => {
 };
 const getIntervalKey = (invalidationIntervalDays) => {
     const now = new Date();
+    if (invalidationIntervalDays <= 0) {
+        return `${now.getTime()}`;
+    }
     const secondsSinceEpoch = now.getTime() / 1000;
     const intervalNumber = Math.floor(secondsSinceEpoch / (invalidationIntervalDays * 86400));
     return intervalNumber.toString();
 };
 async function buildCacheKeys() {
     const keys = [];
+    const invalidationIntervalDays = parseInt(core.getInput(`cache-invalidation-interval`, { required: true }).trim());
     // Periodically invalidate a cache because a new code being added.
-    // TODO: configure it via inputs.
-    let cacheKey = `golangci-lint.cache-${getIntervalKey(7)}-`;
+    let cacheKey = `golangci-lint.cache-${getIntervalKey(invalidationIntervalDays)}-`;
     keys.push(cacheKey);
     // Get working directory from input
     const workingDirectory = core.getInput(`working-directory`);

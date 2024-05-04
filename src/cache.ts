@@ -25,6 +25,11 @@ const getLintCacheDir = (): string => {
 
 const getIntervalKey = (invalidationIntervalDays: number): string => {
   const now = new Date()
+
+  if (invalidationIntervalDays <= 0) {
+    return `${now.getTime()}`
+  }
+
   const secondsSinceEpoch = now.getTime() / 1000
   const intervalNumber = Math.floor(secondsSinceEpoch / (invalidationIntervalDays * 86400))
   return intervalNumber.toString()
@@ -32,21 +37,28 @@ const getIntervalKey = (invalidationIntervalDays: number): string => {
 
 async function buildCacheKeys(): Promise<string[]> {
   const keys = []
+
+  const invalidationIntervalDays = parseInt(core.getInput(`cache-invalidation-interval`, { required: true }).trim())
+
   // Periodically invalidate a cache because a new code being added.
-  // TODO: configure it via inputs.
-  let cacheKey = `golangci-lint.cache-${getIntervalKey(7)}-`
+  let cacheKey = `golangci-lint.cache-${getIntervalKey(invalidationIntervalDays)}-`
   keys.push(cacheKey)
+
   // Get working directory from input
   const workingDirectory = core.getInput(`working-directory`)
+
   // create path to go.mod prepending the workingDirectory if it exists
   const goModPath = path.join(workingDirectory, `go.mod`)
+
   core.info(`Checking for go.mod: ${goModPath}`)
+
   if (await pathExists(goModPath)) {
     // Add checksum to key to invalidate a cache when dependencies change.
     cacheKey += await checksumFile(`sha1`, goModPath)
   } else {
     cacheKey += `nogomod`
   }
+
   keys.push(cacheKey)
 
   return keys

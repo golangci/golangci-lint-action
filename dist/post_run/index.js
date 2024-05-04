@@ -88824,12 +88824,17 @@ const getIntervalKey = (invalidationIntervalDays) => {
 };
 async function buildCacheKeys() {
     const keys = [];
-    const invalidationIntervalDays = parseInt(core.getInput(`cache-invalidation-interval`, { required: true }).trim());
-    // Periodically invalidate a cache because a new code being added.
-    let cacheKey = `golangci-lint.cache-${getIntervalKey(invalidationIntervalDays)}-`;
-    keys.push(cacheKey);
+    // Cache by OS.
+    let cacheKey = `golangci-lint.cache-${process.env?.RUNNER_OS}-`;
     // Get working directory from input
     const workingDirectory = core.getInput(`working-directory`);
+    if (workingDirectory) {
+        cacheKey += `${workingDirectory}-`;
+    }
+    // Periodically invalidate a cache because a new code being added.
+    const invalidationIntervalDays = parseInt(core.getInput(`cache-invalidation-interval`, { required: true }).trim());
+    cacheKey += `${getIntervalKey(invalidationIntervalDays)}-`;
+    keys.push(cacheKey);
     // create path to go.mod prepending the workingDirectory if it exists
     const goModPath = path_1.default.join(workingDirectory, `go.mod`);
     core.info(`Checking for go.mod: ${goModPath}`);

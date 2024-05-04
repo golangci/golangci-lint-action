@@ -308,10 +308,11 @@ Inside our action, we perform 3 steps:
 ### Caching internals
 
 1. We save and restore the following directory: `~/.cache/golangci-lint`.
-2. The primary caching key looks like `golangci-lint.cache-{interval_number}-{go.mod_hash}`.
+2. The primary caching key looks like `golangci-lint.cache-{runner_os}-{working_directory}-{interval_number}-{go.mod_hash}`.
    Interval number ensures that we periodically invalidate our cache (every 7 days).
    `go.mod` hash ensures that we invalidate the cache early - as soon as dependencies have changed.
-3. We use [restore keys](https://help.github.com/en/actions/configuring-and-managing-workflows/caching-dependencies-to-speed-up-workflows#matching-a-cache-key): `golangci-lint.cache-{interval_number}-`. 
+3. We use [restore keys](https://help.github.com/en/actions/configuring-and-managing-workflows/caching-dependencies-to-speed-up-workflows#matching-a-cache-key):
+   `golangci-lint.cache-{runner_os}-{working_directory}-{interval_number}-`.
    GitHub matches keys by prefix if we have no exact match for the primary cache.
 
 This scheme is basic and needs improvements. Pull requests and ideas are welcome.

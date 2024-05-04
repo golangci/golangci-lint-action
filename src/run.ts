@@ -233,8 +233,9 @@ async function runLint(lintPath: string, patchPath: string): Promise<void> {
     }
   }
 
-  const workingDirectory = core.getInput(`working-directory`)
   const cmdArgs: ExecOptions = {}
+
+  const workingDirectory = core.getInput(`working-directory`)
   if (workingDirectory) {
     if (!fs.existsSync(workingDirectory) || !fs.lstatSync(workingDirectory).isDirectory()) {
       throw new Error(`working-directory (${workingDirectory}) was not a path`)
@@ -247,7 +248,7 @@ async function runLint(lintPath: string, patchPath: string): Promise<void> {
 
   const cmd = `${lintPath} run ${addedArgs.join(` `)} ${userArgs}`.trimEnd()
 
-  core.info(`Running [${cmd}] in [${cmdArgs.cwd || ``}] ...`)
+  core.info(`Running [${cmd}] in [${cmdArgs.cwd || process.cwd()}] ...`)
 
   const startedAt = Date.now()
   try {

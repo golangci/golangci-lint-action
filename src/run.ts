@@ -104,11 +104,10 @@ async function fetchPushPatch(ctx: Context): Promise<string> {
 
   let patch: string
   try {
-    const patchResp = await octokit.rest.repos.compareCommits({
+    const patchResp = await octokit.rest.repos.compareCommitsWithBasehead({
       owner: ctx.repo.owner,
       repo: ctx.repo.repo,
-      base: ctx.payload.before,
-      head: ctx.payload.after,
+      basehead: `${ctx.payload.before}..${ctx.payload.after}`,
       mediaType: {
         format: `diff`,
       },

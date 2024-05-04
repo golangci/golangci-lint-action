@@ -102,7 +102,10 @@ You will also likely need to add the following `.gitattributes` file to ensure t
 
 ### `version`
 
-(required) The version of golangci-lint to use.
+(required)
+
+The version of golangci-lint to use.
+
 * When `install-mode` is `binary` (default) the value can be v1.2 or v1.2.3 or `latest` to use the latest version.
 * When `install-mode` is `goinstall` the value can be v1.2.3, `latest`, or the hash of a commit.
 
@@ -115,8 +118,10 @@ with:
 
 ### `install-mode`
 
-(optional) The mode to install golangci-lint.
-It can be `binary` or `goinstall`.
+(optional)
+
+The mode to install golangci-lint: it can be `binary` or `goinstall`.
+
 The default value is `binary`.
 
 ```yml
@@ -128,8 +133,12 @@ with:
 
 ### `only-new-issues`
 
-(optional) Show only new issues.
+(optional)
+
+Show only new issues.
+
 If you are using `merge_group` event (merge queue) you should add the option `fetch-depth: 0` to `actions/checkout` step.
+
 The default value is `false`.
 
 ```yml
@@ -141,7 +150,9 @@ with:
 
 ### `working-directory`
 
-(optional) working directory, useful for monorepos.
+(optional)
+
+Working directory, useful for monorepos.
 
 ```yml
 uses: golangci/golangci-lint-action@v5
@@ -152,8 +163,11 @@ with:
 
 ### `skip-cache`
 
-(optional) If set to `true`, then all caching functionality will be completely disabled,
+(optional)
+
+If set to `true`, then all caching functionality will be completely disabled,
 takes precedence over all other caching options.
+
 The default value is `false`.
 
 ```yml
@@ -165,7 +179,10 @@ with:
 
 ### `skip-save-cache`
 
-(optional) If set to `true`, caches will not be saved, but they may still be restored, required `skip-cache: false`.
+(optional)
+
+If set to `true`, caches will not be saved, but they may still be restored, required `skip-cache: false`.
+
 The default value is `false`.
 
 ```yml
@@ -177,9 +194,15 @@ with:
 
 ### `annotations`
 
-(optional) To enable/disable GitHub Action annotations.
-If disabled (`false`), the output format(s) will follow the golangci-lint configuration file and use the same default as golangci-lint (i.e. `colored-line-number`).
+(optional)
+
+To enable/disable GitHub Action annotations.
+
+If disabled (`false`), the output format(s) will follow the golangci-lint configuration file (or CLI flags from `args`) 
+and use the same default as golangci-lint (i.e. `colored-line-number`).
+
 https://golangci-lint.run/usage/configuration/#output-configuration
+
 The default value is `true`.
 
 ```yml
@@ -191,7 +214,10 @@ with:
 
 ### `args`
 
-(optional) golangci-lint command line arguments.
+(optional)
+
+golangci-lint command line arguments.
+
 Note: By default, the `.golangci.yml` file should be at the root of the repository.
 The location of the configuration file can be changed by using `--config=`
 

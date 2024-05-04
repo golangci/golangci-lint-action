@@ -137,8 +137,6 @@ with:
 
 Show only new issues.
 
-If you are using `merge_group` event (merge queue) you should add the option `fetch-depth: 0` to `actions/checkout` step.
-
 The default value is `false`.
 
 ```yml
@@ -147,6 +145,11 @@ with:
   only-new-issues: true
   # ...
 ```
+
+* `pull_request` and `pull_request_target`: the action gets the diff of the PR content from the [GitHub API](https://docs.github.com/en/rest/pulls/pulls?apiVersion=2022-11-28#get-a-pull-request) and use it with `--new-from-patch`.
+* `push`: the action gets the diff of the push content (difference between commits before and after the push) from the [GitHub API](https://docs.github.com/en/rest/commits/commits?apiVersion=2022-11-28#compare-two-commits) and use it with `--new-from-patch`.
+* `merge_group`: the action gets the diff by using `--new-from-rev` option (relies on git).
+   You should add the option `fetch-depth: 0` to `actions/checkout` step.
 
 ### `working-directory`
 

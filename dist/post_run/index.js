@@ -89292,12 +89292,16 @@ async function runLint(lintPath, patchPath) {
     const userArgNames = new Set(userArgsList.map(([key]) => key));
     const annotations = core.getBooleanInput(`annotations`);
     if (annotations) {
+        let ghaFormat = `github-actions-problem-matchers`;
+        if (!core.getBooleanInput(`problem-matchers`)) {
+            ghaFormat = `github-actions`;
+        }
         const formats = (userArgsMap.get("out-format") || "")
             .trim()
             .split(",")
             .filter((f) => f.length > 0)
-            .filter((f) => !f.startsWith(`github-actions`))
-            .concat("github-actions")
+            .filter((f) => !f.startsWith(ghaFormat))
+            .concat(ghaFormat)
             .join(",");
         addedArgs.push(`--out-format=${formats}`);
         userArgs = userArgs.replace(/--out-format=\S*/gi, "").trim();

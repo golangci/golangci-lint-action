@@ -8,6 +8,8 @@ The action runs [golangci-lint](https://github.com/golangci/golangci-lint) and r
 
 ![GitHub Annotations](./static/annotations.png)
 
+![Logs](./static/colored-line-number.png)
+
 ## Compatibility
 
 * `v6.0.0+` removes `annotations` option, removes the default output format (`github-actions`).

@@ -40,10 +40,6 @@ inputs:
     description: "To Enable/disable GitHub Action annotations"
     default: 'true'
     required: false
-  problem-matchers:
-    description: "To Enable/disable GitHub Action annotations problem matchers"
-    default: 'true'
-    required: false
   args:
     description: "golangci-lint command line arguments"
     default: ""

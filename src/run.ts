@@ -188,16 +188,26 @@ async function runLint(lintPath: string, patchPath: string): Promise<void> {
   const annotations = core.getBooleanInput(`annotations`)
 
   if (annotations) {
-    let ghaFormat = `github-actions-problem-matchers`
-    if (!core.getBooleanInput(`problem-matchers`)) {
-      ghaFormat = `github-actions`
+    // Skip the problem matchers installed by the binary,
+    // use the embedded files.
+    process.env.GOLANGCI_LINT_SKIP_GHA_PM_INSTALL = `true`
+
+    const matchersPath = path.join(__dirname, "../..", "problem-matchers.json")
+
+    let ghaFormat = `github-actions`
+    if (fs.existsSync(matchersPath)) {
+      ghaFormat = `github-actions-problem-matchers`
+
+      // Adds problem matchers.
+      // https://github.com/actions/setup-go/blob/cdcb36043654635271a94b9a6d1392de5bb323a7/src/main.ts#L81-L83
+      core.info(`##[add-matcher]${matchersPath}`)
     }
 
     const formats = (userArgsMap.get("out-format") || "")
       .trim()
       .split(",")
       .filter((f) => f.length > 0)
-      .filter((f) => !f.startsWith(ghaFormat))
+      .filter((f) => !f.startsWith(`github-actions`))
       .concat(ghaFormat)
       .join(",")
 

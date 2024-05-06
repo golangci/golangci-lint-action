@@ -1,0 +1,18 @@
+{
+  "problemMatcher": [
+    {
+      "owner": "golangci-lint-action",
+      "severity": "error",
+      "pattern": [
+        {
+          "regexp": "^([^\\s]+)\\s+([^:]+):(\\d+):(?:(\\d+):)?\\s+(.+)$",
+          "file": 2,
+          "line": 3,
+          "column": 4,
+          "severity": 1,
+          "message": 5
+        }
+      ]
+    }
+  ]
+}

@@ -233,23 +233,6 @@ with:
   # ...
 ```
 
-### `problem-matchers`
-
-(optional)
-
-To enable/disable GitHub Action annotations problem matchers (requires `annotations: true`).
-
-The problem matchers allows the display file information (path, position) inside the logs.
-
-The default value is `true`.
-
-```yml
-uses: golangci/golangci-lint-action@v5
-with:
-  problem-matchers: false
-  # ...
-```
-
 ### `args`
 
 (optional)

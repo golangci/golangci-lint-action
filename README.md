@@ -10,6 +10,7 @@ The action runs [golangci-lint](https://github.com/golangci/golangci-lint) and r
 
 ## Compatibility
 
+* `v6.0.0+` removes `annotations` option.
 * `v5.0.0+` removes `skip-pkg-cache` and `skip-build-cache` because the cache related to Go itself is already handled by `actions/setup-go`.
 * `v4.0.0+` requires an explicit `actions/setup-go` installation step before using this action: `uses: actions/setup-go@v5`.
   The `skip-go-installation` option has been removed.
@@ -212,23 +213,24 @@ with:
 
 If set the number is `<= 0`, the cache will be always invalidate (Not recommended).
 
-### `annotations`
+### `problem-matchers`
 
 (optional)
 
-To enable/disable GitHub Action annotations.
+Force the usage of the embedded problem matchers.
 
-If disabled (`false`), the output format(s) will follow the golangci-lint configuration file (or CLI flags from `args`) 
-and use the same default as golangci-lint (i.e. `colored-line-number`).
+By default, the [problem matcher of Go (`actions/setup-go`)](https://github.com/actions/setup-go/blob/main/matchers.json) already handles the golangci-lint output (`colored-line-number`). 
+
+Works only with `colored-line-number` (the golangci-lint default).
 
 https://golangci-lint.run/usage/configuration/#output-configuration
 
-The default value is `true`.
+The default value is `false`.
 
 ```yml
 uses: golangci/golangci-lint-action@v5
 with:
-  annotations: false
+  problem-matchers: true
   # ...
 ```
 

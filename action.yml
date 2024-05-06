@@ -36,9 +36,9 @@ inputs:
       restore existing caches, subject to other options.
     default: 'false'
     required: false
-  annotations:
-    description: "To Enable/disable GitHub Action annotations"
-    default: 'true'
+  problem-matchers:
+    description: "Force the usage of the embedded problem matchers"
+    default: 'false'
     required: false
   args:
     description: "golangci-lint command line arguments"

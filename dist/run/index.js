@@ -89290,18 +89290,27 @@ async function runLint(lintPath, patchPath) {
         .map(([key, value]) => [key.toLowerCase(), value ?? ""]);
     const userArgsMap = new Map(userArgsList);
     const userArgNames = new Set(userArgsList.map(([key]) => key));
-    const annotations = core.getBooleanInput(`annotations`);
-    if (annotations) {
-        const formats = (userArgsMap.get("out-format") || "")
-            .trim()
-            .split(",")
-            .filter((f) => f.length > 0)
-            .filter((f) => !f.startsWith(`github-actions`))
-            .concat("github-actions")
-            .join(",");
-        addedArgs.push(`--out-format=${formats}`);
-        userArgs = userArgs.replace(/--out-format=\S*/gi, "").trim();
+    const problemMatchers = core.getBooleanInput(`problem-matchers`);
+    if (problemMatchers) {
+        const matchersPath = path.join(__dirname, "../..", "problem-matchers.json");
+        if (fs.existsSync(matchersPath)) {
+            // Adds problem matchers.
+            // https://github.com/actions/setup-go/blob/cdcb36043654635271a94b9a6d1392de5bb323a7/src/main.ts#L81-L83
+            core.info(`##[add-matcher]${matchersPath}`);
+        }
     }
+    const formats = (userArgsMap.get("out-format") || "")
+        .trim()
+        .split(",")
+        .filter((f) => f.length > 0)
+        .filter((f) => !f.startsWith(`github-actions`)) // Removes `github-actions` format.
+        .join(",");
+    if (formats) {
+        // Adds formats but without `github-actions` format.
+        addedArgs.push(`--out-format=${formats}`);
+    }
+    // Removes `--out-format` from the user flags because it's already inside `addedArgs`.
+    userArgs = userArgs.replace(/--out-format=\S*/gi, "").trim();
     if (isOnlyNewIssues()) {
         if (userArgNames.has(`new`) || userArgNames.has(`new-from-rev`) || userArgNames.has(`new-from-patch`)) {
             throw new Error(`please, don't specify manually --new* args when requesting only new issues`);

@@ -10,7 +10,7 @@ The action runs [golangci-lint](https://github.com/golangci/golangci-lint) and r
 
 ## Compatibility
 
-* `v6.0.0+` removes `annotations` option.
+* `v6.0.0+` removes `annotations` option, removes the default output format (`github-actions`).
 * `v5.0.0+` removes `skip-pkg-cache` and `skip-build-cache` because the cache related to Go itself is already handled by `actions/setup-go`.
 * `v4.0.0+` requires an explicit `actions/setup-go` installation step before using this action: `uses: actions/setup-go@v5`.
   The `skip-go-installation` option has been removed.

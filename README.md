@@ -48,7 +48,7 @@ jobs:
         with:
           go-version: '1.22'
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v5
+        uses: golangci/golangci-lint-action@v6
         with:
           version: latest
 ```
@@ -90,7 +90,7 @@ jobs:
         with:
           go-version: ${{ matrix.go }}
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v5
+        uses: golangci/golangci-lint-action@v6
         with:
           version: latest
 ```
@@ -113,7 +113,7 @@ The version of golangci-lint to use.
 * When `install-mode` is `goinstall` the value can be v1.2.3, `latest`, or the hash of a commit.
 
 ```yml
-uses: golangci/golangci-lint-action@v5
+uses: golangci/golangci-lint-action@v6
 with:
   version: latest
   # ...
@@ -128,7 +128,7 @@ The mode to install golangci-lint: it can be `binary` or `goinstall`.
 The default value is `binary`.
 
 ```yml
-uses: golangci/golangci-lint-action@v5
+uses: golangci/golangci-lint-action@v6
 with:
   install-mode: "goinstall"
   # ...
@@ -143,7 +143,7 @@ Show only new issues.
 The default value is `false`.
 
 ```yml
-uses: golangci/golangci-lint-action@v5
+uses: golangci/golangci-lint-action@v6
 with:
   only-new-issues: true
   # ...
@@ -161,7 +161,7 @@ with:
 Working directory, useful for monorepos.
 
 ```yml
-uses: golangci/golangci-lint-action@v5
+uses: golangci/golangci-lint-action@v6
 with:
   working-directory: somedir
   # ...
@@ -177,7 +177,7 @@ takes precedence over all other caching options.
 The default value is `false`.
 
 ```yml
-uses: golangci/golangci-lint-action@v5
+uses: golangci/golangci-lint-action@v6
 with:
   skip-cache: true
   # ...
@@ -192,7 +192,7 @@ If set to `true`, caches will not be saved, but they may still be restored, requ
 The default value is `false`.
 
 ```yml
-uses: golangci/golangci-lint-action@v5
+uses: golangci/golangci-lint-action@v6
 with:
   skip-save-cache: true
   # ...
@@ -207,7 +207,7 @@ Periodically invalidate the cache every `cache-invalidation-interval` days to en
 The default value is `7`.
 
 ```yml
-uses: golangci/golangci-lint-action@v5
+uses: golangci/golangci-lint-action@v6
 with:
   cache-invalidation-interval: 15
   # ...
@@ -230,7 +230,7 @@ https://golangci-lint.run/usage/configuration/#output-configuration
 The default value is `false`.
 
 ```yml
-uses: golangci/golangci-lint-action@v5
+uses: golangci/golangci-lint-action@v6
 with:
   problem-matchers: true
   # ...
@@ -246,7 +246,7 @@ Note: By default, the `.golangci.yml` file should be at the root of the reposito
 The location of the configuration file can be changed by using `--config=`
 
 ```yml
-uses: golangci/golangci-lint-action@v5
+uses: golangci/golangci-lint-action@v6
 with:
   args: --timeout=30m --config=/my/path/.golangci.yml --issues-exit-code=0
   # ...

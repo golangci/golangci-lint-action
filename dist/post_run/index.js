@@ -89228,7 +89228,7 @@ async function fetchPushPatch(ctx) {
         const patchResp = await octokit.rest.repos.compareCommitsWithBasehead({
             owner: ctx.repo.owner,
             repo: ctx.repo.repo,
-            basehead: `${ctx.payload.before}..${ctx.payload.after}`,
+            basehead: `${ctx.payload.before}...${ctx.payload.after}`,
             mediaType: {
                 format: `diff`,
             },

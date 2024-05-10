@@ -41,7 +41,6 @@ async function fetchPatch(): Promise<string> {
     case `push`:
       return await fetchPushPatch(ctx)
     case `merge_group`:
-      core.info(JSON.stringify(ctx.payload))
       return ``
     default:
       core.info(`Not fetching patch for showing only new issues because it's not a pull request context: event name is ${ctx.eventName}`)

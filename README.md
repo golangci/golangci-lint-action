@@ -50,7 +50,7 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          version: v1.58
 ```
 
 We recommend running this action in a job separate from other jobs (`go test`, etc.)
@@ -92,7 +92,7 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          version: v1.58
 ```
 
 You will also likely need to add the following `.gitattributes` file to ensure that line endings for Windows builds are properly formatted:
@@ -115,7 +115,7 @@ The version of golangci-lint to use.
 ```yml
 uses: golangci/golangci-lint-action@v6
 with:
-  version: latest
+  version: v1.58
   # ...
 ```
 

@@ -154,6 +154,21 @@ with:
 * `merge_group`: the action gets the diff by using `--new-from-rev` option (relies on git).
    You should add the option `fetch-depth: 0` to `actions/checkout` step.
 
+### `github-token`
+
+(optional)
+
+When using `only-new-issues` option, the GitHub API is used, so a token is required.
+
+By default, it uses the `github.token` from the action.
+
+```yml
+uses: golangci/golangci-lint-action@v6
+with:
+  github-token: xxx
+  # ...
+```
+
 ### `working-directory`
 
 (optional)

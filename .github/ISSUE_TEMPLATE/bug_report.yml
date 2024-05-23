@@ -36,14 +36,29 @@ body:
       required: true
 
   - type: textarea
-    id: config
+    id: workflow-file
     attributes:
       label: Workflow file
       value: |-
         <details>
 
+        ```yml
+        <add your file content here>
         ```
-        <add you file here>
+
+        </details>
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Golangci-lint configuration
+      value: |-
+        <details>
+
+        ```yml
+        <add your file content here>
         ```
 
         </details>

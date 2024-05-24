@@ -9,6 +9,6 @@ contact_links:
   - name: 🗣️ Chat on Slack
     url: https://gophers.slack.com/archives/CS0TBRKPC
     about: Maybe chatting with the community can help
-  - name: 🏡 egolangci-lint main repository
+  - name: 🏡 Golangci-lint main repository
     url: https://github.com/golangci/golangci-lint
     about: The main repository of golangci-lint.

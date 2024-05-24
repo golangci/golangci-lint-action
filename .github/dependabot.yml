@@ -6,5 +6,10 @@ updates:
       interval: weekly
   - package-ecosystem: npm
     directory: "/"
+    groups:
+      dev-dependencies:
+        dependency-type: development
+      dependencies:
+        dependency-type: production
     schedule:
       interval: weekly

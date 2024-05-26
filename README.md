@@ -56,7 +56,8 @@ jobs:
 We recommend running this action in a job separate from other jobs (`go test`, etc.)
 because different jobs [run in parallel](https://help.github.com/en/actions/getting-started-with-github-actions/core-concepts-for-github-actions#job).
 
-### Multiple OS Support
+<details>
+<summary>Multiple OS Support</summary>
 
 If you need to run linters for specific operating systems, you will need to use the action `>=v2`.
 
@@ -80,7 +81,7 @@ jobs:
   golangci:
     strategy:
       matrix:
-        go: ['1.22']
+        go: [stable]
         os: [ubuntu-latest, macos-latest, windows-latest]
     name: lint
     runs-on: ${{ matrix.os }}
@@ -101,6 +102,8 @@ You will also likely need to add the following `.gitattributes` file to ensure t
 *.go text eol=lf
 ```
 
+</details>
+
 ## Options
 
 ### `version`
@@ -112,12 +115,17 @@ The version of golangci-lint to use.
 * When `install-mode` is `binary` (default) the value can be v1.2 or v1.2.3 or `latest` to use the latest version.
 * When `install-mode` is `goinstall` the value can be v1.2.3, `latest`, or the hash of a commit.
 
+<details>
+<summary>Example</summary>
+
 ```yml
 uses: golangci/golangci-lint-action@v6
 with:
   version: v1.58
   # ...
 ```
+
+</details>
 
 ### `install-mode`
 
@@ -127,6 +135,9 @@ The mode to install golangci-lint: it can be `binary` or `goinstall`.
 
 The default value is `binary`.
 
+<details>
+<summary>Example</summary>
+
 ```yml
 uses: golangci/golangci-lint-action@v6
 with:
@@ -134,25 +145,7 @@ with:
   # ...
 ```
 
-### `only-new-issues`
-
-(optional)
-
-Show only new issues.
-
-The default value is `false`.
-
-```yml
-uses: golangci/golangci-lint-action@v6
-with:
-  only-new-issues: true
-  # ...
-```
-
-* `pull_request` and `pull_request_target`: the action gets the diff of the PR content from the [GitHub API](https://docs.github.com/en/rest/pulls/pulls?apiVersion=2022-11-28#get-a-pull-request) and use it with `--new-from-patch`.
-* `push`: the action gets the diff of the push content (difference between commits before and after the push) from the [GitHub API](https://docs.github.com/en/rest/commits/commits?apiVersion=2022-11-28#compare-two-commits) and use it with `--new-from-patch`.
-* `merge_group`: the action gets the diff by using `--new-from-rev` option (relies on git).
-   You should add the option `fetch-depth: 0` to `actions/checkout` step.
+</details>
 
 ### `github-token`
 
@@ -162,6 +155,9 @@ When using `only-new-issues` option, the GitHub API is used, so a token is requi
 
 By default, it uses the `github.token` from the action.
 
+<details>
+<summary>Example</summary>
+
 ```yml
 uses: golangci/golangci-lint-action@v6
 with:
@@ -169,11 +165,41 @@ with:
   # ...
 ```
 
+</details>
+
+### `only-new-issues`
+
+(optional)
+
+Show only new issues.
+
+The default value is `false`.
+
+* `pull_request` and `pull_request_target`: the action gets the diff of the PR content from the [GitHub API](https://docs.github.com/en/rest/pulls/pulls?apiVersion=2022-11-28#get-a-pull-request) and use it with `--new-from-patch`.
+* `push`: the action gets the diff of the push content (difference between commits before and after the push) from the [GitHub API](https://docs.github.com/en/rest/commits/commits?apiVersion=2022-11-28#compare-two-commits) and use it with `--new-from-patch`.
+* `merge_group`: the action gets the diff by using `--new-from-rev` option (relies on git).
+  You should add the option `fetch-depth: 0` to `actions/checkout` step.
+
+<details>
+<summary>Example</summary>
+
+```yml
+uses: golangci/golangci-lint-action@v6
+with:
+  only-new-issues: true
+  # ...
+```
+
+</details>
+
 ### `working-directory`
 
 (optional)
 
 Working directory, useful for monorepos.
+
+<details>
+<summary>Example</summary>
 
 ```yml
 uses: golangci/golangci-lint-action@v6
@@ -182,74 +208,7 @@ with:
   # ...
 ```
 
-### `skip-cache`
-
-(optional)
-
-If set to `true`, then all caching functionality will be completely disabled,
-takes precedence over all other caching options.
-
-The default value is `false`.
-
-```yml
-uses: golangci/golangci-lint-action@v6
-with:
-  skip-cache: true
-  # ...
-```
-
-### `skip-save-cache`
-
-(optional)
-
-If set to `true`, caches will not be saved, but they may still be restored, required `skip-cache: false`.
-
-The default value is `false`.
-
-```yml
-uses: golangci/golangci-lint-action@v6
-with:
-  skip-save-cache: true
-  # ...
-```
-
-### `cache-invalidation-interval`
-
-(optional)
-
-Periodically invalidate the cache every `cache-invalidation-interval` days to ensure that outdated data is removed and fresh data is loaded.
-
-The default value is `7`.
-
-```yml
-uses: golangci/golangci-lint-action@v6
-with:
-  cache-invalidation-interval: 15
-  # ...
-```
-
-If set the number is `<= 0`, the cache will be always invalidate (Not recommended).
-
-### `problem-matchers`
-
-(optional)
-
-Force the usage of the embedded problem matchers.
-
-By default, the [problem matcher of Go (`actions/setup-go`)](https://github.com/actions/setup-go/blob/main/matchers.json) already handles the golangci-lint output (`colored-line-number`). 
-
-Works only with `colored-line-number` (the golangci-lint default).
-
-https://golangci-lint.run/usage/configuration/#output-configuration
-
-The default value is `false`.
-
-```yml
-uses: golangci/golangci-lint-action@v6
-with:
-  problem-matchers: true
-  # ...
-```
+</details>
 
 ### `args`
 
@@ -260,12 +219,106 @@ golangci-lint command line arguments.
 Note: By default, the `.golangci.yml` file should be at the root of the repository.
 The location of the configuration file can be changed by using `--config=`
 
+<details>
+<summary>Example</summary>
+
 ```yml
 uses: golangci/golangci-lint-action@v6
 with:
   args: --timeout=30m --config=/my/path/.golangci.yml --issues-exit-code=0
   # ...
 ```
+
+</details>
+
+### `problem-matchers`
+
+(optional)
+
+Force the usage of the embedded problem matchers.
+
+By default, the [problem matcher of Go (`actions/setup-go`)](https://github.com/actions/setup-go/blob/main/matchers.json) already handles the golangci-lint output (`colored-line-number`).
+
+Works only with `colored-line-number` (the golangci-lint default).
+
+https://golangci-lint.run/usage/configuration/#output-configuration
+
+The default value is `false`.
+
+<details>
+<summary>Example</summary>
+
+```yml
+uses: golangci/golangci-lint-action@v6
+with:
+  problem-matchers: true
+  # ...
+```
+
+</details>
+
+### `skip-cache`
+
+(optional)
+
+If set to `true`, then all caching functionality will be completely disabled,
+takes precedence over all other caching options.
+
+The default value is `false`.
+
+<details>
+<summary>Example</summary>
+
+```yml
+uses: golangci/golangci-lint-action@v6
+with:
+  skip-cache: true
+  # ...
+```
+
+</details>
+
+### `skip-save-cache`
+
+(optional)
+
+If set to `true`, caches will not be saved, but they may still be restored, required `skip-cache: false`.
+
+The default value is `false`.
+
+<details>
+<summary>Example</summary>
+
+```yml
+uses: golangci/golangci-lint-action@v6
+with:
+  skip-save-cache: true
+  # ...
+```
+
+</details>
+
+### `cache-invalidation-interval`
+
+(optional)
+
+Periodically invalidate the cache every `cache-invalidation-interval` days to ensure that outdated data is removed and fresh data is loaded.
+
+The default value is `7`.
+
+If set the number is `<= 0`, the cache will be always invalidate (Not recommended).
+
+<details>
+<summary>Example</summary>
+
+```yml
+uses: golangci/golangci-lint-action@v6
+with:
+  cache-invalidation-interval: 15
+  # ...
+```
+
+</details>
 
 ## Annotations
 

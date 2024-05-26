@@ -22,7 +22,13 @@ The action runs [golangci-lint](https://github.com/golangci/golangci-lint) and r
 
 ## How to use
 
+We recommend running this action in a job separate from other jobs (`go test`, etc.)
+because different jobs [run in parallel](https://help.github.com/en/actions/getting-started-with-github-actions/core-concepts-for-github-actions#job).
+
 Add `.github/workflows/golangci-lint.yml` with the following contents:
+
+<details>
+<summary>Simple Example</summary>
 
 ```yaml
 name: golangci-lint
@@ -46,18 +52,17 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: stable
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
           version: v1.58
 ```
 
-We recommend running this action in a job separate from other jobs (`go test`, etc.)
-because different jobs [run in parallel](https://help.github.com/en/actions/getting-started-with-github-actions/core-concepts-for-github-actions#job).
+</details>
 
 <details>
-<summary>Multiple OS Support</summary>
+<summary>Multiple OS Example</summary>
 
 If you need to run linters for specific operating systems, you will need to use the action `>=v2`.
 

@@ -10,6 +10,16 @@ The action runs [golangci-lint](https://github.com/golangci/golangci-lint) and r
 
 ![Logs](./static/colored-line-number.png)
 
+## Supporting Us
+
+<!-- [![GitHub Sponsors](https://img.shields.io/badge/GitHub-Donate-blue?logo=github&style=for-the-badge)](https://github.com/sponsors/golangci) -->
+[![Open Collective backers and sponsors](https://img.shields.io/badge/OpenCollective-Donate-blue?logo=opencollective&style=for-the-badge)](https://opencollective.com/golangci-lint)
+[![Linter Authors](https://img.shields.io/badge/Linter_Authors-Donate-blue?style=for-the-badge)](https://golangci-lint.run/product/thanks/)
+
+`golangci-lint` is a free and open-source project built by volunteers.
+
+If you value it, consider supporting us, we appreciate it! :heart:
+
 ## Compatibility
 
 * `v6.0.0+` removes `annotations` option, removes the default output format (`github-actions`).

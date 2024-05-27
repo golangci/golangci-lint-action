@@ -20,16 +20,6 @@ The action runs [golangci-lint](https://github.com/golangci/golangci-lint) and r
 
 If you value it, consider supporting us, we appreciate it! :heart:
 
-## Compatibility
-
-* `v6.0.0+` removes `annotations` option, removes the default output format (`github-actions`).
-* `v5.0.0+` removes `skip-pkg-cache` and `skip-build-cache` because the cache related to Go itself is already handled by `actions/setup-go`.
-* `v4.0.0+` requires an explicit `actions/setup-go` installation step before using this action: `uses: actions/setup-go@v5`.
-  The `skip-go-installation` option has been removed.
-* `v2.0.0+` works with `golangci-lint` version >= `v1.28.3`
-* `v1.2.2` is deprecated due to we forgot to change the minimum version of `golangci-lint` to `v1.28.3` ([issue](https://github.com/golangci/golangci-lint-action/issues/39))
-* `v1.2.1` works with `golangci-lint` version >= `v1.14.0` ([issue](https://github.com/golangci/golangci-lint-action/issues/39))
-
 ## How to use
 
 We recommend running this action in a job separate from other jobs (`go test`, etc.)
@@ -74,10 +64,6 @@ jobs:
 <details>
 <summary>Multiple OS Example</summary>
 
-If you need to run linters for specific operating systems, you will need to use the action `>=v2`.
-
-Here is a sample configuration file:
-
 ```yaml
 name: golangci-lint
 on:
@@ -118,6 +104,16 @@ You will also likely need to add the following `.gitattributes` file to ensure t
 ```
 
 </details>
+
+## Compatibility
+
+* `v6.0.0+` removes `annotations` option, removes the default output format (`github-actions`).
+* `v5.0.0+` removes `skip-pkg-cache` and `skip-build-cache` because the cache related to Go itself is already handled by `actions/setup-go`.
+* `v4.0.0+` requires an explicit `actions/setup-go` installation step before using this action: `uses: actions/setup-go@v5`.
+  The `skip-go-installation` option has been removed.
+* `v2.0.0+` works with `golangci-lint` version >= `v1.28.3`
+* `v1.2.2` is deprecated due to we forgot to change the minimum version of `golangci-lint` to `v1.28.3` ([issue](https://github.com/golangci/golangci-lint-action/issues/39))
+* `v1.2.1` works with `golangci-lint` version >= `v1.14.0` ([issue](https://github.com/golangci/golangci-lint-action/issues/39))
 
 ## Options
 

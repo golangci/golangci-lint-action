@@ -37,6 +37,7 @@ async function fetchPatch(): Promise<string> {
   switch (ctx.eventName) {
     case `pull_request`:
     case `pull_request_target`:
+    case `pull_request_review`:
       return await fetchPullRequestPatch(ctx)
     case `push`:
       return await fetchPushPatch(ctx)
@@ -222,6 +223,7 @@ async function runLint(lintPath: string, patchPath: string): Promise<void> {
     switch (ctx.eventName) {
       case `pull_request`:
       case `pull_request_target`:
+      case `pull_request_review`:
       case `push`:
         if (patchPath) {
           addedArgs.push(`--new-from-patch=${patchPath}`)

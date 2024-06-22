@@ -56,7 +56,7 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: v1.58
+          version: v1.59
 ```
 
 </details>
@@ -94,7 +94,146 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: v1.58
+          version: v1.59
+```
+
+You will also likely need to add the following `.gitattributes` file to ensure that line endings for Windows builds are properly formatted:
+
+```.gitattributes
+*.go text eol=lf
+```
+
+</details>
+
+<details>
+<summary>Go Workspace Example</summary>
+
+```yaml
+name: golangci-lint
+
+on:
+  pull_request:
+  push:
+    branches:
+      - "main"
+      - "master"
+
+env:
+  GO_VERSION: stable
+  GOLANGCI_LINT_VERSION: v1.59
+
+jobs:
+  detect-modules:
+    runs-on: ubuntu-latest
+    outputs:
+      modules: ${{ steps.set-modules.outputs.modules }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - id: set-modules
+        run: echo "modules=$(go list -m -json | jq -s '.' | jq -c '[.[].Dir]')" >> $GITHUB_OUTPUT
+
+  golangci-lint:
+    needs: detect-modules
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        modules: ${{ fromJSON(needs.detect-modules.outputs.modules) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: golangci-lint ${{ matrix.modules }}
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+          working-directory: ${{ matrix.modules }}
+```
+
+</details>
+
+<details>
+<summary>Go Workspace Example (Multiple OS)</summary>
+
+```yaml
+# golangci-lint.yml
+name: golangci-lint (multi OS)
+
+on:
+  pull_request:
+  push:
+    branches:
+      - "main"
+      - "master"
+
+jobs:
+  golangci-lint:
+    strategy:
+      matrix:
+        go-version: [ stable, oldstable ]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    uses: ./.github/workflows/.workspace.yml
+    with:
+      os: ${{ matrix.os }}
+      go-version: ${{ matrix.go-version }}
+      repository: ${{ inputs.repository }}
+      golangci-lint-version: v1.59
+```
+
+```yaml
+# ./.github/workflows/.golangci-lint-reusable.yml
+name: golangci-lint-reusable
+
+on:
+  workflow_call:
+    inputs:
+      os:
+        description: 'OS'
+        required: true
+        type: string
+      go-version:
+        description: 'Go version'
+        required: true
+        type: string
+        default: stable
+      golangci-lint-version:
+        description: 'Golangci-lint version'
+        type: string
+        default: 'v1.59.1'
+
+jobs:
+  detect-modules:
+    runs-on: ${{ inputs.os }}
+    outputs:
+      modules: ${{ steps.set-modules.outputs.modules }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ inputs.go-version }}
+      - id: set-modules
+        shell: bash # require for Windows to be able to use $GITHUB_OUTPUT https://github.com/actions/runner/issues/2224
+        run: echo "modules=$(go list -m -json | jq -s '.' | jq -c '[.[].Dir]')" >> $GITHUB_OUTPUT
+
+  golangci-lint:
+    needs: detect-modules
+    runs-on: ${{ inputs.os }}
+    strategy:
+      matrix:
+        modules: ${{ fromJSON(needs.detect-modules.outputs.modules) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ inputs.go-version }}
+      - name: golangci-lint ${{ matrix.modules }}
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: ${{ inputs.golangci-lint-version }}
+          working-directory: ${{ matrix.modules }}
 ```
 
 You will also likely need to add the following `.gitattributes` file to ensure that line endings for Windows builds are properly formatted:

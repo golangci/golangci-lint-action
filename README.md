@@ -175,7 +175,7 @@ jobs:
       matrix:
         go-version: [ stable, oldstable ]
         os: [ubuntu-latest, macos-latest, windows-latest]
-    uses: ./.github/workflows/.workspace.yml
+    uses: ./.github/workflows/.golangci-lint-reusable.yml
     with:
       os: ${{ matrix.os }}
       go-version: ${{ matrix.go-version }}

@@ -179,7 +179,6 @@ jobs:
     with:
       os: ${{ matrix.os }}
       go-version: ${{ matrix.go-version }}
-      repository: ${{ inputs.repository }}
       golangci-lint-version: v1.59
 ```
 

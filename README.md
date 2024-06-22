@@ -159,7 +159,7 @@ jobs:
 <summary>Go Workspace Example (Multiple OS)</summary>
 
 ```yaml
-# golangci-lint.yml
+# ./.github/workflows/golangci-lint.yml
 name: golangci-lint (multi OS)
 
 on:

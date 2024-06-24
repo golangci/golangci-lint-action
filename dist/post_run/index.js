@@ -84912,7 +84912,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.saveCache = exports.restoreCache = void 0;
+exports.restoreCache = restoreCache;
+exports.saveCache = saveCache;
 const cache = __importStar(__nccwpck_require__(7799));
 const core = __importStar(__nccwpck_require__(2186));
 const crypto = __importStar(__nccwpck_require__(6113));
@@ -85005,7 +85006,6 @@ async function restoreCache() {
         }
     }
 }
-exports.restoreCache = restoreCache;
 async function saveCache() {
     if (core.getBooleanInput(`skip-cache`, { required: true }))
         return;
@@ -85044,7 +85044,6 @@ async function saveCache() {
         }
     }
 }
-exports.saveCache = saveCache;
 
 
 /***/ }),
@@ -85110,7 +85109,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.installBin = exports.goInstall = exports.installLint = exports.InstallMode = void 0;
+exports.InstallMode = void 0;
+exports.installLint = installLint;
+exports.goInstall = goInstall;
+exports.installBin = installBin;
 const core = __importStar(__nccwpck_require__(2186));
 const tc = __importStar(__nccwpck_require__(7784));
 const child_process_1 = __nccwpck_require__(2081);
@@ -85172,7 +85174,6 @@ async function installLint(versionConfig, mode) {
             return installBin(versionConfig);
     }
 }
-exports.installLint = installLint;
 /**
  * Install golangci-lint via `go install`.
  *
@@ -85192,7 +85193,6 @@ async function goInstall(versionConfig) {
     core.info(`Installed golangci-lint into ${lintPath} in ${Date.now() - startedAt}ms`);
     return lintPath;
 }
-exports.goInstall = goInstall;
 /**
  * Install golangci-lint via the precompiled binary.
  *
@@ -85225,7 +85225,6 @@ async function installBin(versionConfig) {
     core.info(`Installed golangci-lint into ${lintPath} in ${Date.now() - startedAt}ms`);
     return lintPath;
 }
-exports.installBin = installBin;
 
 
 /***/ }),
@@ -85259,7 +85258,8 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.postRun = exports.run = void 0;
+exports.run = run;
+exports.postRun = postRun;
 const core = __importStar(__nccwpck_require__(2186));
 const github = __importStar(__nccwpck_require__(5438));
 const child_process_1 = __nccwpck_require__(2081);
@@ -85500,7 +85500,6 @@ async function run() {
         core.setFailed(error.message);
     }
 }
-exports.run = run;
 async function postRun() {
     try {
         await (0, cache_1.saveCache)();
@@ -85510,7 +85509,6 @@ async function postRun() {
         core.setFailed(error.message);
     }
 }
-exports.postRun = postRun;
 
 
 /***/ }),
@@ -85544,7 +85542,11 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.isValidEvent = exports.logWarning = exports.getCacheState = exports.setCacheState = exports.isExactKeyMatch = void 0;
+exports.isExactKeyMatch = isExactKeyMatch;
+exports.setCacheState = setCacheState;
+exports.getCacheState = getCacheState;
+exports.logWarning = logWarning;
+exports.isValidEvent = isValidEvent;
 const core = __importStar(__nccwpck_require__(2186));
 const constants_1 = __nccwpck_require__(9042);
 function isExactKeyMatch(key, cacheKey) {
@@ -85553,11 +85555,9 @@ function isExactKeyMatch(key, cacheKey) {
             sensitivity: "accent",
         }) === 0);
 }
-exports.isExactKeyMatch = isExactKeyMatch;
 function setCacheState(state) {
     core.saveState(constants_1.State.CacheMatchedKey, state);
 }
-exports.setCacheState = setCacheState;
 function getCacheState() {
     const cacheKey = core.getState(constants_1.State.CacheMatchedKey);
     if (cacheKey) {
@@ -85566,18 +85566,15 @@ function getCacheState() {
     }
     return undefined;
 }
-exports.getCacheState = getCacheState;
 function logWarning(message) {
     const warningPrefix = "[warning]";
     core.info(`${warningPrefix}${message}`);
 }
-exports.logWarning = logWarning;
 // Cache token authorized for all events that are tied to a ref
 // See GitHub Context https://help.github.com/actions/automating-your-workflow-with-github-actions/contexts-and-expression-syntax-for-github-actions#github-context
 function isValidEvent() {
     return constants_1.RefKey in process.env && Boolean(process.env[constants_1.RefKey]);
 }
-exports.isValidEvent = isValidEvent;
 
 
 /***/ }),
@@ -85611,7 +85608,7 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.alterDiffPatch = void 0;
+exports.alterDiffPatch = alterDiffPatch;
 const core = __importStar(__nccwpck_require__(2186));
 const path = __importStar(__nccwpck_require__(1017));
 // If needed alter diff file to be compatible with working directory
@@ -85622,7 +85619,6 @@ function alterDiffPatch(patch) {
     }
     return patch;
 }
-exports.alterDiffPatch = alterDiffPatch;
 function alterPatchWithWorkingDirectory(patch, workingDirectory) {
     const workspace = process.env["GITHUB_WORKSPACE"] || "";
     const wd = path.relative(workspace, workingDirectory);
@@ -85692,7 +85688,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.findLintVersion = exports.stringifyVersion = void 0;
+exports.stringifyVersion = void 0;
+exports.findLintVersion = findLintVersion;
 const core = __importStar(__nccwpck_require__(2186));
 const httpm = __importStar(__nccwpck_require__(6255));
 const fs = __importStar(__nccwpck_require__(7147));
@@ -85815,7 +85812,6 @@ async function findLintVersion(mode) {
     core.info(`Requested golangci-lint '${(0, exports.stringifyVersion)(reqLintVersion)}', using '${versionConfig.TargetVersion}', calculation took ${Date.now() - startedAt}ms`);
     return versionConfig;
 }
-exports.findLintVersion = findLintVersion;
 
 
 /***/ }),

@@ -10,7 +10,7 @@ inputs:
       When `install-mode` is `goinstall` the value can be v1.2.3, `latest`, or the hash of a commit.
     required: false
   install-mode:
-    description: "The mode to install golangci-lint. It can be 'binary' or 'goinstall'."
+    description: "The mode to install golangci-lint. It can be 'binary', 'goinstall' or 'none'."
     default: "binary"
     required: false
   working-directory:

@@ -33,7 +33,9 @@
     "@types/node": "^20.14.9",
     "@types/semver": "^7.5.8",
     "@types/tmp": "^0.2.6",
-    "tmp": "^0.2.3"
+    "@types/which": "^3.0.4",
+    "tmp": "^0.2.3",
+    "which": "^4.0.0"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^7.14.1",

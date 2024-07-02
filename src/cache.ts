@@ -20,7 +20,9 @@ function checksumFile(hashName: string, path: string): Promise<string> {
 const pathExists = async (path: string): Promise<boolean> => !!(await fs.promises.stat(path).catch(() => false))
 
 const getLintCacheDir = (): string => {
-  return path.resolve(`${process.env.HOME}/.cache/golangci-lint`)
+  const home = process.platform === "win32" ? process.env.USERPROFILE : process.env.HOME
+
+  return path.resolve(`${home}`, `.cache`, `golangci-lint`)
 }
 
 const getIntervalKey = (invalidationIntervalDays: number): string => {

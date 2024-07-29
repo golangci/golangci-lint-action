@@ -38,6 +38,7 @@ const getAssetURL = (versionConfig: VersionConfig): string => {
 export enum InstallMode {
   Binary = "binary",
   GoInstall = "goinstall",
+  None = "none",
 }
 
 type ExecRes = {

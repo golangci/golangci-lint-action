@@ -6,6 +6,7 @@ import * as fs from "fs"
 import * as path from "path"
 import { dir } from "tmp"
 import { promisify } from "util"
+import which from "which"
 
 import { restoreCache, saveCache } from "./cache"
 import { installLint, InstallMode } from "./install"
@@ -22,6 +23,15 @@ function isOnlyNewIssues(): boolean {
 
 async function prepareLint(): Promise<string> {
   const mode = core.getInput("install-mode").toLowerCase()
+
+  if (mode === InstallMode.None) {
+    const bin = await which("golangci-lint", { nothrow: true })
+    if (!bin) {
+      throw new Error("golangci-lint binary not found in the PATH")
+    }
+    return bin
+  }
+
   const versionConfig = await findLintVersion(<InstallMode>mode)
 
   return await installLint(versionConfig, <InstallMode>mode)

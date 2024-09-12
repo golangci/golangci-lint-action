@@ -85322,7 +85322,12 @@ async function goInstall(versionConfig) {
     const res = await execShellCommand(`go install -n github.com/golangci/golangci-lint/cmd/golangci-lint@${versionConfig.TargetVersion}`, options);
     printOutput(res);
     // The output of `go install -n` when the binary is already installed is `touch <path_to_the_binary>`.
-    const lintPath = res.stderr.trimStart().trimEnd().split(` `, 2)[1];
+    const lintPath = res.stderr
+        .split(/\r?\n/)
+        .map((v) => v.trimStart().trimEnd())
+        .filter((v) => v.startsWith("touch "))
+        .reduce((a, b) => a + b, "")
+        .split(` `, 2)[1];
     core.info(`Installed golangci-lint into ${lintPath} in ${Date.now() - startedAt}ms`);
     return lintPath;
 }

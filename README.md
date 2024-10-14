@@ -1,5 +1,7 @@
 # golangci-lint-action
-
+with:
+  install-mode: "goinstall"
+  # ...
 [![Build Status](https://github.com/golangci/golangci-lint-action/workflows/build-and-test/badge.svg)](https://github.com/golangci/golangci-lint-action/actions)
 
 It's the official GitHub action for [golangci-lint](https://github.com/golangci/golangci-lint) from its authors.

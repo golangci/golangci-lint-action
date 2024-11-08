@@ -544,5 +544,7 @@ This scheme is basic and needs improvements. Pull requests and ideas are welcome
 
 1. Install [act](https://github.com/nektos/act#installation)
 2. Make a symlink for `act` to work properly: `ln -s . golangci-lint-action`
-3. Prepare deps once: `npm run prepare-deps`
-4. Run `npm run local` after any change to test it
+3. Instally typescript (on a Mac, `brew install tsc`)
+4. Prepare deps once: `npm install`
+5. Build: `npm run build`
+6. Run `npm run local` after any change to test it

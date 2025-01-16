@@ -93771,6 +93771,9 @@ const getAssetURL = (versionConfig) => {
     }
     let arch = os_1.default.arch();
     switch (arch) {
+        case "arm64":
+            arch = "arm64";
+            break;
         case "x64":
             arch = "amd64";
             break;
@@ -94389,6 +94392,7 @@ exports.findLintVersion = findLintVersion;
 const core = __importStar(__nccwpck_require__(7484));
 const httpm = __importStar(__nccwpck_require__(4844));
 const fs = __importStar(__nccwpck_require__(9896));
+const os_1 = __importDefault(__nccwpck_require__(857));
 const path_1 = __importDefault(__nccwpck_require__(6928));
 const install_1 = __nccwpck_require__(232);
 const versionRe = /^v(\d+)\.(\d+)(?:\.(\d+))?$/;
@@ -94485,10 +94489,14 @@ async function findLintVersion(mode) {
     // if the patched version is passed, just use it
     if (reqLintVersion?.major !== null && reqLintVersion?.minor != null && reqLintVersion?.patch !== null) {
         return new Promise((resolve) => {
+            let arch = "amd64";
+            if (os_1.default.arch() === "arm64") {
+                arch = "arm64";
+            }
             const versionWithoutV = `${reqLintVersion.major}.${reqLintVersion.minor}.${reqLintVersion.patch}`;
             resolve({
                 TargetVersion: `v${versionWithoutV}`,
-                AssetURL: `https://github.com/golangci/golangci-lint/releases/download/v${versionWithoutV}/golangci-lint-${versionWithoutV}-linux-amd64.tar.gz`,
+                AssetURL: `https://github.com/golangci/golangci-lint/releases/download/v${versionWithoutV}/golangci-lint-${versionWithoutV}-linux-${arch}.tar.gz`,
             });
         });
     }

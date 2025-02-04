@@ -94329,6 +94329,7 @@ const versionRe = /^v(\d+)\.(\d+)(?:\.(\d+))?$/;
 const modVersionRe = /github.com\/golangci\/golangci-lint\s(v.+)/;
 const parseVersion = (s) => {
     if (s == "latest" || s == "") {
+        // TODO(ldez): it should be replaced with an explicit version (ex: v1.64.0)
         return null;
     }
     const match = s.match(versionRe);
@@ -94348,6 +94349,7 @@ const stringifyVersion = (v) => {
     return `v${v.major}.${v.minor}${v.patch !== null ? `.${v.patch}` : ``}`;
 };
 exports.stringifyVersion = stringifyVersion;
+// TODO(ldez): it should be updated to v2.0.0.
 const minVersion = {
     major: 1,
     minor: 28,
@@ -94397,7 +94399,8 @@ const getConfig = async () => {
         maxRetries: 5,
     });
     try {
-        const url = `https://raw.githubusercontent.com/golangci/golangci-lint/master/assets/github-action-config.json`;
+        // TODO(ldez): HEAD should be replaced with an explicit version (ex: v1.64.0).
+        const url = `https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/assets/github-action-config-v1.json`;
         const response = await http.get(url);
         if (response.message.statusCode !== 200) {
             throw new Error(`failed to download from "${url}". Code(${response.message.statusCode}) Message(${response.message.statusMessage})`);
@@ -94413,6 +94416,7 @@ async function findLintVersion(mode) {
     core.info(`Finding needed golangci-lint version...`);
     if (mode == install_1.InstallMode.GoInstall) {
         const v = core.getInput(`version`);
+        // TODO(ldez): latest should be replaced with an explicit version (ex: v1.64.0)
         return { TargetVersion: v ? v : "latest", AssetURL: "github.com/golangci/golangci-lint" };
     }
     const reqLintVersion = getRequestedLintVersion();

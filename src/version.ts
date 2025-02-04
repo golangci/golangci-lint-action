@@ -135,7 +135,8 @@ export async function findLintVersion(mode: InstallMode): Promise<VersionConfig>
 
   if (mode == InstallMode.GoInstall) {
     const v: string = core.getInput(`version`)
-    // TODO(ldez): latest should be replaced with an explicit version (ex: v1.64.0)
+    // TODO(ldez): latest should be replaced with an explicit version (ex: v1.64.0).
+    // TODO(ldez): AssetURL should be updated for v2.
     return { TargetVersion: v ? v : "latest", AssetURL: "github.com/golangci/golangci-lint" }
   }
 

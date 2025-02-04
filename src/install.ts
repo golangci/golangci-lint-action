@@ -91,12 +91,14 @@ export async function goInstall(versionConfig: VersionConfig): Promise<string> {
 
   const options: ExecOptions = { env: { ...process.env, CGO_ENABLED: "1" } }
 
+  // TODO(ldez): it should be updated for v2.
   const exres = await execShellCommand(
     `go install github.com/golangci/golangci-lint/cmd/golangci-lint@${versionConfig.TargetVersion}`,
     options
   )
   printOutput(exres)
 
+  // TODO(ldez): it should be updated for v2.
   const res = await execShellCommand(
     `go install -n github.com/golangci/golangci-lint/cmd/golangci-lint@${versionConfig.TargetVersion}`,
     options

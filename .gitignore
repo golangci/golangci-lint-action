@@ -6,7 +6,7 @@ __tests__/runner/*
 node_modules/
 lib/
 
-# Rest pulled from https://github.com/github/gitignore/blob/master/Node.gitignore
+# Rest pulled from https://github.com/github/gitignore/blob/HEAD/Node.gitignore
 # Logs
 logs
 *.log

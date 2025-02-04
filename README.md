@@ -115,8 +115,8 @@ on:
   pull_request:
   push:
     branches:
-      - "main"
-      - "master"
+      - main
+      - master
 
 env:
   GO_VERSION: stable
@@ -166,8 +166,8 @@ on:
   pull_request:
   push:
     branches:
-      - "main"
-      - "master"
+      - main
+      - master
 
 jobs:
   golangci-lint:
@@ -498,7 +498,7 @@ permissions:
 
 The action was implemented with performance in mind:
 
-1. We cache data from golangci-lint analysis between builds by using [@actions/cache](https://github.com/actions/toolkit/tree/master/packages/cache). 
+1. We cache data from golangci-lint analysis between builds by using [@actions/cache](https://github.com/actions/toolkit/tree/HEAD/packages/cache). 
 2. We don't use Docker because image pulling is slow.
 3. We do as much as we can in parallel, e.g. we download cache, and golangci-lint binary in parallel.
 
@@ -514,7 +514,7 @@ We use JavaScript-based action.
 We don't use Docker-based action because:
 
 1. Docker pulling is slow currently
-2. it's easier to use caching from [@actions/cache](https://github.com/actions/toolkit/tree/master/packages/cache)
+2. it's easier to use caching from [@actions/cache](https://github.com/actions/toolkit/tree/HEAD/packages/cache)
 
 We support different platforms, such as `ubuntu`, `macos`, and `windows` with `x32` and `x64` archs.
 
@@ -522,9 +522,9 @@ Inside our action, we perform 3 steps:
 
 1. Setup environment running in parallel:
    * restore [cache](https://github.com/actions/cache) of previous analyses
-   * fetch [action config](https://github.com/golangci/golangci-lint/blob/master/assets/github-action-config.json) and find the latest `golangci-lint` patch version for needed version
+   * fetch [action config](https://github.com/golangci/golangci-lint/blob/HEAD/assets/github-action-config.json) and find the latest `golangci-lint` patch version for needed version
      (users of this action can specify only minor version of `golangci-lint`).
-     After that install [golangci-lint](https://github.com/golangci/golangci-lint) using [@actions/tool-cache](https://github.com/actions/toolkit/tree/master/packages/tool-cache)
+     After that install [golangci-lint](https://github.com/golangci/golangci-lint) using [@actions/tool-cache](https://github.com/actions/toolkit/tree/HEAD/packages/tool-cache)
 2. Run `golangci-lint` with specified by user `args`
 3. Save cache for later builds
 

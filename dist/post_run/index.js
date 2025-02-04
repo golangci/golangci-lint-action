@@ -93757,8 +93757,10 @@ async function goInstall(versionConfig) {
     core.info(`Installing golangci-lint ${versionConfig.TargetVersion}...`);
     const startedAt = Date.now();
     const options = { env: { ...process.env, CGO_ENABLED: "1" } };
+    // TODO(ldez): it should be updated for v2.
     const exres = await execShellCommand(`go install github.com/golangci/golangci-lint/cmd/golangci-lint@${versionConfig.TargetVersion}`, options);
     printOutput(exres);
+    // TODO(ldez): it should be updated for v2.
     const res = await execShellCommand(`go install -n github.com/golangci/golangci-lint/cmd/golangci-lint@${versionConfig.TargetVersion}`, options);
     printOutput(res);
     // The output of `go install -n` when the binary is already installed is `touch <path_to_the_binary>`.
@@ -94416,7 +94418,8 @@ async function findLintVersion(mode) {
     core.info(`Finding needed golangci-lint version...`);
     if (mode == install_1.InstallMode.GoInstall) {
         const v = core.getInput(`version`);
-        // TODO(ldez): latest should be replaced with an explicit version (ex: v1.64.0)
+        // TODO(ldez): latest should be replaced with an explicit version (ex: v1.64.0).
+        // TODO(ldez): AssetURL should be updated for v2.
         return { TargetVersion: v ? v : "latest", AssetURL: "github.com/golangci/golangci-lint" };
     }
     const reqLintVersion = getRequestedLintVersion();

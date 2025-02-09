@@ -539,21 +539,3 @@ Inside our action, we perform 3 steps:
    GitHub matches keys by prefix if we have no exact match for the primary cache.
 
 This scheme is basic and needs improvements. Pull requests and ideas are welcome.
-
-## Development of this action
-
-1. Install [act](https://github.com/nektos/act#installation)
-2. Make a symlink for `act` to work properly: `ln -s . golangci-lint-action`
-3. Install dependencies: `npm install`
-4. Build: `npm run build`
-5. Run `npm run local` after any change to test it
-
-### Releases
-
-```bash
-npm version <major | minor | patch> -m "Upgrade to %s"
-```
-
-- https://docs.npmjs.com/cli/v11/commands/npm-version
-
-The "major tag" (ex: `v6`) should be deleted and then recreated manually.

@@ -1,7 +1,6 @@
 import * as core from "@actions/core"
 import * as httpm from "@actions/http-client"
 import * as fs from "fs"
-import os from "os"
 import path from "path"
 
 import { InstallMode } from "./install"
@@ -14,6 +13,7 @@ export type Version = {
 } | null
 
 const versionRe = /^v(\d+)\.(\d+)(?:\.(\d+))?$/
+// TODO(ldez): it should be updated to match v2 module name.
 const modVersionRe = /github.com\/golangci\/golangci-lint\s(v.+)/
 
 const parseVersion = (s: string): Version => {
@@ -64,8 +64,8 @@ const isLessVersion = (a: Version, b: Version): boolean => {
   return a.minor < b.minor
 }
 
-const getRequestedLintVersion = (): Version => {
-  let requestedLintVersion = core.getInput(`version`)
+const getRequestedVersion = (): Version => {
+  let requestedVersion = core.getInput(`version`)
   const workingDirectory = core.getInput(`working-directory`)
 
   let goMod = "go.mod"
@@ -73,43 +73,43 @@ const getRequestedLintVersion = (): Version => {
     goMod = path.join(workingDirectory, goMod)
   }
 
-  if (requestedLintVersion == "" && fs.existsSync(goMod)) {
+  if (requestedVersion == "" && fs.existsSync(goMod)) {
     const content = fs.readFileSync(goMod, "utf-8")
     const match = content.match(modVersionRe)
     if (match) {
-      requestedLintVersion = match[1]
-      core.info(`Found golangci-lint version '${requestedLintVersion}' in '${goMod}' file`)
+      requestedVersion = match[1]
+      core.info(`Found golangci-lint version '${requestedVersion}' in '${goMod}' file`)
     }
   }
 
-  const parsedRequestedLintVersion = parseVersion(requestedLintVersion)
-  if (parsedRequestedLintVersion == null) {
+  const parsedRequestedVersion = parseVersion(requestedVersion)
+  if (parsedRequestedVersion == null) {
     return null
   }
 
-  if (isLessVersion(parsedRequestedLintVersion, minVersion)) {
+  if (isLessVersion(parsedRequestedVersion, minVersion)) {
     throw new Error(
-      `requested golangci-lint version '${requestedLintVersion}' isn't supported: we support only ${stringifyVersion(
+      `requested golangci-lint version '${requestedVersion}' isn't supported: we support only ${stringifyVersion(
         minVersion
       )} and later versions`
     )
   }
 
-  return parsedRequestedLintVersion
+  return parsedRequestedVersion
 }
 
-export type VersionConfig = {
+export type VersionInfo = {
   Error?: string
   TargetVersion: string
 }
 
-type Config = {
+type VersionMapping = {
   MinorVersionToConfig: {
-    [minorVersion: string]: VersionConfig
+    [minorVersion: string]: VersionInfo
   }
 }
 
-const fetchConfig = async (): Promise<Config> => {
+const fetchVersionMapping = async (): Promise<VersionMapping> => {
   const http = new httpm.HttpClient(`golangci/golangci-lint-action`, [], {
     allowRetries: true,
     maxRetries: 5,
@@ -129,7 +129,7 @@ const fetchConfig = async (): Promise<Config> => {
   }
 }
 
-export async function findLintVersion(mode: InstallMode): Promise<VersionConfig> {
+export async function getVersion(mode: InstallMode): Promise<VersionInfo> {
   core.info(`Finding needed golangci-lint version...`)
 
   if (mode == InstallMode.GoInstall) {
@@ -138,38 +138,39 @@ export async function findLintVersion(mode: InstallMode): Promise<VersionConfig>
     return { TargetVersion: v ? v : "latest" }
   }
 
-  const reqLintVersion = getRequestedLintVersion()
+  const reqVersion = getRequestedVersion()
 
   // if the patched version is passed, just use it
-  if (reqLintVersion?.major === 1 && reqLintVersion?.minor != null && reqLintVersion?.patch !== null) {
+  // TODO(ldez): should be updated to `reqVersion?.major === 2`.
+  if (reqVersion?.major === 1 && reqVersion?.minor != null && reqVersion?.patch !== null) {
     return new Promise((resolve) => {
-      const versionWithoutV = `${reqLintVersion.major}.${reqLintVersion.minor}.${reqLintVersion.patch}`
+      const versionWithoutV = `${reqVersion.major}.${reqVersion.minor}.${reqVersion.patch}`
       resolve({ TargetVersion: `v${versionWithoutV}` })
     })
   }
 
   const startedAt = Date.now()
 
-  const config = await fetchConfig()
-  if (!config.MinorVersionToConfig) {
-    core.warning(JSON.stringify(config))
+  const mapping = await fetchVersionMapping()
+  if (!mapping.MinorVersionToConfig) {
+    core.warning(JSON.stringify(mapping))
     throw new Error(`invalid config: no MinorVersionToConfig field`)
   }
 
-  const versionConfig = config.MinorVersionToConfig[stringifyVersion(reqLintVersion)]
-  if (!versionConfig) {
-    throw new Error(`requested golangci-lint version '${stringifyVersion(reqLintVersion)}' doesn't exist`)
+  const versionInfo = mapping.MinorVersionToConfig[stringifyVersion(reqVersion)]
+  if (!versionInfo) {
+    throw new Error(`requested golangci-lint version '${stringifyVersion(reqVersion)}' doesn't exist`)
   }
 
-  if (versionConfig.Error) {
-    throw new Error(`failed to use requested golangci-lint version '${stringifyVersion(reqLintVersion)}': ${versionConfig.Error}`)
+  if (versionInfo.Error) {
+    throw new Error(`failed to use requested golangci-lint version '${stringifyVersion(reqVersion)}': ${versionInfo.Error}`)
   }
 
   core.info(
-    `Requested golangci-lint '${stringifyVersion(reqLintVersion)}', using '${versionConfig.TargetVersion}', calculation took ${
+    `Requested golangci-lint '${stringifyVersion(reqVersion)}', using '${versionInfo.TargetVersion}', calculation took ${
       Date.now() - startedAt
     }ms`
   )
 
-  return versionConfig
+  return versionInfo
 }

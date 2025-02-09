@@ -93689,8 +93689,7 @@ const os_1 = __importDefault(__nccwpck_require__(857));
 const path_1 = __importDefault(__nccwpck_require__(6928));
 const util_1 = __nccwpck_require__(9023);
 const execShellCommand = (0, util_1.promisify)(child_process_1.exec);
-const downloadURL = "https://github.com/golangci/golangci-lint/releases/download";
-const getAssetURL = (versionConfig) => {
+const getAssetURL = (versionInfo) => {
     let ext = "tar.gz";
     let platform = os_1.default.platform().toString();
     switch (platform) {
@@ -93712,8 +93711,8 @@ const getAssetURL = (versionConfig) => {
             arch = "386";
             break;
     }
-    const noPrefix = versionConfig.TargetVersion.slice(1);
-    return `${downloadURL}/${versionConfig.TargetVersion}/golangci-lint-${noPrefix}-${platform}-${arch}.${ext}`;
+    const noPrefix = versionInfo.TargetVersion.slice(1);
+    return `https://github.com/golangci/golangci-lint/releases/download/${versionInfo.TargetVersion}/golangci-lint-${noPrefix}-${platform}-${arch}.${ext}`;
 };
 var InstallMode;
 (function (InstallMode) {
@@ -93732,57 +93731,57 @@ const printOutput = (res) => {
 /**
  * Install golangci-lint.
  *
- * @param versionConfig information about version to install.
+ * @param versionInfo   information about version to install.
  * @param mode          installation mode.
  * @returns             path to installed binary of golangci-lint.
  */
-async function installLint(versionConfig, mode) {
+async function installLint(versionInfo, mode) {
     core.info(`Installation mode: ${mode}`);
     switch (mode) {
         case InstallMode.Binary:
-            return installBin(versionConfig);
+            return installBin(versionInfo);
         case InstallMode.GoInstall:
-            return goInstall(versionConfig);
+            return goInstall(versionInfo);
         default:
-            return installBin(versionConfig);
+            return installBin(versionInfo);
     }
 }
 /**
  * Install golangci-lint via `go install`.
  *
- * @param versionConfig information about version to install.
+ * @param versionInfo   information about version to install.
  * @returns             path to installed binary of golangci-lint.
  */
-async function goInstall(versionConfig) {
-    core.info(`Installing golangci-lint ${versionConfig.TargetVersion}...`);
+async function goInstall(versionInfo) {
+    core.info(`Installing golangci-lint ${versionInfo.TargetVersion}...`);
     const startedAt = Date.now();
     const options = { env: { ...process.env, CGO_ENABLED: "1" } };
     // TODO(ldez): it should be updated for v2.
-    const exres = await execShellCommand(`go install github.com/golangci/golangci-lint/cmd/golangci-lint@${versionConfig.TargetVersion}`, options);
+    const exres = await execShellCommand(`go install github.com/golangci/golangci-lint/cmd/golangci-lint@${versionInfo.TargetVersion}`, options);
     printOutput(exres);
     // TODO(ldez): it should be updated for v2.
-    const res = await execShellCommand(`go install -n github.com/golangci/golangci-lint/cmd/golangci-lint@${versionConfig.TargetVersion}`, options);
+    const res = await execShellCommand(`go install -n github.com/golangci/golangci-lint/cmd/golangci-lint@${versionInfo.TargetVersion}`, options);
     printOutput(res);
     // The output of `go install -n` when the binary is already installed is `touch <path_to_the_binary>`.
-    const lintPath = res.stderr
+    const binPath = res.stderr
         .split(/\r?\n/)
         .map((v) => v.trimStart().trimEnd())
         .filter((v) => v.startsWith("touch "))
         .reduce((a, b) => a + b, "")
         .split(` `, 2)[1];
-    core.info(`Installed golangci-lint into ${lintPath} in ${Date.now() - startedAt}ms`);
-    return lintPath;
+    core.info(`Installed golangci-lint into ${binPath} in ${Date.now() - startedAt}ms`);
+    return binPath;
 }
 /**
  * Install golangci-lint via the precompiled binary.
  *
- * @param versionConfig information about version to install.
+ * @param versionInfo   information about version to install.
  * @returns             path to installed binary of golangci-lint.
  */
-async function installBin(versionConfig) {
-    core.info(`Installing golangci-lint binary ${versionConfig.TargetVersion}...`);
+async function installBin(versionInfo) {
+    core.info(`Installing golangci-lint binary ${versionInfo.TargetVersion}...`);
     const startedAt = Date.now();
-    const assetURL = getAssetURL(versionConfig);
+    const assetURL = getAssetURL(versionInfo);
     core.info(`Downloading binary ${assetURL} ...`);
     const archivePath = await tc.downloadTool(assetURL);
     let extractedDir = "";
@@ -93801,9 +93800,9 @@ async function installBin(versionConfig) {
     }
     const urlParts = assetURL.split(`/`);
     const dirName = urlParts[urlParts.length - 1].replace(repl, ``);
-    const lintPath = path_1.default.join(extractedDir, dirName, `golangci-lint`);
-    core.info(`Installed golangci-lint into ${lintPath} in ${Date.now() - startedAt}ms`);
-    return lintPath;
+    const binPath = path_1.default.join(extractedDir, dirName, `golangci-lint`);
+    core.info(`Installed golangci-lint into ${binPath} in ${Date.now() - startedAt}ms`);
+    return binPath;
 }
 
 
@@ -93874,14 +93873,14 @@ function isOnlyNewIssues() {
 async function prepareLint() {
     const mode = core.getInput("install-mode").toLowerCase();
     if (mode === install_1.InstallMode.None) {
-        const bin = await (0, which_1.default)("golangci-lint", { nothrow: true });
-        if (!bin) {
+        const binPath = await (0, which_1.default)("golangci-lint", { nothrow: true });
+        if (!binPath) {
             throw new Error("golangci-lint binary not found in the PATH");
         }
-        return bin;
+        return binPath;
     }
-    const versionConfig = await (0, version_1.findLintVersion)(mode);
-    return await (0, install_1.installLint)(versionConfig, mode);
+    const versionInfo = await (0, version_1.getVersion)(mode);
+    return await (0, install_1.installLint)(versionInfo, mode);
 }
 async function fetchPatch() {
     if (!isOnlyNewIssues()) {
@@ -93980,10 +93979,10 @@ async function prepareEnv() {
     const startedAt = Date.now();
     // Prepare cache, lint and go in parallel.
     await (0, cache_1.restoreCache)();
-    const lintPath = await prepareLint();
+    const binPath = await prepareLint();
     const patchPath = await fetchPatch();
     core.info(`Prepared env in ${Date.now() - startedAt}ms`);
-    return { lintPath, patchPath };
+    return { binPath: binPath, patchPath };
 }
 const printOutput = (res) => {
     if (res.stdout) {
@@ -94092,9 +94091,9 @@ async function runLint(lintPath, patchPath) {
 }
 async function run() {
     try {
-        const { lintPath, patchPath } = await core.group(`prepare environment`, prepareEnv);
-        core.addPath(path.dirname(lintPath));
-        await core.group(`run golangci-lint`, () => runLint(lintPath, patchPath));
+        const { binPath, patchPath } = await core.group(`prepare environment`, prepareEnv);
+        core.addPath(path.dirname(binPath));
+        await core.group(`run golangci-lint`, () => runLint(binPath, patchPath));
     }
     catch (error) {
         core.error(`Failed to run: ${error}, ${error.stack}`);
@@ -94320,14 +94319,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.stringifyVersion = void 0;
-exports.findLintVersion = findLintVersion;
+exports.getVersion = getVersion;
 const core = __importStar(__nccwpck_require__(7484));
 const httpm = __importStar(__nccwpck_require__(4844));
 const fs = __importStar(__nccwpck_require__(9896));
-const os_1 = __importDefault(__nccwpck_require__(857));
 const path_1 = __importDefault(__nccwpck_require__(6928));
 const install_1 = __nccwpck_require__(232);
 const versionRe = /^v(\d+)\.(\d+)(?:\.(\d+))?$/;
+// TODO(ldez): it should be updated to match v2 module name.
 const modVersionRe = /github.com\/golangci\/golangci-lint\s(v.+)/;
 const parseVersion = (s) => {
     if (s == "latest" || s == "") {
@@ -94371,31 +94370,31 @@ const isLessVersion = (a, b) => {
     // then it returns false, since the patch version of requested is always zero
     return a.minor < b.minor;
 };
-const getRequestedLintVersion = () => {
-    let requestedLintVersion = core.getInput(`version`);
+const getRequestedVersion = () => {
+    let requestedVersion = core.getInput(`version`);
     const workingDirectory = core.getInput(`working-directory`);
     let goMod = "go.mod";
     if (workingDirectory) {
         goMod = path_1.default.join(workingDirectory, goMod);
     }
-    if (requestedLintVersion == "" && fs.existsSync(goMod)) {
+    if (requestedVersion == "" && fs.existsSync(goMod)) {
         const content = fs.readFileSync(goMod, "utf-8");
         const match = content.match(modVersionRe);
         if (match) {
-            requestedLintVersion = match[1];
-            core.info(`Found golangci-lint version '${requestedLintVersion}' in '${goMod}' file`);
+            requestedVersion = match[1];
+            core.info(`Found golangci-lint version '${requestedVersion}' in '${goMod}' file`);
         }
     }
-    const parsedRequestedLintVersion = parseVersion(requestedLintVersion);
-    if (parsedRequestedLintVersion == null) {
+    const parsedRequestedVersion = parseVersion(requestedVersion);
+    if (parsedRequestedVersion == null) {
         return null;
     }
-    if (isLessVersion(parsedRequestedLintVersion, minVersion)) {
-        throw new Error(`requested golangci-lint version '${requestedLintVersion}' isn't supported: we support only ${(0, exports.stringifyVersion)(minVersion)} and later versions`);
+    if (isLessVersion(parsedRequestedVersion, minVersion)) {
+        throw new Error(`requested golangci-lint version '${requestedVersion}' isn't supported: we support only ${(0, exports.stringifyVersion)(minVersion)} and later versions`);
     }
-    return parsedRequestedLintVersion;
+    return parsedRequestedVersion;
 };
-const getConfig = async () => {
+const fetchVersionMapping = async () => {
     const http = new httpm.HttpClient(`golangci/golangci-lint-action`, [], {
         allowRetries: true,
         maxRetries: 5,
@@ -94414,44 +94413,37 @@ const getConfig = async () => {
         throw new Error(`failed to get action config: ${exc.message}`);
     }
 };
-async function findLintVersion(mode) {
+async function getVersion(mode) {
     core.info(`Finding needed golangci-lint version...`);
     if (mode == install_1.InstallMode.GoInstall) {
         const v = core.getInput(`version`);
         // TODO(ldez): latest should be replaced with an explicit version (ex: v1.64.0).
-        // TODO(ldez): AssetURL should be updated for v2.
-        return { TargetVersion: v ? v : "latest", AssetURL: "github.com/golangci/golangci-lint" };
+        return { TargetVersion: v ? v : "latest" };
     }
-    const reqLintVersion = getRequestedLintVersion();
+    const reqVersion = getRequestedVersion();
     // if the patched version is passed, just use it
-    if (reqLintVersion?.major !== null && reqLintVersion?.minor != null && reqLintVersion?.patch !== null) {
+    // TODO(ldez): should be updated to `reqVersion?.major === 2`.
+    if (reqVersion?.major === 1 && reqVersion?.minor != null && reqVersion?.patch !== null) {
         return new Promise((resolve) => {
-            let arch = "amd64";
-            if (os_1.default.arch() === "arm64") {
-                arch = "arm64";
-            }
-            const versionWithoutV = `${reqLintVersion.major}.${reqLintVersion.minor}.${reqLintVersion.patch}`;
-            resolve({
-                TargetVersion: `v${versionWithoutV}`,
-                AssetURL: `https://github.com/golangci/golangci-lint/releases/download/v${versionWithoutV}/golangci-lint-${versionWithoutV}-linux-${arch}.tar.gz`,
-            });
+            const versionWithoutV = `${reqVersion.major}.${reqVersion.minor}.${reqVersion.patch}`;
+            resolve({ TargetVersion: `v${versionWithoutV}` });
         });
     }
     const startedAt = Date.now();
-    const config = await getConfig();
-    if (!config.MinorVersionToConfig) {
-        core.warning(JSON.stringify(config));
+    const mapping = await fetchVersionMapping();
+    if (!mapping.MinorVersionToConfig) {
+        core.warning(JSON.stringify(mapping));
         throw new Error(`invalid config: no MinorVersionToConfig field`);
     }
-    const versionConfig = config.MinorVersionToConfig[(0, exports.stringifyVersion)(reqLintVersion)];
-    if (!versionConfig) {
-        throw new Error(`requested golangci-lint version '${(0, exports.stringifyVersion)(reqLintVersion)}' doesn't exist`);
+    const versionInfo = mapping.MinorVersionToConfig[(0, exports.stringifyVersion)(reqVersion)];
+    if (!versionInfo) {
+        throw new Error(`requested golangci-lint version '${(0, exports.stringifyVersion)(reqVersion)}' doesn't exist`);
     }
-    if (versionConfig.Error) {
-        throw new Error(`failed to use requested golangci-lint version '${(0, exports.stringifyVersion)(reqLintVersion)}': ${versionConfig.Error}`);
+    if (versionInfo.Error) {
+        throw new Error(`failed to use requested golangci-lint version '${(0, exports.stringifyVersion)(reqVersion)}': ${versionInfo.Error}`);
     }
-    core.info(`Requested golangci-lint '${(0, exports.stringifyVersion)(reqLintVersion)}', using '${versionConfig.TargetVersion}', calculation took ${Date.now() - startedAt}ms`);
-    return versionConfig;
+    core.info(`Requested golangci-lint '${(0, exports.stringifyVersion)(reqVersion)}', using '${versionInfo.TargetVersion}', calculation took ${Date.now() - startedAt}ms`);
+    return versionInfo;
 }
 
 

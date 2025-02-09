@@ -110,7 +110,7 @@ type Config = {
   }
 }
 
-const getConfig = async (): Promise<Config> => {
+const fetchConfig = async (): Promise<Config> => {
   const http = new httpm.HttpClient(`golangci/golangci-lint-action`, [], {
     allowRetries: true,
     maxRetries: 5,
@@ -143,7 +143,7 @@ export async function findLintVersion(mode: InstallMode): Promise<VersionConfig>
   const reqLintVersion = getRequestedLintVersion()
 
   // if the patched version is passed, just use it
-  if (reqLintVersion?.major !== null && reqLintVersion?.minor != null && reqLintVersion?.patch !== null) {
+  if (reqLintVersion?.major === 1 && reqLintVersion?.minor != null && reqLintVersion?.patch !== null) {
     return new Promise((resolve) => {
       let arch: string = "amd64"
       if (os.arch() === "arm64") {
@@ -159,7 +159,7 @@ export async function findLintVersion(mode: InstallMode): Promise<VersionConfig>
 
   const startedAt = Date.now()
 
-  const config = await getConfig()
+  const config = await fetchConfig()
   if (!config.MinorVersionToConfig) {
     core.warning(JSON.stringify(config))
     throw new Error(`invalid config: no MinorVersionToConfig field`)

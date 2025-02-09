@@ -11,7 +11,7 @@ import which from "which"
 import { restoreCache, saveCache } from "./cache"
 import { installLint, InstallMode } from "./install"
 import { alterDiffPatch } from "./utils/diffUtils"
-import { findLintVersion } from "./version"
+import { getVersion } from "./version"
 
 const execShellCommand = promisify(exec)
 const writeFile = promisify(fs.writeFile)
@@ -25,16 +25,16 @@ async function prepareLint(): Promise<string> {
   const mode = core.getInput("install-mode").toLowerCase()
 
   if (mode === InstallMode.None) {
-    const bin = await which("golangci-lint", { nothrow: true })
-    if (!bin) {
+    const binPath = await which("golangci-lint", { nothrow: true })
+    if (!binPath) {
       throw new Error("golangci-lint binary not found in the PATH")
     }
-    return bin
+    return binPath
   }
 
-  const versionConfig = await findLintVersion(<InstallMode>mode)
+  const versionInfo = await getVersion(<InstallMode>mode)
 
-  return await installLint(versionConfig, <InstallMode>mode)
+  return await installLint(versionInfo, <InstallMode>mode)
 }
 
 async function fetchPatch(): Promise<string> {
@@ -141,7 +141,7 @@ async function fetchPushPatch(ctx: Context): Promise<string> {
 }
 
 type Env = {
-  lintPath: string
+  binPath: string
   patchPath: string
 }
 
@@ -151,12 +151,12 @@ async function prepareEnv(): Promise<Env> {
   // Prepare cache, lint and go in parallel.
   await restoreCache()
 
-  const lintPath = await prepareLint()
+  const binPath = await prepareLint()
   const patchPath = await fetchPatch()
 
   core.info(`Prepared env in ${Date.now() - startedAt}ms`)
 
-  return { lintPath, patchPath }
+  return { binPath: binPath, patchPath }
 }
 
 type ExecRes = {
@@ -292,9 +292,9 @@ async function runLint(lintPath: string, patchPath: string): Promise<void> {
 
 export async function run(): Promise<void> {
   try {
-    const { lintPath, patchPath } = await core.group(`prepare environment`, prepareEnv)
-    core.addPath(path.dirname(lintPath))
-    await core.group(`run golangci-lint`, () => runLint(lintPath, patchPath))
+    const { binPath, patchPath } = await core.group(`prepare environment`, prepareEnv)
+    core.addPath(path.dirname(binPath))
+    await core.group(`run golangci-lint`, () => runLint(binPath, patchPath))
   } catch (error) {
     core.error(`Failed to run: ${error}, ${error.stack}`)
     core.setFailed(error.message)

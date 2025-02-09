@@ -101,7 +101,6 @@ const getRequestedLintVersion = (): Version => {
 export type VersionConfig = {
   Error?: string
   TargetVersion: string
-  AssetURL: string
 }
 
 type Config = {
@@ -136,8 +135,7 @@ export async function findLintVersion(mode: InstallMode): Promise<VersionConfig>
   if (mode == InstallMode.GoInstall) {
     const v: string = core.getInput(`version`)
     // TODO(ldez): latest should be replaced with an explicit version (ex: v1.64.0).
-    // TODO(ldez): AssetURL should be updated for v2.
-    return { TargetVersion: v ? v : "latest", AssetURL: "github.com/golangci/golangci-lint" }
+    return { TargetVersion: v ? v : "latest" }
   }
 
   const reqLintVersion = getRequestedLintVersion()
@@ -145,15 +143,8 @@ export async function findLintVersion(mode: InstallMode): Promise<VersionConfig>
   // if the patched version is passed, just use it
   if (reqLintVersion?.major === 1 && reqLintVersion?.minor != null && reqLintVersion?.patch !== null) {
     return new Promise((resolve) => {
-      let arch: string = "amd64"
-      if (os.arch() === "arm64") {
-        arch = "arm64"
-      }
       const versionWithoutV = `${reqLintVersion.major}.${reqLintVersion.minor}.${reqLintVersion.patch}`
-      resolve({
-        TargetVersion: `v${versionWithoutV}`,
-        AssetURL: `https://github.com/golangci/golangci-lint/releases/download/v${versionWithoutV}/golangci-lint-${versionWithoutV}-linux-${arch}.tar.gz`,
-      })
+      resolve({ TargetVersion: `v${versionWithoutV}` })
     })
   }
 

@@ -173,10 +173,10 @@ const printOutput = (res: ExecRes): void => {
   }
 }
 
-async function runLint(lintPath: string, patchPath: string): Promise<void> {
+async function runLint(binPath: string, patchPath: string): Promise<void> {
   const debug = core.getInput(`debug`)
   if (debug.split(`,`).includes(`cache`)) {
-    const res = await execShellCommand(`${lintPath} cache status`)
+    const res = await execShellCommand(`${binPath} cache status`)
     printOutput(res)
   }
 
@@ -266,7 +266,7 @@ async function runLint(lintPath: string, patchPath: string): Promise<void> {
     cmdArgs.cwd = path.resolve(workingDirectory)
   }
 
-  const cmd = `${lintPath} run ${addedArgs.join(` `)} ${userArgs}`.trimEnd()
+  const cmd = `${binPath} run ${addedArgs.join(` `)} ${userArgs}`.trimEnd()
 
   core.info(`Running [${cmd}] in [${cmdArgs.cwd || process.cwd()}] ...`)
 

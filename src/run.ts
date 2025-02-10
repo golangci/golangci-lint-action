@@ -156,7 +156,7 @@ async function prepareEnv(): Promise<Env> {
 
   core.info(`Prepared env in ${Date.now() - startedAt}ms`)
 
-  return { binPath: binPath, patchPath }
+  return { binPath, patchPath }
 }
 
 type ExecRes = {

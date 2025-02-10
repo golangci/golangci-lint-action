@@ -93982,7 +93982,7 @@ async function prepareEnv() {
     const binPath = await prepareLint();
     const patchPath = await fetchPatch();
     core.info(`Prepared env in ${Date.now() - startedAt}ms`);
-    return { binPath: binPath, patchPath };
+    return { binPath, patchPath };
 }
 const printOutput = (res) => {
     if (res.stdout) {
@@ -93992,10 +93992,10 @@ const printOutput = (res) => {
         core.info(res.stderr);
     }
 };
-async function runLint(lintPath, patchPath) {
+async function runLint(binPath, patchPath) {
     const debug = core.getInput(`debug`);
     if (debug.split(`,`).includes(`cache`)) {
-        const res = await execShellCommand(`${lintPath} cache status`);
+        const res = await execShellCommand(`${binPath} cache status`);
         printOutput(res);
     }
     let userArgs = core.getInput(`args`);
@@ -94068,7 +94068,7 @@ async function runLint(lintPath, patchPath) {
         }
         cmdArgs.cwd = path.resolve(workingDirectory);
     }
-    const cmd = `${lintPath} run ${addedArgs.join(` `)} ${userArgs}`.trimEnd();
+    const cmd = `${binPath} run ${addedArgs.join(` `)} ${userArgs}`.trimEnd();
     core.info(`Running [${cmd}] in [${cmdArgs.cwd || process.cwd()}] ...`);
     const startedAt = Date.now();
     try {

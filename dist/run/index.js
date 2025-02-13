@@ -94123,6 +94123,12 @@ async function runLint(binPath, patchPath) {
         }
         cmdArgs.cwd = path.resolve(workingDirectory);
     }
+    if (core.getBooleanInput(`verify`, { required: true })) {
+        const cmdVerify = `${binPath} config verify`;
+        core.info(`Running [${cmdVerify}] in [${cmdArgs.cwd || process.cwd()}] ...`);
+        const res = await execShellCommand(cmdVerify, cmdArgs);
+        printOutput(res);
+    }
     const cmd = `${binPath} run ${addedArgs.join(` `)} ${userArgs}`.trimEnd();
     core.info(`Running [${cmd}] in [${cmdArgs.cwd || process.cwd()}] ...`);
     const startedAt = Date.now();

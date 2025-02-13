@@ -22,6 +22,10 @@ inputs:
     description: "the token is used for fetching patch of a pull request to show only new issues"
     default: ${{ github.token }}
     required: false
+  verify:
+    description: "if set to true and the action verify the configuration file against the JSONSchema"
+    default: 'false'
+    required: false
   only-new-issues:
     description: "if set to true and the action runs on a pull request - the action outputs only newly found issues"
     default: 'false'

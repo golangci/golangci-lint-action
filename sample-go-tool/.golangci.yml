@@ -1,0 +1,6 @@
+output:
+  show-stats: true
+  sort-results: true
+  sort-order:
+    - linter
+    - file

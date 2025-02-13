@@ -73,6 +73,7 @@ jobs:
           version: ${{ matrix.version }}
           args: --timeout=5m --issues-exit-code=0 ./sample/...
           only-new-issues: true
+          verify: true
 
   test-go-install: # make sure the action works on a clean machine without building (go-install mode)
     needs: [ build ]
@@ -103,6 +104,7 @@ jobs:
           args: --timeout=5m --issues-exit-code=0 ./sample/...
           only-new-issues: true
           install-mode: goinstall
+          verify: true
 
   test-go-mod:
     needs: [ build ]
@@ -128,3 +130,4 @@ jobs:
         with:
           working-directory: ${{ matrix.wd }}
           args: --timeout=5m --issues-exit-code=0 ./...
+          verify: true

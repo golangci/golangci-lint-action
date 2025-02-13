@@ -14,7 +14,7 @@ export type Version = {
 
 const versionRe = /^v(\d+)\.(\d+)(?:\.(\d+))?$/
 // TODO(ldez): it should be updated to match v2 module name.
-const modVersionRe = /github.com\/golangci\/golangci-lint\s(v.+)/
+const modVersionRe = /github.com\/golangci\/golangci-lint\s(v\S+)/
 
 const parseVersion = (s: string): Version => {
   if (s == "latest" || s == "") {

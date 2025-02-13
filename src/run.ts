@@ -52,7 +52,7 @@ async function runLint(binPath: string, patchPath: string): Promise<void> {
   }
 
   if (core.getBooleanInput(`verify`, { required: true })) {
-    const res = await execShellCommand(`${binPath} verify`)
+    const res = await execShellCommand(`${binPath} config verify`)
     printOutput(res)
   }
 

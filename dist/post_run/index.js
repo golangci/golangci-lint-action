@@ -94054,7 +94054,7 @@ async function runLint(binPath, patchPath) {
         printOutput(res);
     }
     if (core.getBooleanInput(`verify`, { required: true })) {
-        const res = await execShellCommand(`${binPath} verify`);
+        const res = await execShellCommand(`${binPath} config verify`);
         printOutput(res);
     }
     let userArgs = core.getInput(`args`);

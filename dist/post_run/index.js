@@ -94053,6 +94053,10 @@ async function runLint(binPath, patchPath) {
         const res = await execShellCommand(`${binPath} cache status`);
         printOutput(res);
     }
+    if (core.getBooleanInput(`verify`, { required: true })) {
+        const res = await execShellCommand(`${binPath} verify`);
+        printOutput(res);
+    }
     let userArgs = core.getInput(`args`);
     const addedArgs = [];
     const userArgsList = userArgs

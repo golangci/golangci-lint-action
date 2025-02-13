@@ -6,12 +6,10 @@ import * as fs from "fs"
 import * as path from "path"
 import { dir } from "tmp"
 import { promisify } from "util"
-import which from "which"
 
 import { restoreCache, saveCache } from "./cache"
-import { installLint, InstallMode } from "./install"
+import { install } from "./install"
 import { alterDiffPatch } from "./utils/diffUtils"
-import { getVersion } from "./version"
 
 const execShellCommand = promisify(exec)
 const writeFile = promisify(fs.writeFile)
@@ -21,20 +19,23 @@ function isOnlyNewIssues(): boolean {
   return core.getBooleanInput(`only-new-issues`, { required: true })
 }
 
-async function prepareLint(): Promise<string> {
-  const mode = core.getInput("install-mode").toLowerCase()
+type Env = {
+  binPath: string
+  patchPath: string
+}
 
-  if (mode === InstallMode.None) {
-    const binPath = await which("golangci-lint", { nothrow: true })
-    if (!binPath) {
-      throw new Error("golangci-lint binary not found in the PATH")
-    }
-    return binPath
-  }
+async function prepareEnv(): Promise<Env> {
+  const startedAt = Date.now()
 
-  const versionInfo = await getVersion(<InstallMode>mode)
+  // Prepare cache, lint and go in parallel.
+  await restoreCache()
 
-  return await installLint(versionInfo, <InstallMode>mode)
+  const binPath = await install()
+  const patchPath = await fetchPatch()
+
+  core.info(`Prepared env in ${Date.now() - startedAt}ms`)
+
+  return { binPath, patchPath }
 }
 
 async function fetchPatch(): Promise<string> {
@@ -138,25 +139,6 @@ async function fetchPushPatch(ctx: Context): Promise<string> {
     console.warn(`failed to save pull request patch:`, err)
     return `` // don't fail the action, but analyze without patch
   }
-}
-
-type Env = {
-  binPath: string
-  patchPath: string
-}
-
-async function prepareEnv(): Promise<Env> {
-  const startedAt = Date.now()
-
-  // Prepare cache, lint and go in parallel.
-  await restoreCache()
-
-  const binPath = await prepareLint()
-  const patchPath = await fetchPatch()
-
-  core.info(`Prepared env in ${Date.now() - startedAt}ms`)
-
-  return { binPath, patchPath }
 }
 
 type ExecRes = {

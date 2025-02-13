@@ -4,40 +4,11 @@ import { exec, ExecOptions } from "child_process"
 import os from "os"
 import path from "path"
 import { promisify } from "util"
+import which from "which"
 
-import { VersionInfo } from "./version"
+import { getVersion, VersionInfo } from "./version"
 
 const execShellCommand = promisify(exec)
-
-const getAssetURL = (versionInfo: VersionInfo): string => {
-  let ext = "tar.gz"
-
-  let platform = os.platform().toString()
-  switch (platform) {
-    case "win32":
-      platform = "windows"
-      ext = "zip"
-      break
-  }
-
-  let arch = os.arch()
-  switch (arch) {
-    case "arm64":
-      arch = "arm64"
-      break
-    case "x64":
-      arch = "amd64"
-      break
-    case "x32":
-    case "ia32":
-      arch = "386"
-      break
-  }
-
-  const noPrefix = versionInfo.TargetVersion.slice(1)
-
-  return `https://github.com/golangci/golangci-lint/releases/download/${versionInfo.TargetVersion}/golangci-lint-${noPrefix}-${platform}-${arch}.${ext}`
-}
 
 export enum InstallMode {
   Binary = "binary",
@@ -62,11 +33,32 @@ const printOutput = (res: ExecRes): void => {
 /**
  * Install golangci-lint.
  *
+ * @returns             path to installed binary of golangci-lint.
+ */
+export async function install(): Promise<string> {
+  const mode = core.getInput("install-mode").toLowerCase()
+
+  if (mode === InstallMode.None) {
+    const binPath = await which("golangci-lint", { nothrow: true })
+    if (!binPath) {
+      throw new Error("golangci-lint binary not found in the PATH")
+    }
+    return binPath
+  }
+
+  const versionInfo = await getVersion(<InstallMode>mode)
+
+  return await installBinary(versionInfo, <InstallMode>mode)
+}
+
+/**
+ * Install golangci-lint.
+ *
  * @param versionInfo   information about version to install.
  * @param mode          installation mode.
  * @returns             path to installed binary of golangci-lint.
  */
-export async function installLint(versionInfo: VersionInfo, mode: InstallMode): Promise<string> {
+export async function installBinary(versionInfo: VersionInfo, mode: InstallMode): Promise<string> {
   core.info(`Installation mode: ${mode}`)
 
   switch (mode) {
@@ -85,7 +77,7 @@ export async function installLint(versionInfo: VersionInfo, mode: InstallMode): 
  * @param versionInfo   information about version to install.
  * @returns             path to installed binary of golangci-lint.
  */
-export async function goInstall(versionInfo: VersionInfo): Promise<string> {
+async function goInstall(versionInfo: VersionInfo): Promise<string> {
   core.info(`Installing golangci-lint ${versionInfo.TargetVersion}...`)
 
   const startedAt = Date.now()
@@ -125,7 +117,7 @@ export async function goInstall(versionInfo: VersionInfo): Promise<string> {
  * @param versionInfo   information about version to install.
  * @returns             path to installed binary of golangci-lint.
  */
-export async function installBin(versionInfo: VersionInfo): Promise<string> {
+async function installBin(versionInfo: VersionInfo): Promise<string> {
   core.info(`Installing golangci-lint binary ${versionInfo.TargetVersion}...`)
 
   const startedAt = Date.now()
@@ -157,4 +149,34 @@ export async function installBin(versionInfo: VersionInfo): Promise<string> {
   core.info(`Installed golangci-lint into ${binPath} in ${Date.now() - startedAt}ms`)
 
   return binPath
+}
+
+function getAssetURL(versionInfo: VersionInfo): string {
+  let ext = "tar.gz"
+
+  let platform = os.platform().toString()
+  switch (platform) {
+    case "win32":
+      platform = "windows"
+      ext = "zip"
+      break
+  }
+
+  let arch = os.arch()
+  switch (arch) {
+    case "arm64":
+      arch = "arm64"
+      break
+    case "x64":
+      arch = "amd64"
+      break
+    case "x32":
+    case "ia32":
+      arch = "386"
+      break
+  }
+
+  const noPrefix = versionInfo.TargetVersion.slice(1)
+
+  return `https://github.com/golangci/golangci-lint/releases/download/${versionInfo.TargetVersion}/golangci-lint-${noPrefix}-${platform}-${arch}.${ext}`
 }

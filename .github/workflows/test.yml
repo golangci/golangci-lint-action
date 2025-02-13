@@ -104,7 +104,7 @@ jobs:
           only-new-issues: true
           install-mode: goinstall
 
-  test-go-mod-version:
+  test-go-mod:
     needs: [ build ]
     strategy:
       matrix:
@@ -113,6 +113,9 @@ jobs:
           - ubuntu-24.04-arm
           - macos-latest
           - windows-latest
+        wd:
+          - sample-go-mod
+          - sample-go-tool
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -123,27 +126,5 @@ jobs:
           go-version: oldstable
       - uses: ./
         with:
-          working-directory: sample-go-mod
-          args: --timeout=5m --issues-exit-code=0 ./...
-
-  test-go-tool-version:
-    needs: [ build ]
-    strategy:
-      matrix:
-        os:
-          - ubuntu-latest
-          - ubuntu-24.04-arm
-          - macos-latest
-          - windows-latest
-    runs-on: ${{ matrix.os }}
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: stable
-      - uses: ./
-        with:
-          working-directory: sample-go-tool
+          working-directory: ${{ matrix.wd }}
           args: --timeout=5m --issues-exit-code=0 ./...

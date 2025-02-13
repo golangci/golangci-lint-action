@@ -94124,7 +94124,9 @@ async function runLint(binPath, patchPath) {
         cmdArgs.cwd = path.resolve(workingDirectory);
     }
     if (core.getBooleanInput(`verify`, { required: true })) {
-        const res = await execShellCommand(`${binPath} config verify`, cmdArgs);
+        const cmdVerify = `${binPath} config verify`;
+        core.info(`Running [${cmdVerify}] in [${cmdArgs.cwd || process.cwd()}] ...`);
+        const res = await execShellCommand(cmdVerify, cmdArgs);
         printOutput(res);
     }
     const cmd = `${binPath} run ${addedArgs.join(` `)} ${userArgs}`.trimEnd();

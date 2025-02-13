@@ -94053,10 +94053,6 @@ async function runLint(binPath, patchPath) {
         const res = await execShellCommand(`${binPath} cache status`);
         printOutput(res);
     }
-    if (core.getBooleanInput(`verify`, { required: true })) {
-        const res = await execShellCommand(`${binPath} config verify`);
-        printOutput(res);
-    }
     let userArgs = core.getInput(`args`);
     const addedArgs = [];
     const userArgsList = userArgs
@@ -94126,6 +94122,10 @@ async function runLint(binPath, patchPath) {
             addedArgs.push(`--path-prefix=${workingDirectory}`);
         }
         cmdArgs.cwd = path.resolve(workingDirectory);
+    }
+    if (core.getBooleanInput(`verify`, { required: true })) {
+        const res = await execShellCommand(`${binPath} config verify`, cmdArgs);
+        printOutput(res);
     }
     const cmd = `${binPath} run ${addedArgs.join(` `)} ${userArgs}`.trimEnd();
     core.info(`Running [${cmd}] in [${cmdArgs.cwd || process.cwd()}] ...`);

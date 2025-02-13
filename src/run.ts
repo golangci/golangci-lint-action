@@ -51,6 +51,11 @@ async function runLint(binPath: string, patchPath: string): Promise<void> {
     printOutput(res)
   }
 
+  if (core.getBooleanInput(`verify`, { required: true })) {
+    const res = await execShellCommand(`${binPath} verify`)
+    printOutput(res)
+  }
+
   let userArgs = core.getInput(`args`)
   const addedArgs: string[] = []
 

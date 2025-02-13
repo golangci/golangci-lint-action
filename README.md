@@ -318,6 +318,24 @@ with:
 
 </details>
 
+### `verify`
+
+(optional)
+
+If set to true and the action verify the configuration file against the JSONSchema.
+
+<details>
+<summary>Example</summary>
+
+```yml
+uses: golangci/golangci-lint-action@v6
+with:
+  verify: true
+  # ...
+```
+
+</details>
+
 ### `only-new-issues`
 
 (optional)

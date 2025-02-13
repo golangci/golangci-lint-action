@@ -125,3 +125,25 @@ jobs:
         with:
           working-directory: sample-go-mod
           args: --timeout=5m --issues-exit-code=0 ./...
+
+  test-go-tool-version:
+    needs: [ build ]
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+          - macos-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - uses: ./
+        with:
+          working-directory: sample-go-tool
+          args: --timeout=5m --issues-exit-code=0 ./...

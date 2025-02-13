@@ -94327,7 +94327,7 @@ const path_1 = __importDefault(__nccwpck_require__(6928));
 const install_1 = __nccwpck_require__(232);
 const versionRe = /^v(\d+)\.(\d+)(?:\.(\d+))?$/;
 // TODO(ldez): it should be updated to match v2 module name.
-const modVersionRe = /github.com\/golangci\/golangci-lint\s(v.+)/;
+const modVersionRe = /github.com\/golangci\/golangci-lint\s(v\S+)/;
 const parseVersion = (s) => {
     if (s == "latest" || s == "") {
         // TODO(ldez): it should be replaced with an explicit version (ex: v1.64.0)

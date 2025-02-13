@@ -51,11 +51,6 @@ async function runLint(binPath: string, patchPath: string): Promise<void> {
     printOutput(res)
   }
 
-  if (core.getBooleanInput(`verify`, { required: true })) {
-    const res = await execShellCommand(`${binPath} config verify`)
-    printOutput(res)
-  }
-
   let userArgs = core.getInput(`args`)
   const addedArgs: string[] = []
 
@@ -140,6 +135,11 @@ async function runLint(binPath: string, patchPath: string): Promise<void> {
       addedArgs.push(`--path-prefix=${workingDirectory}`)
     }
     cmdArgs.cwd = path.resolve(workingDirectory)
+  }
+
+  if (core.getBooleanInput(`verify`, { required: true })) {
+    const res = await execShellCommand(`${binPath} config verify`, cmdArgs)
+    printOutput(res)
   }
 
   const cmd = `${binPath} run ${addedArgs.join(` `)} ${userArgs}`.trimEnd()

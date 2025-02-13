@@ -128,7 +128,6 @@ jobs:
           go-version: oldstable
       - uses: ./
         with:
-          working-directory: sample-go-mod
-          #working-directory: ${{ matrix.wd }}
+          working-directory: ${{ matrix.wd }}
           args: --timeout=5m --issues-exit-code=0 ./...
           verify: true

@@ -1,144 +1,15 @@
 import * as core from "@actions/core"
 import * as github from "@actions/github"
-import { Context } from "@actions/github/lib/context"
 import { exec, ExecOptions } from "child_process"
 import * as fs from "fs"
 import * as path from "path"
-import { dir } from "tmp"
 import { promisify } from "util"
-import which from "which"
 
 import { restoreCache, saveCache } from "./cache"
-import { installLint, InstallMode } from "./install"
-import { alterDiffPatch } from "./utils/diffUtils"
-import { getVersion } from "./version"
+import { install } from "./install"
+import { fetchPatch, isOnlyNewIssues } from "./patch"
 
 const execShellCommand = promisify(exec)
-const writeFile = promisify(fs.writeFile)
-const createTempDir = promisify(dir)
-
-function isOnlyNewIssues(): boolean {
-  return core.getBooleanInput(`only-new-issues`, { required: true })
-}
-
-async function prepareLint(): Promise<string> {
-  const mode = core.getInput("install-mode").toLowerCase()
-
-  if (mode === InstallMode.None) {
-    const binPath = await which("golangci-lint", { nothrow: true })
-    if (!binPath) {
-      throw new Error("golangci-lint binary not found in the PATH")
-    }
-    return binPath
-  }
-
-  const versionInfo = await getVersion(<InstallMode>mode)
-
-  return await installLint(versionInfo, <InstallMode>mode)
-}
-
-async function fetchPatch(): Promise<string> {
-  if (!isOnlyNewIssues()) {
-    return ``
-  }
-
-  const ctx = github.context
-
-  switch (ctx.eventName) {
-    case `pull_request`:
-    case `pull_request_target`:
-      return await fetchPullRequestPatch(ctx)
-    case `push`:
-      return await fetchPushPatch(ctx)
-    case `merge_group`:
-      return ``
-    default:
-      core.info(`Not fetching patch for showing only new issues because it's not a pull request context: event name is ${ctx.eventName}`)
-      return ``
-  }
-}
-
-async function fetchPullRequestPatch(ctx: Context): Promise<string> {
-  const pr = ctx.payload.pull_request
-  if (!pr) {
-    core.warning(`No pull request in context`)
-    return ``
-  }
-
-  const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }))
-
-  let patch: string
-  try {
-    const patchResp = await octokit.rest.pulls.get({
-      owner: ctx.repo.owner,
-      repo: ctx.repo.repo,
-      [`pull_number`]: pr.number,
-      mediaType: {
-        format: `diff`,
-      },
-    })
-
-    if (patchResp.status !== 200) {
-      core.warning(`failed to fetch pull request patch: response status is ${patchResp.status}`)
-      return `` // don't fail the action, but analyze without patch
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    patch = patchResp.data as any
-  } catch (err) {
-    console.warn(`failed to fetch pull request patch:`, err)
-    return `` // don't fail the action, but analyze without patch
-  }
-
-  try {
-    const tempDir = await createTempDir()
-    const patchPath = path.join(tempDir, "pull.patch")
-    core.info(`Writing patch to ${patchPath}`)
-    await writeFile(patchPath, alterDiffPatch(patch))
-    return patchPath
-  } catch (err) {
-    console.warn(`failed to save pull request patch:`, err)
-    return `` // don't fail the action, but analyze without patch
-  }
-}
-
-async function fetchPushPatch(ctx: Context): Promise<string> {
-  const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }))
-
-  let patch: string
-  try {
-    const patchResp = await octokit.rest.repos.compareCommitsWithBasehead({
-      owner: ctx.repo.owner,
-      repo: ctx.repo.repo,
-      basehead: `${ctx.payload.before}...${ctx.payload.after}`,
-      mediaType: {
-        format: `diff`,
-      },
-    })
-
-    if (patchResp.status !== 200) {
-      core.warning(`failed to fetch push patch: response status is ${patchResp.status}`)
-      return `` // don't fail the action, but analyze without patch
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    patch = patchResp.data as any
-  } catch (err) {
-    console.warn(`failed to fetch push patch:`, err)
-    return `` // don't fail the action, but analyze without patch
-  }
-
-  try {
-    const tempDir = await createTempDir()
-    const patchPath = path.join(tempDir, "push.patch")
-    core.info(`Writing patch to ${patchPath}`)
-    await writeFile(patchPath, alterDiffPatch(patch))
-    return patchPath
-  } catch (err) {
-    console.warn(`failed to save pull request patch:`, err)
-    return `` // don't fail the action, but analyze without patch
-  }
-}
 
 type Env = {
   binPath: string
@@ -151,7 +22,7 @@ async function prepareEnv(): Promise<Env> {
   // Prepare cache, lint and go in parallel.
   await restoreCache()
 
-  const binPath = await prepareLint()
+  const binPath = await install()
   const patchPath = await fetchPatch()
 
   core.info(`Prepared env in ${Date.now() - startedAt}ms`)

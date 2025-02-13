@@ -93679,41 +93679,17 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.InstallMode = void 0;
-exports.installLint = installLint;
-exports.goInstall = goInstall;
-exports.installBin = installBin;
+exports.install = install;
+exports.installBinary = installBinary;
 const core = __importStar(__nccwpck_require__(7484));
 const tc = __importStar(__nccwpck_require__(3472));
 const child_process_1 = __nccwpck_require__(5317);
 const os_1 = __importDefault(__nccwpck_require__(857));
 const path_1 = __importDefault(__nccwpck_require__(6928));
 const util_1 = __nccwpck_require__(9023);
+const which_1 = __importDefault(__nccwpck_require__(1189));
+const version_1 = __nccwpck_require__(311);
 const execShellCommand = (0, util_1.promisify)(child_process_1.exec);
-const getAssetURL = (versionInfo) => {
-    let ext = "tar.gz";
-    let platform = os_1.default.platform().toString();
-    switch (platform) {
-        case "win32":
-            platform = "windows";
-            ext = "zip";
-            break;
-    }
-    let arch = os_1.default.arch();
-    switch (arch) {
-        case "arm64":
-            arch = "arm64";
-            break;
-        case "x64":
-            arch = "amd64";
-            break;
-        case "x32":
-        case "ia32":
-            arch = "386";
-            break;
-    }
-    const noPrefix = versionInfo.TargetVersion.slice(1);
-    return `https://github.com/golangci/golangci-lint/releases/download/${versionInfo.TargetVersion}/golangci-lint-${noPrefix}-${platform}-${arch}.${ext}`;
-};
 var InstallMode;
 (function (InstallMode) {
     InstallMode["Binary"] = "binary";
@@ -93731,11 +93707,28 @@ const printOutput = (res) => {
 /**
  * Install golangci-lint.
  *
+ * @returns             path to installed binary of golangci-lint.
+ */
+async function install() {
+    const mode = core.getInput("install-mode").toLowerCase();
+    if (mode === InstallMode.None) {
+        const binPath = await (0, which_1.default)("golangci-lint", { nothrow: true });
+        if (!binPath) {
+            throw new Error("golangci-lint binary not found in the PATH");
+        }
+        return binPath;
+    }
+    const versionInfo = await (0, version_1.getVersion)(mode);
+    return await installBinary(versionInfo, mode);
+}
+/**
+ * Install golangci-lint.
+ *
  * @param versionInfo   information about version to install.
  * @param mode          installation mode.
  * @returns             path to installed binary of golangci-lint.
  */
-async function installLint(versionInfo, mode) {
+async function installBinary(versionInfo, mode) {
     core.info(`Installation mode: ${mode}`);
     switch (mode) {
         case InstallMode.Binary:
@@ -93804,11 +93797,36 @@ async function installBin(versionInfo) {
     core.info(`Installed golangci-lint into ${binPath} in ${Date.now() - startedAt}ms`);
     return binPath;
 }
+function getAssetURL(versionInfo) {
+    let ext = "tar.gz";
+    let platform = os_1.default.platform().toString();
+    switch (platform) {
+        case "win32":
+            platform = "windows";
+            ext = "zip";
+            break;
+    }
+    let arch = os_1.default.arch();
+    switch (arch) {
+        case "arm64":
+            arch = "arm64";
+            break;
+        case "x64":
+            arch = "amd64";
+            break;
+        case "x32":
+        case "ia32":
+            arch = "386";
+            break;
+    }
+    const noPrefix = versionInfo.TargetVersion.slice(1);
+    return `https://github.com/golangci/golangci-lint/releases/download/${versionInfo.TargetVersion}/golangci-lint-${noPrefix}-${platform}-${arch}.${ext}`;
+}
 
 
 /***/ }),
 
-/***/ 9786:
+/***/ 7161:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 "use strict";
@@ -93850,37 +93868,19 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.run = run;
-exports.postRun = postRun;
+exports.isOnlyNewIssues = isOnlyNewIssues;
+exports.fetchPatch = fetchPatch;
 const core = __importStar(__nccwpck_require__(7484));
 const github = __importStar(__nccwpck_require__(3228));
-const child_process_1 = __nccwpck_require__(5317);
-const fs = __importStar(__nccwpck_require__(9896));
-const path = __importStar(__nccwpck_require__(6928));
+const fs_1 = __importDefault(__nccwpck_require__(9896));
+const path_1 = __importDefault(__nccwpck_require__(6928));
 const tmp_1 = __nccwpck_require__(1288);
 const util_1 = __nccwpck_require__(9023);
-const which_1 = __importDefault(__nccwpck_require__(1189));
-const cache_1 = __nccwpck_require__(7377);
-const install_1 = __nccwpck_require__(232);
 const diffUtils_1 = __nccwpck_require__(3441);
-const version_1 = __nccwpck_require__(311);
-const execShellCommand = (0, util_1.promisify)(child_process_1.exec);
-const writeFile = (0, util_1.promisify)(fs.writeFile);
+const writeFile = (0, util_1.promisify)(fs_1.default.writeFile);
 const createTempDir = (0, util_1.promisify)(tmp_1.dir);
 function isOnlyNewIssues() {
     return core.getBooleanInput(`only-new-issues`, { required: true });
-}
-async function prepareLint() {
-    const mode = core.getInput("install-mode").toLowerCase();
-    if (mode === install_1.InstallMode.None) {
-        const binPath = await (0, which_1.default)("golangci-lint", { nothrow: true });
-        if (!binPath) {
-            throw new Error("golangci-lint binary not found in the PATH");
-        }
-        return binPath;
-    }
-    const versionInfo = await (0, version_1.getVersion)(mode);
-    return await (0, install_1.installLint)(versionInfo, mode);
 }
 async function fetchPatch() {
     if (!isOnlyNewIssues()) {
@@ -93930,7 +93930,7 @@ async function fetchPullRequestPatch(ctx) {
     }
     try {
         const tempDir = await createTempDir();
-        const patchPath = path.join(tempDir, "pull.patch");
+        const patchPath = path_1.default.join(tempDir, "pull.patch");
         core.info(`Writing patch to ${patchPath}`);
         await writeFile(patchPath, (0, diffUtils_1.alterDiffPatch)(patch));
         return patchPath;
@@ -93965,7 +93965,7 @@ async function fetchPushPatch(ctx) {
     }
     try {
         const tempDir = await createTempDir();
-        const patchPath = path.join(tempDir, "push.patch");
+        const patchPath = path_1.default.join(tempDir, "push.patch");
         core.info(`Writing patch to ${patchPath}`);
         await writeFile(patchPath, (0, diffUtils_1.alterDiffPatch)(patch));
         return patchPath;
@@ -93975,12 +93975,67 @@ async function fetchPushPatch(ctx) {
         return ``; // don't fail the action, but analyze without patch
     }
 }
+
+
+/***/ }),
+
+/***/ 9786:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.run = run;
+exports.postRun = postRun;
+const core = __importStar(__nccwpck_require__(7484));
+const github = __importStar(__nccwpck_require__(3228));
+const child_process_1 = __nccwpck_require__(5317);
+const fs = __importStar(__nccwpck_require__(9896));
+const path = __importStar(__nccwpck_require__(6928));
+const util_1 = __nccwpck_require__(9023);
+const cache_1 = __nccwpck_require__(7377);
+const install_1 = __nccwpck_require__(232);
+const patch_1 = __nccwpck_require__(7161);
+const execShellCommand = (0, util_1.promisify)(child_process_1.exec);
 async function prepareEnv() {
     const startedAt = Date.now();
     // Prepare cache, lint and go in parallel.
     await (0, cache_1.restoreCache)();
-    const binPath = await prepareLint();
-    const patchPath = await fetchPatch();
+    const binPath = await (0, install_1.install)();
+    const patchPath = await (0, patch_1.fetchPatch)();
     core.info(`Prepared env in ${Date.now() - startedAt}ms`);
     return { binPath, patchPath };
 }
@@ -94030,7 +94085,7 @@ async function runLint(binPath, patchPath) {
     }
     // Removes `--out-format` from the user flags because it's already inside `addedArgs`.
     userArgs = userArgs.replace(/--out-format=\S*/gi, "").trim();
-    if (isOnlyNewIssues()) {
+    if ((0, patch_1.isOnlyNewIssues)()) {
         if (userArgNames.has(`new`) || userArgNames.has(`new-from-rev`) || userArgNames.has(`new-from-patch`)) {
             throw new Error(`please, don't specify manually --new* args when requesting only new issues`);
         }

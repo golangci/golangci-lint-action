@@ -138,7 +138,10 @@ async function runLint(binPath: string, patchPath: string): Promise<void> {
   }
 
   if (core.getBooleanInput(`verify`, { required: true })) {
-    const cmdVerify = `${binPath} config verify`
+    let cmdVerify = `${binPath} config verify`
+    if (userArgsMap.get("config")) {
+      cmdVerify += ` --config=${userArgsMap.get("config")}`
+    }
 
     core.info(`Running [${cmdVerify}] in [${cmdArgs.cwd || process.cwd()}] ...`)
 

@@ -24,7 +24,7 @@ inputs:
     required: false
   verify:
     description: "if set to true and the action verify the configuration file against the JSONSchema"
-    default: 'false'
+    default: 'true'
     required: false
   only-new-issues:
     description: "if set to true and the action runs on a pull request - the action outputs only newly found issues"

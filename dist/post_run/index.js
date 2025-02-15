@@ -94123,15 +94123,7 @@ async function runLint(binPath, patchPath) {
         }
         cmdArgs.cwd = path.resolve(workingDirectory);
     }
-    if (core.getBooleanInput(`verify`, { required: true })) {
-        let cmdVerify = `${binPath} config verify`;
-        if (userArgsMap.get("config")) {
-            cmdVerify += ` --config=${userArgsMap.get("config")}`;
-        }
-        core.info(`Running [${cmdVerify}] in [${cmdArgs.cwd || process.cwd()}] ...`);
-        const res = await execShellCommand(cmdVerify, cmdArgs);
-        printOutput(res);
-    }
+    await runVerify(binPath, userArgsMap, cmdArgs);
     const cmd = `${binPath} run ${addedArgs.join(` `)} ${userArgs}`.trimEnd();
     core.info(`Running [${cmd}] in [${cmdArgs.cwd || process.cwd()}] ...`);
     const startedAt = Date.now();
@@ -94152,6 +94144,37 @@ async function runLint(binPath, patchPath) {
         }
     }
     core.info(`Ran golangci-lint in ${Date.now() - startedAt}ms`);
+}
+async function runVerify(binPath, userArgsMap, cmdArgs) {
+    const verify = core.getBooleanInput(`verify`, { required: true });
+    if (!verify) {
+        return;
+    }
+    const cfgPath = await getConfigPath(binPath, userArgsMap, cmdArgs);
+    if (!cfgPath) {
+        return;
+    }
+    let cmdVerify = `${binPath} config verify`;
+    if (userArgsMap.get("config")) {
+        cmdVerify += ` --config=${userArgsMap.get("config")}`;
+    }
+    core.info(`Running [${cmdVerify}] in [${cmdArgs.cwd || process.cwd()}] ...`);
+    const res = await execShellCommand(cmdVerify, cmdArgs);
+    printOutput(res);
+}
+async function getConfigPath(binPath, userArgsMap, cmdArgs) {
+    let cmdConfigPath = `${binPath} config path`;
+    if (userArgsMap.get("config")) {
+        cmdConfigPath += ` --config=${userArgsMap.get("config")}`;
+    }
+    core.info(`Running [${cmdConfigPath}] in [${cmdArgs.cwd || process.cwd()}] ...`);
+    try {
+        const resPath = await execShellCommand(cmdConfigPath, cmdArgs);
+        return resPath.stderr.trim();
+    }
+    catch {
+        return ``;
+    }
 }
 async function run() {
     try {

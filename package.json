@@ -1,6 +1,6 @@
 {
   "name": "golanci-lint-action",
-  "version": "6.4.1",
+  "version": "6.5.0",
   "private": true,
   "description": "golangci-lint github action",
   "main": "dist/main.js",

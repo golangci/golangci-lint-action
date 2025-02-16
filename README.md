@@ -512,6 +512,8 @@ permissions:
   checks: write
 ```
 
+Make sure to use `actions/setup-go` in the job as that's needed for the problem matcher and use the `colored-line-number` output (golangci-lint default).
+
 ## Performance
 
 The action was implemented with performance in mind:

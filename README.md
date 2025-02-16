@@ -512,6 +512,8 @@ permissions:
   checks: write
 ```
 
+For annotations to work use the default `colored-line-number` output and either use `actions/setup-go` in the job or enable the internal [problem matchers](#problem-matchers).
+
 ## Performance
 
 The action was implemented with performance in mind:

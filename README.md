@@ -322,7 +322,12 @@ with:
 
 (optional)
 
-If set to true and the action verify the configuration file against the JSONSchema.
+This option is `true` by default.
+
+If the GitHub Action detects configuration file the validation will be performed unless this option is set to `false`.
+If there is no configuration file, the validation is skipped.
+
+The JSONSchema used to validate the configuration depends on the version of golangci-lint you are using.
 
 <details>
 <summary>Example</summary>
@@ -330,7 +335,7 @@ If set to true and the action verify the configuration file against the JSONSche
 ```yml
 uses: golangci/golangci-lint-action@v6
 with:
-  verify: true
+  verify: false
   # ...
 ```
 

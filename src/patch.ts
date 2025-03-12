@@ -1,6 +1,7 @@
 import * as core from "@actions/core"
 import * as github from "@actions/github"
 import { Context } from "@actions/github/lib/context"
+import * as pluginRetry from "@octokit/plugin-retry"
 import fs from "fs"
 import path from "path"
 import { dir } from "tmp"
@@ -43,7 +44,7 @@ async function fetchPullRequestPatch(ctx: Context): Promise<string> {
     return ``
   }
 
-  const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }))
+  const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }), {}, pluginRetry.retry)
 
   let patch: string
   try {
@@ -81,7 +82,7 @@ async function fetchPullRequestPatch(ctx: Context): Promise<string> {
 }
 
 async function fetchPushPatch(ctx: Context): Promise<string> {
-  const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }))
+  const octokit = github.getOctokit(core.getInput(`github-token`, { required: true }), {}, pluginRetry.retry)
 
   let patch: string
   try {

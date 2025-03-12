@@ -18,13 +18,20 @@ const modVersionRe = /github.com\/golangci\/golangci-lint\s(v\S+)/
 
 const parseVersion = (s: string): Version => {
   if (s == "latest" || s == "") {
-    // TODO(ldez): it should be replaced with an explicit version (ex: v1.64.0)
-    return null
+    // TODO(ldez): v2: it should be replaced with "return null"
+    return { major: 1, minor: 64, patch: 7 }
   }
 
   const match = s.match(versionRe)
   if (!match) {
     throw new Error(`invalid version string '${s}', expected format v1.2 or v1.2.3`)
+  }
+
+  // TODO(ldez): v2: to remove.
+  if (parseInt(match[1]) > 1) {
+    throw new Error(
+      `invalid version string '${s}', golangci-lint v2 is not supported by golangci-lint-action v6, you must update to golangci-lint-action v7.`
+    )
   }
 
   return {
@@ -115,7 +122,6 @@ const fetchVersionMapping = async (): Promise<VersionMapping> => {
     maxRetries: 5,
   })
   try {
-    // TODO(ldez): HEAD should be replaced with an explicit version (ex: v1.64.0).
     const url = `https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/assets/github-action-config-v1.json`
     const response: httpm.HttpClientResponse = await http.get(url)
     if (response.message.statusCode !== 200) {
@@ -134,8 +140,13 @@ export async function getVersion(mode: InstallMode): Promise<VersionInfo> {
 
   if (mode == InstallMode.GoInstall) {
     const v: string = core.getInput(`version`)
-    // TODO(ldez): latest should be replaced with an explicit version (ex: v1.64.0).
-    return { TargetVersion: v ? v : "latest" }
+    // TODO(ldez): v2: to remove.
+    if (v == "latest") {
+      return { TargetVersion: "v1.64.7" }
+    }
+
+    // TODO(ldez): v2: "v1.64.7" should be replaced with "latest".
+    return { TargetVersion: v ? v : "v1.64.7" }
   }
 
   const reqVersion = getRequestedVersion()

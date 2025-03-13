@@ -1,3 +1,3 @@
 module github.com/golangci/golangci-lint-action
 
-go 1.14
+go 1.23

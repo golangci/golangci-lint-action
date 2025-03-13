@@ -13,13 +13,11 @@ export type Version = {
 } | null
 
 const versionRe = /^v(\d+)\.(\d+)(?:\.(\d+))?$/
-// TODO(ldez): it should be updated to match v2 module name.
-const modVersionRe = /github.com\/golangci\/golangci-lint\s(v\S+)/
+const modVersionRe = /github.com\/golangci\/golangci-lint\/v2\s(v\S+)/
 
 const parseVersion = (s: string): Version => {
   if (s == "latest" || s == "") {
-    // TODO(ldez): v2: it should be replaced with "return null"
-    return { major: 1, minor: 64, patch: 8 }
+    return null
   }
 
   const match = s.match(versionRe)
@@ -27,11 +25,8 @@ const parseVersion = (s: string): Version => {
     throw new Error(`invalid version string '${s}', expected format v1.2 or v1.2.3`)
   }
 
-  // TODO(ldez): v2: to remove.
-  if (parseInt(match[1]) > 1) {
-    throw new Error(
-      `invalid version string '${s}', golangci-lint v2 is not supported by golangci-lint-action v6, you must update to golangci-lint-action v7.`
-    )
+  if (parseInt(match[1]) !== 2) {
+    throw new Error(`invalid version string '${s}', golangci-lint v${match[1]} is not supported by golangci-lint-action v7.`)
   }
 
   return {
@@ -48,11 +43,10 @@ export const stringifyVersion = (v: Version): string => {
   return `v${v.major}.${v.minor}${v.patch !== null ? `.${v.patch}` : ``}`
 }
 
-// TODO(ldez): it should be updated to v2.0.0.
 const minVersion = {
-  major: 1,
-  minor: 28,
-  patch: 3,
+  major: 2,
+  minor: 0,
+  patch: 0,
 }
 
 const isLessVersion = (a: Version, b: Version): boolean => {
@@ -122,7 +116,7 @@ const fetchVersionMapping = async (): Promise<VersionMapping> => {
     maxRetries: 5,
   })
   try {
-    const url = `https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/assets/github-action-config-v1.json`
+    const url = `https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/assets/github-action-config-v2.json`
     const response: httpm.HttpClientResponse = await http.get(url)
     if (response.message.statusCode !== 200) {
       throw new Error(`failed to download from "${url}". Code(${response.message.statusCode}) Message(${response.message.statusMessage})`)
@@ -140,20 +134,14 @@ export async function getVersion(mode: InstallMode): Promise<VersionInfo> {
 
   if (mode == InstallMode.GoInstall) {
     const v: string = core.getInput(`version`)
-    // TODO(ldez): v2: to remove.
-    if (v == "latest") {
-      return { TargetVersion: "v1.64.8" }
-    }
 
-    // TODO(ldez): v2: "v1.64.8" should be replaced with "latest".
-    return { TargetVersion: v ? v : "v1.64.8" }
+    return { TargetVersion: v ? v : "latest" }
   }
 
   const reqVersion = getRequestedVersion()
 
   // if the patched version is passed, just use it
-  // TODO(ldez): should be updated to `reqVersion?.major === 2`.
-  if (reqVersion?.major === 1 && reqVersion?.minor != null && reqVersion?.patch !== null) {
+  if (reqVersion?.major === 2 && reqVersion?.minor != null && reqVersion?.patch !== null) {
     return new Promise((resolve) => {
       const versionWithoutV = `${reqVersion.major}.${reqVersion.minor}.${reqVersion.patch}`
       resolve({ TargetVersion: `v${versionWithoutV}` })

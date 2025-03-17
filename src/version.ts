@@ -19,7 +19,7 @@ const modVersionRe = /github.com\/golangci\/golangci-lint\s(v\S+)/
 const parseVersion = (s: string): Version => {
   if (s == "latest" || s == "") {
     // TODO(ldez): v2: it should be replaced with "return null"
-    return { major: 1, minor: 64, patch: 7 }
+    return { major: 1, minor: 64, patch: 8 }
   }
 
   const match = s.match(versionRe)
@@ -142,11 +142,11 @@ export async function getVersion(mode: InstallMode): Promise<VersionInfo> {
     const v: string = core.getInput(`version`)
     // TODO(ldez): v2: to remove.
     if (v == "latest") {
-      return { TargetVersion: "v1.64.7" }
+      return { TargetVersion: "v1.64.8" }
     }
 
-    // TODO(ldez): v2: "v1.64.7" should be replaced with "latest".
-    return { TargetVersion: v ? v : "v1.64.7" }
+    // TODO(ldez): v2: "v1.64.8" should be replaced with "latest".
+    return { TargetVersion: v ? v : "v1.64.8" }
   }
 
   const reqVersion = getRequestedVersion()

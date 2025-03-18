@@ -513,8 +513,6 @@ permissions:
   contents: read
   # Optional: allow read access to pull request. Use with `only-new-issues` option.
   pull-requests: read
-  # Optional: allow write access to checks to allow the action to annotate code in the PR.
-  checks: write
 ```
 
 For annotations to work use the default `colored-line-number` output and either use `actions/setup-go` in the job or enable the internal [problem matchers](#problem-matchers).

@@ -505,7 +505,7 @@ The restrictions of annotations are the following:
    If you would like to have comments - please, up-vote [the issue](https://github.com/golangci/golangci-lint-action/issues/5).
 3. The number of annotations is [limited](https://github.com/actions/toolkit/blob/main/docs/problem-matchers.md#limitations).
 
-To enable annotations, you need to add the `checks` permission to your action.
+Permissions required:
 
 ```yaml annotate
 permissions:
@@ -521,7 +521,7 @@ For annotations to work use the default `colored-line-number` output and either 
 
 The action was implemented with performance in mind:
 
-1. We cache data from golangci-lint analysis between builds by using [@actions/cache](https://github.com/actions/toolkit/tree/HEAD/packages/cache). 
+1. We cache data from golangci-lint analysis between builds by using [@actions/cache](https://github.com/actions/toolkit/tree/HEAD/packages/cache).
 2. We don't use Docker because image pulling is slow.
 3. We do as much as we can in parallel, e.g. we download cache, and golangci-lint binary in parallel.
 

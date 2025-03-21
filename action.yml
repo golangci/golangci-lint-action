@@ -7,8 +7,8 @@ inputs:
     description: |
       The version of golangci-lint to use.
       When `install-mode` is:
-      - `binary` (default): the value can be v1.2 or v1.2.3 or `latest` to use the latest version.
-      - `goinstall`: the value can be v1.2.3, `latest`, or the hash of a commit.
+      - `binary` (default): the value can be v2.3 or v2.3.4 or `latest` to use the latest version.
+      - `goinstall`: the value can be v2.3.4, `latest`, or the hash of a commit.
       - `none`: the value is ignored.
     required: false
   install-mode:

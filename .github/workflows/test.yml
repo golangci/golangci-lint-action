@@ -84,7 +84,7 @@ jobs:
           - ""
           - "latest"
           - "v2.0.0"
-          - "95c39ac1fbaf66475705c06c16259ffd9d6bf9a2" # FIXME(ldez): it should be updated for v2.
+          - "1f032fbc4b117e4247b19ff606cc847ab5383bc9"
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read

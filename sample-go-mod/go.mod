@@ -2,7 +2,7 @@ module sample
 
 go 1.22.1
 
-require github.com/golangci/golangci-lint v1.60.1
+require github.com/golangci/golangci-lint/v2 v2.0.0
 
 require (
 	4d63.com/gocheckcompilerdirectives v1.2.1 // indirect

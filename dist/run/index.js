@@ -92568,11 +92568,9 @@ async function goInstall(versionInfo) {
     core.info(`Installing golangci-lint ${versionInfo.TargetVersion}...`);
     const startedAt = Date.now();
     const options = { env: { ...process.env, CGO_ENABLED: "1" } };
-    // TODO(ldez): it should be updated for v2.
-    const exres = await execShellCommand(`go install github.com/golangci/golangci-lint/cmd/golangci-lint@${versionInfo.TargetVersion}`, options);
+    const exres = await execShellCommand(`go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${versionInfo.TargetVersion}`, options);
     printOutput(exres);
-    // TODO(ldez): it should be updated for v2.
-    const res = await execShellCommand(`go install -n github.com/golangci/golangci-lint/cmd/golangci-lint@${versionInfo.TargetVersion}`, options);
+    const res = await execShellCommand(`go install -n github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${versionInfo.TargetVersion}`, options);
     printOutput(res);
     // The output of `go install -n` when the binary is already installed is `touch <path_to_the_binary>`.
     const binPath = res.stderr
@@ -92873,7 +92871,7 @@ async function runLint(binPath, patchPath) {
         const res = await execShellCommand(`${binPath} cache status`);
         printOutput(res);
     }
-    let userArgs = core.getInput(`args`);
+    const userArgs = core.getInput(`args`);
     const addedArgs = [];
     const userArgsList = userArgs
         .trim()
@@ -92893,20 +92891,11 @@ async function runLint(binPath, patchPath) {
             core.info(`##[add-matcher]${matchersPath}`);
         }
     }
-    const formats = (userArgsMap.get("out-format") || "")
-        .trim()
-        .split(",")
-        .filter((f) => f.length > 0)
-        .filter((f) => !f.startsWith(`github-actions`)) // Removes `github-actions` format.
-        .join(",");
-    if (formats) {
-        // Adds formats but without `github-actions` format.
-        addedArgs.push(`--out-format=${formats}`);
-    }
-    // Removes `--out-format` from the user flags because it's already inside `addedArgs`.
-    userArgs = userArgs.replace(/--out-format=\S*/gi, "").trim();
     if ((0, patch_1.isOnlyNewIssues)()) {
-        if (userArgNames.has(`new`) || userArgNames.has(`new-from-rev`) || userArgNames.has(`new-from-patch`)) {
+        if (userArgNames.has(`new`) ||
+            userArgNames.has(`new-from-rev`) ||
+            userArgNames.has(`new-from-patch`) ||
+            userArgNames.has(`new-from-merge-base`)) {
             throw new Error(`please, don't specify manually --new* args when requesting only new issues`);
         }
         const ctx = github.context;
@@ -92920,6 +92909,7 @@ async function runLint(binPath, patchPath) {
                     // Override config values.
                     addedArgs.push(`--new=false`);
                     addedArgs.push(`--new-from-rev=`);
+                    addedArgs.push(`--new-from-merge-base=`);
                 }
                 break;
             case `merge_group`:
@@ -92927,6 +92917,7 @@ async function runLint(binPath, patchPath) {
                 // Override config values.
                 addedArgs.push(`--new=false`);
                 addedArgs.push(`--new-from-patch=`);
+                addedArgs.push(`--new-from-merge-base=`);
                 break;
             default:
                 break;
@@ -92954,7 +92945,6 @@ async function runLint(binPath, patchPath) {
     }
     catch (exc) {
         // This logging passes issues to GitHub annotations but comments can be more convenient for some users.
-        // TODO: support reviewdog or leaving comments by GitHub API.
         printOutput(exc);
         if (exc.code === 1) {
             core.setFailed(`issues found`);
@@ -93233,20 +93223,17 @@ const fs = __importStar(__nccwpck_require__(9896));
 const path_1 = __importDefault(__nccwpck_require__(6928));
 const install_1 = __nccwpck_require__(232);
 const versionRe = /^v(\d+)\.(\d+)(?:\.(\d+))?$/;
-// TODO(ldez): it should be updated to match v2 module name.
-const modVersionRe = /github.com\/golangci\/golangci-lint\s(v\S+)/;
+const modVersionRe = /github.com\/golangci\/golangci-lint\/v2\s(v\S+)/;
 const parseVersion = (s) => {
     if (s == "latest" || s == "") {
-        // TODO(ldez): v2: it should be replaced with "return null"
-        return { major: 1, minor: 64, patch: 8 };
+        return null;
     }
     const match = s.match(versionRe);
     if (!match) {
         throw new Error(`invalid version string '${s}', expected format v1.2 or v1.2.3`);
     }
-    // TODO(ldez): v2: to remove.
-    if (parseInt(match[1]) > 1) {
-        throw new Error(`invalid version string '${s}', golangci-lint v2 is not supported by golangci-lint-action v6, you must update to golangci-lint-action v7.`);
+    if (parseInt(match[1]) !== 2) {
+        throw new Error(`invalid version string '${s}', golangci-lint v${match[1]} is not supported by golangci-lint-action v7.`);
     }
     return {
         major: parseInt(match[1]),
@@ -93261,11 +93248,10 @@ const stringifyVersion = (v) => {
     return `v${v.major}.${v.minor}${v.patch !== null ? `.${v.patch}` : ``}`;
 };
 exports.stringifyVersion = stringifyVersion;
-// TODO(ldez): it should be updated to v2.0.0.
 const minVersion = {
-    major: 1,
-    minor: 28,
-    patch: 3,
+    major: 2,
+    minor: 0,
+    patch: 0,
 };
 const isLessVersion = (a, b) => {
     if (a == null) {
@@ -93311,7 +93297,7 @@ const fetchVersionMapping = async () => {
         maxRetries: 5,
     });
     try {
-        const url = `https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/assets/github-action-config-v1.json`;
+        const url = `https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/assets/github-action-config-v2.json`;
         const response = await http.get(url);
         if (response.message.statusCode !== 200) {
             throw new Error(`failed to download from "${url}". Code(${response.message.statusCode}) Message(${response.message.statusMessage})`);
@@ -93327,17 +93313,11 @@ async function getVersion(mode) {
     core.info(`Finding needed golangci-lint version...`);
     if (mode == install_1.InstallMode.GoInstall) {
         const v = core.getInput(`version`);
-        // TODO(ldez): v2: to remove.
-        if (v == "latest") {
-            return { TargetVersion: "v1.64.8" };
-        }
-        // TODO(ldez): v2: "v1.64.8" should be replaced with "latest".
-        return { TargetVersion: v ? v : "v1.64.8" };
+        return { TargetVersion: v ? v : "latest" };
     }
     const reqVersion = getRequestedVersion();
     // if the patched version is passed, just use it
-    // TODO(ldez): should be updated to `reqVersion?.major === 2`.
-    if (reqVersion?.major === 1 && reqVersion?.minor != null && reqVersion?.patch !== null) {
+    if (reqVersion?.major === 2 && reqVersion?.minor != null && reqVersion?.patch !== null) {
         return new Promise((resolve) => {
             const versionWithoutV = `${reqVersion.major}.${reqVersion.minor}.${reqVersion.patch}`;
             resolve({ TargetVersion: `v${versionWithoutV}` });

@@ -8,7 +8,7 @@ The action runs [golangci-lint](https://github.com/golangci/golangci-lint) and r
 
 ![GitHub Annotations](./static/annotations.png)
 
-![Logs](./static/colored-line-number.png)
+![Logs](./static/logs.png)
 
 ## Supporting Us
 

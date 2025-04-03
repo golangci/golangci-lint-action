@@ -57,6 +57,9 @@ jobs:
         uses: golangci/golangci-lint-action@v7
         with:
           version: v2.0
+     # optionally you can check the formatting with gofmt which (since golanci-lint v2) is no longer a linter
+     - name: check formatting
+       run: golangci-lint fmt --diff --enable gofmt
 ```
 
 </details>

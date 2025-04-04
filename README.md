@@ -400,7 +400,7 @@ The location of the configuration file can be changed by using `--config=`
 ```yml
 uses: golangci/golangci-lint-action@v7
 with:
-  args: --config=/my/path/.golangci.yml --issues-exit-code=0
+  args: --config=${{ github.workspace }}/my/path/.golangci.yml --issues-exit-code=0
   # ...
 ```
 

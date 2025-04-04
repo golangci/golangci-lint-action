@@ -12,13 +12,13 @@ The action runs [golangci-lint](https://github.com/golangci/golangci-lint) and r
 
 ## Supporting Us
 
-<!-- [![GitHub Sponsors](https://img.shields.io/badge/GitHub-Donate-blue?logo=github&style=for-the-badge)](https://github.com/sponsors/golangci) -->
+[![GitHub Sponsors](https://img.shields.io/badge/GitHub-Donate-blue?logo=github&style=for-the-badge)](https://github.com/sponsors/golangci)
 [![Open Collective backers and sponsors](https://img.shields.io/badge/OpenCollective-Donate-blue?logo=opencollective&style=for-the-badge)](https://opencollective.com/golangci-lint)
 [![Linter Authors](https://img.shields.io/badge/Linter_Authors-Donate-blue?style=for-the-badge)](https://golangci-lint.run/product/thanks/)
 
 `golangci-lint` is a free and open-source project built by volunteers.
 
-If you value it, consider supporting us, we appreciate it! :heart:
+If you value it, consider supporting us; we appreciate it! :heart:
 
 ## How to use
 
@@ -251,7 +251,7 @@ You will also likely need to add the following `.gitattributes` file to ensure t
 * `v4.0.0+` requires an explicit `actions/setup-go` installation step before using this action: `uses: actions/setup-go@v5`.
   The `skip-go-installation` option has been removed.
 * `v2.0.0+` works with `golangci-lint` version >= `v1.28.3`
-* `v1.2.2` is deprecated due to we forgot to change the minimum version of `golangci-lint` to `v1.28.3` ([issue](https://github.com/golangci/golangci-lint-action/issues/39))
+* `v1.2.2` is deprecated because we forgot to change the minimum version of `golangci-lint` to `v1.28.3` ([issue](https://github.com/golangci/golangci-lint-action/issues/39))
 * `v1.2.1` works with `golangci-lint` version >= `v1.14.0` ([issue](https://github.com/golangci/golangci-lint-action/issues/39))
 
 ## Options
@@ -325,10 +325,10 @@ with:
 
 This option is `true` by default.
 
-If the GitHub Action detects configuration file the validation will be performed unless this option is set to `false`.
+If the GitHub Action detects a configuration file, the validation will be performed unless this option is set to `false`.
 If there is no configuration file, the validation is skipped.
 
-The JSONSchema used to validate the configuration depends on the version of golangci-lint you are using.
+The JSON Schema used to validate the configuration depends on the version of golangci-lint you are using.
 
 <details>
 <summary>Example</summary>
@@ -350,8 +350,8 @@ Show only new issues.
 
 The default value is `false`.
 
-* `pull_request` and `pull_request_target`: the action gets the diff of the PR content from the [GitHub API](https://docs.github.com/en/rest/pulls/pulls?apiVersion=2022-11-28#get-a-pull-request) and use it with `--new-from-patch`.
-* `push`: the action gets the diff of the push content (difference between commits before and after the push) from the [GitHub API](https://docs.github.com/en/rest/commits/commits?apiVersion=2022-11-28#compare-two-commits) and use it with `--new-from-patch`.
+* `pull_request` and `pull_request_target`: the action gets the diff of the PR content from the [GitHub API](https://docs.github.com/en/rest/pulls/pulls?apiVersion=2022-11-28#get-a-pull-request) and uses it with `--new-from-patch`.
+* `push`: the action gets the diff of the push content (difference between commits before and after the push) from the [GitHub API](https://docs.github.com/en/rest/commits/commits?apiVersion=2022-11-28#compare-two-commits) and uses it with `--new-from-patch`.
 * `merge_group`: the action gets the diff by using `--new-from-rev` option (relies on git).
   You should add the option `fetch-depth: 0` to `actions/checkout` step.
 
@@ -391,8 +391,12 @@ with:
 
 golangci-lint command line arguments.
 
-Note: By default, the `.golangci.yml` file should be at the root of the repository.
-The location of the configuration file can be changed by using `--config=`
+> [!NOTE]
+> By default, the `.golangci.yml` file should be at the root of the repository.
+> The location of the configuration file can be changed by using `--config=`.
+
+> [!IMPORTANT]
+> Adding a `=` between the flag name and its value is important because the action parses the arguments on spaces.
 
 <details>
 <summary>Example</summary>
@@ -459,7 +463,7 @@ with:
 
 (optional)
 
-If set to `true`, caches will not be saved, but they may still be restored, required `skip-cache: false`.
+If set to `true`, caches will not be saved, but they may still be restored, requiring `skip-cache: false`.
 
 The default value is `false`.
 
@@ -483,7 +487,7 @@ Periodically invalidate the cache every `cache-invalidation-interval` days to en
 
 The default value is `7`.
 
-If set the number is `<= 0`, the cache will be always invalidate (Not recommended).
+If the number is `<= 0`, the cache will always be invalidated (Not recommended).
 
 <details>
 <summary>Example</summary>
@@ -518,7 +522,7 @@ permissions:
   pull-requests: read
 ```
 
-For annotations to work use the default format output (`text`) and either use `actions/setup-go` in the job or enable the internal [problem matchers](#problem-matchers).
+For annotations to work, use the default format output (`text`) and either use `actions/setup-go` in the job or enable the internal [problem matchers](#problem-matchers).
 
 ## Performance
 

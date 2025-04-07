@@ -420,7 +420,7 @@ Force the usage of the embedded problem matchers.
 
 By default, the [problem matcher of Go (`actions/setup-go`)](https://github.com/actions/setup-go/blob/main/matchers.json) already handles the default golangci-lint output (`text`).
 
-Works only with `colored-line-number` (the golangci-lint default).
+Works only with `text` format (the golangci-lint default).
 
 https://golangci-lint.run/usage/configuration/#output-configuration
 

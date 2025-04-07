@@ -31,7 +31,7 @@
     "@actions/http-client": "^2.2.3",
     "@octokit/plugin-retry": "^6.1.0",
     "@actions/tool-cache": "^2.0.2",
-    "@types/node": "^22.13.14",
+    "@types/node": "^22.14.0",
     "@types/semver": "^7.7.0",
     "@types/tmp": "^0.2.6",
     "@types/which": "^3.0.4",

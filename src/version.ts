@@ -26,7 +26,7 @@ const parseVersion = (s: string): Version => {
   }
 
   if (parseInt(match[1]) !== 2) {
-    throw new Error(`invalid version string '${s}', golangci-lint v${match[1]} is not supported by golangci-lint-action v7.`)
+    throw new Error(`invalid version string '${s}', golangci-lint v${match[1]} is not supported by golangci-lint-action >= v7.`)
   }
 
   return {
@@ -45,7 +45,7 @@ export const stringifyVersion = (v: Version): string => {
 
 const minVersion = {
   major: 2,
-  minor: 0,
+  minor: 1,
   patch: 0,
 }
 
@@ -60,7 +60,7 @@ const isLessVersion = (a: Version, b: Version): boolean => {
     return a.major < b.major
   }
 
-  // Do not compare patch parts because if the min version has a non zero value
+  // Do not compare patch parts because if the min version has a non-zero value
   // then it returns false, since the patch version of requested is always zero
   return a.minor < b.minor
 }

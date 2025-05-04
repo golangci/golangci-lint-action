@@ -123,9 +123,11 @@ async function runLint(binPath: string, patchPath: string): Promise<void> {
     if (!fs.existsSync(workingDirectory) || !fs.lstatSync(workingDirectory).isDirectory()) {
       throw new Error(`working-directory (${workingDirectory}) was not a path`)
     }
-    if (!userArgNames.has(`path-prefix`)) {
-      addedArgs.push(`--path-prefix=${workingDirectory}`)
+
+    if (!userArgNames.has(`path-prefix`) && !userArgNames.has(`path-mode`)) {
+      addedArgs.push(`--path-mode=abs`)
     }
+
     cmdArgs.cwd = path.resolve(workingDirectory)
   }
 

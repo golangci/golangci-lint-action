@@ -120,7 +120,7 @@ on:
 
 env:
   GO_VERSION: stable
-  GOLANGCI_LINT_VERSION: v2.0
+  GOLANGCI_LINT_VERSION: v2.1
 
 jobs:
   detect-modules:
@@ -151,6 +151,7 @@ jobs:
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           working-directory: ${{ matrix.modules }}
+          args: --path-mode=abs
 ```
 
 </details>
@@ -179,7 +180,7 @@ jobs:
     with:
       os: ${{ matrix.os }}
       go-version: ${{ matrix.go-version }}
-      golangci-lint-version: v2.0
+      golangci-lint-version: v2.1
 ```
 
 ```yaml
@@ -201,7 +202,7 @@ on:
       golangci-lint-version:
         description: 'Golangci-lint version'
         type: string
-        default: 'v2.0'
+        default: 'v2.1'
 
 jobs:
   detect-modules:
@@ -233,6 +234,7 @@ jobs:
         with:
           version: ${{ inputs.golangci-lint-version }}
           working-directory: ${{ matrix.modules }}
+          args: --path-mode=abs
 ```
 
 You will also likely need to add the following `.gitattributes` file to ensure that line endings for Windows builds are properly formatted:

@@ -93012,8 +93012,8 @@ async function runLint(binPath, patchPath) {
         if (!fs.existsSync(workingDirectory) || !fs.lstatSync(workingDirectory).isDirectory()) {
             throw new Error(`working-directory (${workingDirectory}) was not a path`);
         }
-        if (!userArgNames.has(`path-prefix`)) {
-            addedArgs.push(`--path-prefix=${workingDirectory}`);
+        if (!userArgNames.has(`path-prefix`) && !userArgNames.has(`path-mode`)) {
+            addedArgs.push(`--path-mode=abs`);
         }
         cmdArgs.cwd = path.resolve(workingDirectory);
     }
@@ -93316,7 +93316,7 @@ const parseVersion = (s) => {
         throw new Error(`invalid version string '${s}', expected format v1.2 or v1.2.3`);
     }
     if (parseInt(match[1]) !== 2) {
-        throw new Error(`invalid version string '${s}', golangci-lint v${match[1]} is not supported by golangci-lint-action v7.`);
+        throw new Error(`invalid version string '${s}', golangci-lint v${match[1]} is not supported by golangci-lint-action >= v7.`);
     }
     return {
         major: parseInt(match[1]),
@@ -93333,7 +93333,7 @@ const stringifyVersion = (v) => {
 exports.stringifyVersion = stringifyVersion;
 const minVersion = {
     major: 2,
-    minor: 0,
+    minor: 1,
     patch: 0,
 };
 const isLessVersion = (a, b) => {
@@ -93346,7 +93346,7 @@ const isLessVersion = (a, b) => {
     if (a.major != b.major) {
         return a.major < b.major;
     }
-    // Do not compare patch parts because if the min version has a non zero value
+    // Do not compare patch parts because if the min version has a non-zero value
     // then it returns false, since the patch version of requested is always zero
     return a.minor < b.minor;
 };

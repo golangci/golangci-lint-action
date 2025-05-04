@@ -93015,6 +93015,9 @@ async function runLint(binPath, patchPath) {
         if (!userArgNames.has(`path-prefix`)) {
             addedArgs.push(`--path-prefix=${workingDirectory}`);
         }
+        if (!userArgNames.has(`path-mode`)) {
+            addedArgs.push(`--path-mode=abs`);
+        }
         cmdArgs.cwd = path.resolve(workingDirectory);
     }
     await runVerify(binPath, userArgsMap, cmdArgs);

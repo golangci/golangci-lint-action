@@ -1,13 +1,13 @@
 # https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions
 name: "Golangci-lint"
-description: "Official golangci-lint action with line-attached annotations for found issues, caching and parallel execution."
+description: "Official golangci-lint action with line-attached annotations for found issues, caching, and parallel execution."
 author: "golangci"
 inputs:
   version:
     description: |
       The version of golangci-lint to use.
       When `install-mode` is:
-      - `binary` (default): the value can be v2.3 or v2.3.4 or `latest` to use the latest version.
+      - `binary` (default): the value can be v2.3, v2.3.4, or `latest` to use the latest version.
       - `goinstall`: the value can be v2.3.4, `latest`, or the hash of a commit.
       - `none`: the value is ignored.
     required: false
@@ -16,42 +16,42 @@ inputs:
     default: "binary"
     required: false
   working-directory:
-    description: "golangci-lint working directory, default is project root"
+    description: "golangci-lint working directory. The default is the project root."
     required: false
   github-token:
-    description: "the token is used for fetching patch of a pull request to show only new issues"
+    description: "The token is used for fetching the patch of a pull request to show only new issues."
     default: ${{ github.token }}
     required: false
   verify:
-    description: "if set to true and the action verify the configuration file against the JSONSchema"
+    description: "If set to true, the action verifies the configuration file against the JSONSchema."
     default: 'true'
     required: false
   only-new-issues:
-    description: "if set to true and the action runs on a pull request - the action outputs only newly found issues"
+    description: "If set to true and the action runs on a pull request, the action outputs only newly found issues."
     default: 'false'
     required: false
   skip-cache:
     description: |
-      if set to true then the all caching functionality will be complete disabled,
-      takes precedence over all other caching options.
+      If set to true, all caching functionality will be completely disabled.
+      This takes precedence over all other caching options.
     default: 'false'
     required: false
   skip-save-cache:
     description: |
-      if set to true then the action will not save any caches, but it may still
+      If set to true, the action will not save any caches, but it may still
       restore existing caches, subject to other options.
     default: 'false'
     required: false
   problem-matchers:
-    description: "Force the usage of the embedded problem matchers"
+    description: "Force the usage of the embedded problem matchers."
     default: 'false'
     required: false
   args:
-    description: "golangci-lint command line arguments"
+    description: "golangci-lint command line arguments."
     default: ""
     required: false
   cache-invalidation-interval:
-    description: "Periodically invalidate a cache because a new code being added. (number of days)"
+    description: "Periodically invalidate a cache when new code is added (number of days)."
     default: '7'
     required: false
 runs:

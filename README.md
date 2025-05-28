@@ -2,7 +2,7 @@
 
 [![Build Status](https://github.com/golangci/golangci-lint-action/workflows/build-and-test/badge.svg)](https://github.com/golangci/golangci-lint-action/actions)
 
-It's the official GitHub action for [golangci-lint](https://github.com/golangci/golangci-lint) from its authors.
+It's the official GitHub Action for [golangci-lint](https://github.com/golangci/golangci-lint) from its authors.
 
 The action runs [golangci-lint](https://github.com/golangci/golangci-lint) and reports issues from linters.
 
@@ -25,7 +25,7 @@ If you value it, consider supporting us; we appreciate it! :heart:
 We recommend running this action in a job separate from other jobs (`go test`, etc.)
 because different jobs [run in parallel](https://help.github.com/en/actions/getting-started-with-github-actions/core-concepts-for-github-actions#job).
 
-Add `.github/workflows/golangci-lint.yml` with the following contents:
+Add a `.github/workflows/golangci-lint.yml` file with the following contents:
 
 <details>
 <summary>Simple Example</summary>
@@ -41,7 +41,7 @@ on:
 
 permissions:
   contents: read
-  # Optional: allow read access to pull request. Use with `only-new-issues` option.
+  # Optional: allow read access to pull requests. Use with `only-new-issues` option.
   # pull-requests: read
 
 jobs:
@@ -75,7 +75,7 @@ on:
 
 permissions:
   contents: read
-  # Optional: allow read access to pull request. Use with `only-new-issues` option.
+  # Optional: allow read access to pull requests. Use with `only-new-issues` option.
   # pull-requests: read
 
 jobs:
@@ -214,7 +214,7 @@ jobs:
         with:
           go-version: ${{ inputs.go-version }}
       - id: set-modules
-        shell: bash # require for Windows to be able to use $GITHUB_OUTPUT https://github.com/actions/runner/issues/2224
+        shell: bash # required for Windows to be able to use $GITHUB_OUTPUT https://github.com/actions/runner/issues/2224
         run: echo "modules=$(go list -m -json | jq -s '.' | jq -c '[.[].Dir]')" >> $GITHUB_OUTPUT
 
   golangci-lint:
@@ -264,7 +264,7 @@ You will also likely need to add the following `.gitattributes` file to ensure t
 The version of golangci-lint to use.
 
 When `install-mode` is:
-* `binary` (default): the value can be v2.3 or v2.3.4 or `latest` to use the latest version.
+* `binary` (default): the value can be v2.3, v2.3.4, or `latest` to use the latest version.
 * `goinstall`: the value can be v2.3.4, `latest`, or the hash of a commit.
 * `none`: the value is ignored.
 
@@ -304,7 +304,7 @@ with:
 
 (optional)
 
-When using `only-new-issues` option, the GitHub API is used, so a token is required.
+When using the `only-new-issues` option, the GitHub API is used, so a token is required.
 
 By default, it uses the `github.token` from the action.
 
@@ -326,8 +326,8 @@ with:
 
 This option is `true` by default.
 
-If the GitHub Action detects a configuration file, the validation will be performed unless this option is set to `false`.
-If there is no configuration file, the validation is skipped.
+If the GitHub Action detects a configuration file, validation will be performed unless this option is set to `false`.
+If there is no configuration file, validation is skipped.
 
 The JSON Schema used to validate the configuration depends on the version of golangci-lint you are using.
 
@@ -352,9 +352,9 @@ Show only new issues.
 The default value is `false`.
 
 * `pull_request` and `pull_request_target`: the action gets the diff of the PR content from the [GitHub API](https://docs.github.com/en/rest/pulls/pulls?apiVersion=2022-11-28#get-a-pull-request) and uses it with `--new-from-patch`.
-* `push`: the action gets the diff of the push content (difference between commits before and after the push) from the [GitHub API](https://docs.github.com/en/rest/commits/commits?apiVersion=2022-11-28#compare-two-commits) and uses it with `--new-from-patch`.
-* `merge_group`: the action gets the diff by using `--new-from-rev` option (relies on git).
-  You should add the option `fetch-depth: 0` to `actions/checkout` step.
+* `push`: the action gets the diff of the push content (the difference between commits before and after the push) from the [GitHub API](https://docs.github.com/en/rest/commits/commits?apiVersion=2022-11-28#compare-two-commits) and uses it with `--new-from-patch`.
+* `merge_group`: the action gets the diff by using the `--new-from-rev` option (relies on git).
+  You should add the option `fetch-depth: 0` to the `actions/checkout` step.
 
 <details>
 <summary>Example</summary>
@@ -372,7 +372,7 @@ with:
 
 (optional)
 
-Working directory, useful for monorepos.
+The golangci-lint working directory, useful for monorepos. The default is the project root.
 
 <details>
 <summary>Example</summary>
@@ -406,7 +406,7 @@ golangci-lint command line arguments.
 uses: golangci/golangci-lint-action@v8
 with:
   # In some rare cases,
-  # you could have to use `${{ github.workspace }}` as base directory to reference your configuration file.
+  # you may need to use `${{ github.workspace }}` as the base directory to reference your configuration file.
   args: --config=/my/path/.golangci.yml --issues-exit-code=0
   # ...
 ```
@@ -417,11 +417,11 @@ with:
 
 (optional)
 
-Force the usage of the embedded problem matchers.
+Forces the usage of the embedded problem matchers.
 
 By default, the [problem matcher of Go (`actions/setup-go`)](https://github.com/actions/setup-go/blob/main/matchers.json) already handles the default golangci-lint output (`text`).
 
-Works only with `text` format (the golangci-lint default).
+Works only with the `text` format (the golangci-lint default).
 
 https://golangci-lint.run/usage/configuration/#output-configuration
 
@@ -443,8 +443,8 @@ with:
 
 (optional)
 
-If set to `true`, then all caching functionality will be completely disabled,
-takes precedence over all other caching options.
+If set to `true`, all caching functionality will be completely disabled.
+This takes precedence over all other caching options.
 
 The default value is `false`.
 
@@ -484,11 +484,11 @@ with:
 
 (optional)
 
-Periodically invalidate the cache every `cache-invalidation-interval` days to ensure that outdated data is removed and fresh data is loaded.
+Periodically invalidate a cache every `cache-invalidation-interval` days to ensure that outdated data is removed and fresh data is loaded.
 
 The default value is `7`.
 
-If the number is `<= 0`, the cache will always be invalidated (Not recommended).
+If the number is `<= 0`, the cache will always be invalidated (not recommended).
 
 <details>
 <summary>Example</summary>
@@ -506,11 +506,11 @@ with:
 
 Currently, GitHub parses the action's output and creates [annotations](https://github.blog/2018-12-14-introducing-check-runs-and-annotations/).
 
-The restrictions of annotations are the following:
+The restrictions of annotations are as follows:
 
-1. Currently, they don't support Markdown formatting (see the [feature request](https://github.community/t5/GitHub-API-Development-and/Checks-Ability-to-include-Markdown-in-line-annotations/m-p/56704))
+1. Currently, they don't support Markdown formatting (see the [feature request](https://github.community/t5/GitHub-API-Development-and/Checks-Ability-to-include-Markdown-in-line-annotations/m-p/56704)).
 2. They aren't shown in the list of comments.
-   If you would like to have comments - please, up-vote [the issue](https://github.com/golangci/golangci-lint-action/issues/5).
+   If you would like to have comments, please up-vote [the issue](https://github.com/golangci/golangci-lint-action/issues/5).
 3. The number of annotations is [limited](https://github.com/actions/toolkit/blob/main/docs/problem-matchers.md#limitations).
 
 Permissions required:
@@ -519,7 +519,7 @@ Permissions required:
 permissions:
   # Required: allow read access to the content for analysis.
   contents: read
-  # Optional: allow read access to pull request. Use with `only-new-issues` option.
+  # Optional: allow read access to pull requests. Use with `only-new-issues` option.
   pull-requests: read
 ```
 
@@ -531,9 +531,9 @@ The action was implemented with performance in mind:
 
 1. We cache data from golangci-lint analysis between builds by using [@actions/cache](https://github.com/actions/toolkit/tree/HEAD/packages/cache).
 2. We don't use Docker because image pulling is slow.
-3. We do as much as we can in parallel, e.g. we download cache, and golangci-lint binary in parallel.
+3. We do as much as we can in parallel, e.g., we download the cache and the golangci-lint binary in parallel.
 
-For example, in a repository of [golangci-lint](https://github.com/golangci/golangci-lint) running this action without the cache takes 50s, but with cache takes 14s:
+For example, in the [golangci-lint](https://github.com/golangci/golangci-lint) repository, running this action without the cache takes 50s, but with the cache it takes 14s:
   * in parallel:
     * 4s to restore 50 MB of cache
     * 1s to find and install `golangci-lint`
@@ -541,32 +541,32 @@ For example, in a repository of [golangci-lint](https://github.com/golangci/gola
 
 ## Internals
 
-We use JavaScript-based action.
-We don't use Docker-based action because:
+We use a JavaScript-based action.
+We don't use a Docker-based action because:
 
-1. Docker pulling is slow currently
-2. it's easier to use caching from [@actions/cache](https://github.com/actions/toolkit/tree/HEAD/packages/cache)
+1. Pulling Docker images is currently slow.
+2. It is easier to use caching from [@actions/cache](https://github.com/actions/toolkit/tree/HEAD/packages/cache).
 
-We support different platforms, such as `ubuntu`, `macos`, and `windows` with `x32` and `x64` archs.
+We support different platforms, such as `ubuntu`, `macos`, and `windows` with `x32` and `x64` architectures.
 
-Inside our action, we perform 3 steps:
+Inside our action, we perform three steps:
 
-1. Setup environment running in parallel:
-   * restore [cache](https://github.com/actions/cache) of previous analyses
-   * fetch [action config](https://github.com/golangci/golangci-lint/blob/HEAD/assets/github-action-config.json) and find the latest `golangci-lint` patch version for needed version
-     (users of this action can specify only minor version of `golangci-lint`).
-     After that install [golangci-lint](https://github.com/golangci/golangci-lint) using [@actions/tool-cache](https://github.com/actions/toolkit/tree/HEAD/packages/tool-cache)
-2. Run `golangci-lint` with specified by user `args`
-3. Save cache for later builds
+1. Set up the environment in parallel:
+   * Restore the [cache](https://github.com/actions/cache) from previous analyses.
+   * Fetch the [action config](https://github.com/golangci/golangci-lint/blob/HEAD/assets/github-action-config.json) and find the latest `golangci-lint` patch version for the required version
+     (users of this action can specify only the minor version of `golangci-lint`).
+     After that, install [golangci-lint](https://github.com/golangci/golangci-lint) using [@actions/tool-cache](https://github.com/actions/toolkit/tree/HEAD/packages/tool-cache).
+2. Run `golangci-lint` with the arguments `args` specified by the user.
+3. Save the cache for later builds.
 
 ### Caching internals
 
 1. We save and restore the following directory: `~/.cache/golangci-lint`.
 2. The primary caching key looks like `golangci-lint.cache-{runner_os}-{working_directory}-{interval_number}-{go.mod_hash}`.
-   Interval number ensures that we periodically invalidate our cache (every 7 days).
-   `go.mod` hash ensures that we invalidate the cache early - as soon as dependencies have changed.
+   The interval number ensures that we periodically invalidate our cache (every 7 days).
+   The `go.mod` hash ensures that we invalidate the cache early — as soon as dependencies have changed.
 3. We use [restore keys](https://help.github.com/en/actions/configuring-and-managing-workflows/caching-dependencies-to-speed-up-workflows#matching-a-cache-key):
    `golangci-lint.cache-{runner_os}-{working_directory}-{interval_number}-`.
-   GitHub matches keys by prefix if we have no exact match for the primary cache.
+   GitHub matches keys by prefix if there is no exact match for the primary cache.
 
 This scheme is basic and needs improvements. Pull requests and ideas are welcome.

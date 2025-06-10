@@ -523,7 +523,7 @@ permissions:
   pull-requests: read
 ```
 
-For annotations to work, use the default format output (`text`) and either use `actions/setup-go` in the job or enable the internal [problem matchers](#problem-matchers).
+For annotations to work, use the default format output (`text`) and either use [`actions/setup-go`](https://github.com/actions/setup-go) in the job or enable the internal [problem matchers](#problem-matchers).
 
 ## Performance
 
@@ -532,12 +532,7 @@ The action was implemented with performance in mind:
 1. We cache data from golangci-lint analysis between builds by using [@actions/cache](https://github.com/actions/toolkit/tree/HEAD/packages/cache).
 2. We don't use Docker because image pulling is slow.
 3. We do as much as we can in parallel, e.g., we download the cache and the golangci-lint binary in parallel.
-
-For example, in the [golangci-lint](https://github.com/golangci/golangci-lint) repository, running this action without the cache takes 50s, but with the cache it takes 14s:
-  * in parallel:
-    * 4s to restore 50 MB of cache
-    * 1s to find and install `golangci-lint`
-  * 1s to run `golangci-lint` (it takes 35s without cache)
+4. We rely on [`actions/setup-go`](https://github.com/actions/setup-go) for Go module cache.
 
 ## Internals
 

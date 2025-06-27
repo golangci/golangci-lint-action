@@ -92707,21 +92707,20 @@ function getAssetURL(versionInfo) {
             ext = "zip";
             break;
     }
-    let arch = os_1.default.arch();
-    switch (arch) {
+    let platformArch = "amd64";
+    switch (os_1.default.arch()) {
         case "arm64":
-            arch = "arm64";
+            platformArch = "arm64";
             break;
         case "x64":
-            arch = "amd64";
+            platformArch = "amd64";
             break;
-        case "x32":
         case "ia32":
-            arch = "386";
+            platformArch = "386";
             break;
     }
     const noPrefix = versionInfo.TargetVersion.slice(1);
-    return `https://github.com/golangci/golangci-lint/releases/download/${versionInfo.TargetVersion}/golangci-lint-${noPrefix}-${platform}-${arch}.${ext}`;
+    return `https://github.com/golangci/golangci-lint/releases/download/${versionInfo.TargetVersion}/golangci-lint-${noPrefix}-${platform}-${platformArch}.${ext}`;
 }
 
 

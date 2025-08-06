@@ -35,7 +35,7 @@
     "@types/semver": "^7.7.0",
     "@types/tmp": "^0.2.6",
     "@types/which": "^3.0.4",
-    "tmp": "^0.2.3",
+    "tmp": "^0.2.4",
     "which": "^5.0.0"
   },
   "devDependencies": {

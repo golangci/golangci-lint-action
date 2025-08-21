@@ -68,9 +68,10 @@ const isLessVersion = (a: Version, b: Version): boolean => {
 const getRequestedVersion = (): Version => {
   let requestedVersion = core.getInput(`version`)
   const workingDirectory = core.getInput(`working-directory`)
+  const goModPath = core.getInput(`go-mod-path`)
 
-  let goMod = "go.mod"
-  if (workingDirectory) {
+  let goMod = goModPath || "go.mod"
+  if (!path.isAbsolute(goMod) && workingDirectory) {
     goMod = path.join(workingDirectory, goMod)
   }
 
@@ -129,11 +130,32 @@ const fetchVersionMapping = async (): Promise<VersionMapping> => {
   }
 }
 
+export function isVersionFromGoMod(): boolean {
+  const requestedVersion = core.getInput(`version`)
+  const goModPath = core.getInput(`go-mod-path`)
+  const workingDirectory = core.getInput(`working-directory`)
+
+  let goMod = goModPath || "go.mod"
+  if (!path.isAbsolute(goMod) && workingDirectory) {
+    goMod = path.join(workingDirectory, goMod)
+  }
+
+  return requestedVersion == "" && fs.existsSync(goMod)
+}
+
 export async function getVersion(mode: InstallMode): Promise<VersionInfo> {
   core.info(`Finding needed golangci-lint version...`)
 
   if (mode == InstallMode.GoInstall) {
-    const v: string = core.getInput(`version`)
+    let v: string = core.getInput(`version`)
+
+    // If no explicit version is provided, check go.mod
+    if (!v && isVersionFromGoMod()) {
+      const reqVersion = getRequestedVersion()
+      if (reqVersion) {
+        v = stringifyVersion(reqVersion)
+      }
+    }
 
     return { TargetVersion: v ? v : "latest" }
   }

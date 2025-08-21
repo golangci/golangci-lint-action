@@ -11,6 +11,13 @@ inputs:
       - `goinstall`: the value can be v2.3.4, `latest`, or the hash of a commit.
       - `none`: the value is ignored.
     required: false
+  go-mod-path:
+    description: |
+      Path to a go.mod file to read the golangci-lint version from.
+      If specified and version is not set, the action will parse the go.mod file
+      to determine the golangci-lint version. Default is "go.mod" in the working directory.
+      Note: When a version is read from go.mod, it automatically uses `goinstall` install-mode.
+    required: false
   install-mode:
     description: "The mode to install golangci-lint. It can be 'binary', 'goinstall', or 'none'."
     default: "binary"

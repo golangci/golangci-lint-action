@@ -6,7 +6,7 @@ import path from "path"
 import { promisify } from "util"
 import which from "which"
 
-import { getVersion, VersionInfo } from "./version"
+import { getVersion, isVersionFromGoMod, VersionInfo } from "./version"
 
 const execShellCommand = promisify(exec)
 
@@ -36,7 +36,7 @@ const printOutput = (res: ExecRes): void => {
  * @returns             path to installed binary of golangci-lint.
  */
 export async function install(): Promise<string> {
-  const mode = core.getInput("install-mode").toLowerCase()
+  let mode = core.getInput("install-mode").toLowerCase()
 
   if (mode === InstallMode.None) {
     const binPath = await which("golangci-lint", { nothrow: true })
@@ -44,6 +44,12 @@ export async function install(): Promise<string> {
       throw new Error("golangci-lint binary not found in the PATH")
     }
     return binPath
+  }
+
+  // If version is being read from go.mod, force goinstall mode
+  if (isVersionFromGoMod()) {
+    core.info(`Version detected from go.mod file, using goinstall mode`)
+    mode = InstallMode.GoInstall
   }
 
   const versionInfo = await getVersion(<InstallMode>mode)

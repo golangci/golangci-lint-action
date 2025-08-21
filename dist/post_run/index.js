@@ -92671,13 +92671,18 @@ const printOutput = (res) => {
  * @returns             path to installed binary of golangci-lint.
  */
 async function install() {
-    const mode = core.getInput("install-mode").toLowerCase();
+    let mode = core.getInput("install-mode").toLowerCase();
     if (mode === InstallMode.None) {
         const binPath = await (0, which_1.default)("golangci-lint", { nothrow: true });
         if (!binPath) {
             throw new Error("golangci-lint binary not found in the PATH");
         }
         return binPath;
+    }
+    // If version is being read from go.mod, force goinstall mode
+    if ((0, version_1.isVersionFromGoMod)()) {
+        core.info(`Version detected from go.mod file, using goinstall mode`);
+        mode = InstallMode.GoInstall;
     }
     const versionInfo = await (0, version_1.getVersion)(mode);
     return await installBinary(versionInfo, mode);
@@ -93358,6 +93363,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.stringifyVersion = void 0;
+exports.isVersionFromGoMod = isVersionFromGoMod;
 exports.getVersion = getVersion;
 const core = __importStar(__nccwpck_require__(7484));
 const httpm = __importStar(__nccwpck_require__(4844));
@@ -93412,8 +93418,9 @@ const isLessVersion = (a, b) => {
 const getRequestedVersion = () => {
     let requestedVersion = core.getInput(`version`);
     const workingDirectory = core.getInput(`working-directory`);
-    let goMod = "go.mod";
-    if (workingDirectory) {
+    const goModPath = core.getInput(`go-mod-path`);
+    let goMod = goModPath || "go.mod";
+    if (!path_1.default.isAbsolute(goMod) && workingDirectory) {
         goMod = path_1.default.join(workingDirectory, goMod);
     }
     if (requestedVersion == "" && fs.existsSync(goMod)) {
@@ -93451,10 +93458,27 @@ const fetchVersionMapping = async () => {
         throw new Error(`failed to get action config: ${exc.message}`);
     }
 };
+function isVersionFromGoMod() {
+    const requestedVersion = core.getInput(`version`);
+    const goModPath = core.getInput(`go-mod-path`);
+    const workingDirectory = core.getInput(`working-directory`);
+    let goMod = goModPath || "go.mod";
+    if (!path_1.default.isAbsolute(goMod) && workingDirectory) {
+        goMod = path_1.default.join(workingDirectory, goMod);
+    }
+    return requestedVersion == "" && fs.existsSync(goMod);
+}
 async function getVersion(mode) {
     core.info(`Finding needed golangci-lint version...`);
     if (mode == install_1.InstallMode.GoInstall) {
-        const v = core.getInput(`version`);
+        let v = core.getInput(`version`);
+        // If no explicit version is provided, check go.mod
+        if (!v && isVersionFromGoMod()) {
+            const reqVersion = getRequestedVersion();
+            if (reqVersion) {
+                v = (0, exports.stringifyVersion)(reqVersion);
+            }
+        }
         return { TargetVersion: v ? v : "latest" };
     }
     const reqVersion = getRequestedVersion();

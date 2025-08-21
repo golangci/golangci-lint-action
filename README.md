@@ -106,6 +106,68 @@ You will also likely need to add the following `.gitattributes` file to ensure t
 </details>
 
 <details>
+<summary>Using go.mod Version Example</summary>
+
+If you have golangci-lint as a dependency in your go.mod file, you can use that version automatically:
+
+```yaml
+name: golangci-lint
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  golangci:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        # No version specified - will read from go.mod automatically
+```
+
+Or if you have a separate tools module:
+
+```yaml
+name: golangci-lint
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  golangci:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          go-mod-path: tools/go.mod
+```
+
+</details>
+
+<details>
 <summary>Go Workspace Example</summary>
 
 ```yaml
@@ -280,6 +342,29 @@ with:
 
 </details>
 
+### `go-mod-path`
+
+(optional)
+
+Path to a go.mod file to read the golangci-lint version from.
+If specified and `version` is not set, the action will parse the go.mod file to determine the golangci-lint version.
+
+Default is "go.mod" in the working directory.
+
+**Note:** When a version is read from go.mod, it automatically uses `goinstall` install-mode to ensure compatibility with your module's dependencies.
+
+<details>
+<summary>Example</summary>
+
+```yml
+uses: golangci/golangci-lint-action@v8
+with:
+  go-mod-path: tools/go.mod
+  # ...
+```
+
+</details>
+
 ### `install-mode`
 
 (optional)
@@ -287,6 +372,8 @@ with:
 The mode to install golangci-lint: it can be `binary`, `goinstall`, or `none`.
 
 The default value is `binary`.
+
+**Note:** When using `go-mod-path` to read the version from a go.mod file, the install-mode is automatically set to `goinstall`.
 
 <details>
 <summary>Example</summary>

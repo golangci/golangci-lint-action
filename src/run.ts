@@ -1,6 +1,6 @@
 import * as core from "@actions/core"
 import * as github from "@actions/github"
-import { exec, ExecOptions } from "child_process"
+import { exec, ExecOptionsWithStringEncoding } from "child_process"
 import * as fs from "fs"
 import * as path from "path"
 import { promisify } from "util"
@@ -116,7 +116,7 @@ async function runLint(binPath: string, patchPath: string): Promise<void> {
     }
   }
 
-  const cmdArgs: ExecOptions = {}
+  const cmdArgs: ExecOptionsWithStringEncoding = {}
 
   const workingDirectory = core.getInput(`working-directory`)
   if (workingDirectory) {
@@ -156,7 +156,7 @@ async function runLint(binPath: string, patchPath: string): Promise<void> {
   core.info(`Ran golangci-lint in ${Date.now() - startedAt}ms`)
 }
 
-async function runVerify(binPath: string, userArgsMap: Map<string, string>, cmdArgs: ExecOptions): Promise<void> {
+async function runVerify(binPath: string, userArgsMap: Map<string, string>, cmdArgs: ExecOptionsWithStringEncoding): Promise<void> {
   const verify = core.getBooleanInput(`verify`, { required: true })
   if (!verify) {
     return
@@ -178,7 +178,7 @@ async function runVerify(binPath: string, userArgsMap: Map<string, string>, cmdA
   printOutput(res)
 }
 
-async function getConfigPath(binPath: string, userArgsMap: Map<string, string>, cmdArgs: ExecOptions): Promise<string> {
+async function getConfigPath(binPath: string, userArgsMap: Map<string, string>, cmdArgs: ExecOptionsWithStringEncoding): Promise<string> {
   let cmdConfigPath = `${binPath} config path`
   if (userArgsMap.get("config")) {
     cmdConfigPath += ` --config=${userArgsMap.get("config")}`

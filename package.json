@@ -23,6 +23,9 @@
   },
   "author": "golangci",
   "license": "MIT",
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "dependencies": {
     "@actions/cache": "^4.0.5",
     "@actions/core": "^1.11.1",

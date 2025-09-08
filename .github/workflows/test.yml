@@ -11,6 +11,9 @@ jobs:
   build: # make sure build/ci work properly
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
       - if: ${{ !(github.event_name == 'pull_request' && (github.event.pull_request.user.id == 49699333 || contains(github.event.pull_request.labels.*.name, 'dependencies'))) }}
         uses: actions/checkout@v5
       - if: github.event_name == 'pull_request' && (github.event.pull_request.user.id == 49699333 || contains(github.event.pull_request.labels.*.name, 'dependencies'))
@@ -62,6 +65,9 @@ jobs:
       pull-requests: read
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
       - uses: actions/setup-go@v6
         with:
           go-version: oldstable
@@ -91,6 +97,9 @@ jobs:
       pull-requests: read
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
       - uses: actions/setup-go@v6
         with:
           go-version: oldstable
@@ -118,6 +127,9 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
       - uses: actions/setup-go@v6
         with:
           go-version: oldstable

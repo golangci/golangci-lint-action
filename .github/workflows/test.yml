@@ -14,36 +14,13 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 24.x
-      - if: ${{ !(github.event_name == 'pull_request' && (github.event.pull_request.user.id == 49699333 || contains(github.event.pull_request.labels.*.name, 'dependencies'))) }}
-        uses: actions/checkout@v5
-      - if: github.event_name == 'pull_request' && (github.event.pull_request.user.id == 49699333 || contains(github.event.pull_request.labels.*.name, 'dependencies'))
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.ref }}
-
+      - uses: actions/checkout@v5
       - run: |
           npm install
           npm run all
 
-      # Update dist files if there is label dependencies or pull request' author is dependabot[bot] (id = 49699333)
-      - name: Update dist files
-        if: github.event_name == 'pull_request' && (github.event.pull_request.user.id == 49699333 || contains(github.event.pull_request.labels.*.name, 'dependencies'))
-        run: |
-          if [[ -z $(git status -s) ]]
-          then
-            echo "No change is required"
-          else
-            echo "Updating dist directory"
-            git config --local user.name "dependabot[bot]"
-            git config --local user.email "49699333+dependabot[bot]@users.noreply.github.com"
-            git add --update
-            git commit --message="Update dist files"
-            git push
-          fi
-
       # Fail the build if there is dirty change
-      - run: git diff --exit-code
+      - run: git diff --exit-code -- dist
 
   test: # make sure the action works on a clean machine without building
     needs: [ build ]
@@ -57,8 +34,8 @@ jobs:
         version:
           - ""
           - "latest"
-          - "v2.1"
-          - "v2.1.0"
+          - "v2.5"
+          - "v2.5.0"
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -89,8 +66,8 @@ jobs:
         version:
           - ""
           - "latest"
-          - "v2.1.0"
-          - "f6c2e6c999dfae444d1fe7f1b0d49becdae44547"
+          - "v2.5.0"
+          - "655e8ede5178280b2a640e185bc4a343aed0f54e"
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read

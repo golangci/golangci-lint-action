@@ -153,7 +153,7 @@ async function runLint(binPath: string, patchPath: string): Promise<void> {
     }
   }
 
-  core.info(`Ran golangci-lint in ${Date.now() - startedAt}ms`)
+  core.info(`Run golangci-lint in ${Date.now() - startedAt}ms`)
 }
 
 async function runVerify(binPath: string, userArgsMap: Map<string, string>, cmdArgs: ExecOptionsWithStringEncoding): Promise<void> {

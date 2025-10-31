@@ -93588,6 +93588,7 @@ const crypto = __importStar(__nccwpck_require__(6982));
 const fs = __importStar(__nccwpck_require__(9896));
 const path_1 = __importDefault(__nccwpck_require__(6928));
 const constants_1 = __nccwpck_require__(7242);
+const custom_1 = __nccwpck_require__(8000);
 const utils = __importStar(__nccwpck_require__(8270));
 function checksumFile(hashName, path) {
     return new Promise((resolve, reject) => {
@@ -93625,6 +93626,16 @@ async function buildCacheKeys() {
     const invalidationIntervalDays = parseInt(core.getInput(`cache-invalidation-interval`, { required: true }).trim());
     cacheKey += `${getIntervalKey(invalidationIntervalDays)}-`;
     keys.push(cacheKey);
+    // Check for custom golangci-lint plugin configuration
+    const workDir = workingDirectory ? path_1.default.resolve(workingDirectory) : process.cwd();
+    const customConfigPath = (0, custom_1.findCustomConfigFile)(workDir);
+    if (customConfigPath) {
+        core.info(`Custom plugin configuration detected for cache: ${customConfigPath}`);
+        // Add hash of custom config file to cache key
+        const customConfigHash = (0, custom_1.hashCustomConfigFile)(customConfigPath);
+        cacheKey += `custom-${customConfigHash}-`;
+        keys.push(cacheKey);
+    }
     // create path to go.mod prepending the workingDirectory if it exists
     const goModPath = path_1.default.join(workingDirectory, `go.mod`);
     core.info(`Checking for go.mod: ${goModPath}`);
@@ -93656,8 +93667,19 @@ async function restoreCache() {
         return;
     }
     core.saveState(constants_1.State.CachePrimaryKey, primaryKey);
+    // Prepare cache paths
+    const cachePaths = [getLintCacheDir()];
+    // If custom plugin config exists, also cache the custom binary
+    const workingDirectory = core.getInput(`working-directory`);
+    const workDir = workingDirectory ? path_1.default.resolve(workingDirectory) : process.cwd();
+    const customConfigPath = (0, custom_1.findCustomConfigFile)(workDir);
+    if (customConfigPath) {
+        core.info(`Will cache custom golangci-lint binary from: ${workDir}`);
+        // Cache the working directory to include the custom binary
+        cachePaths.push(workDir);
+    }
     try {
-        const cacheKey = await cache.restoreCache([getLintCacheDir()], primaryKey, restoreKeys);
+        const cacheKey = await cache.restoreCache(cachePaths, primaryKey, restoreKeys);
         if (!cacheKey) {
             core.info(`Cache not found for input keys: ${[primaryKey, ...restoreKeys].join(", ")}`);
             return;
@@ -93687,6 +93709,14 @@ async function saveCache() {
     }
     const startedAt = Date.now();
     const cacheDirs = [getLintCacheDir()];
+    // If custom plugin config exists, also cache the custom binary
+    const workingDirectory = core.getInput(`working-directory`);
+    const workDir = workingDirectory ? path_1.default.resolve(workingDirectory) : process.cwd();
+    const customConfigPath = (0, custom_1.findCustomConfigFile)(workDir);
+    if (customConfigPath) {
+        core.info(`Will save custom golangci-lint binary from: ${workDir}`);
+        cacheDirs.push(workDir);
+    }
     const primaryKey = core.getState(constants_1.State.CachePrimaryKey);
     if (!primaryKey) {
         utils.logWarning(`Error retrieving key from state.`);
@@ -93742,6 +93772,181 @@ var Events;
     Events["PullRequest"] = "pull_request";
 })(Events || (exports.Events = Events = {}));
 exports.RefKey = "GITHUB_REF";
+
+
+/***/ }),
+
+/***/ 8000:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.findCustomConfigFile = findCustomConfigFile;
+exports.getCustomBinaryInfo = getCustomBinaryInfo;
+exports.buildCustomBinary = buildCustomBinary;
+exports.hashCustomConfigFile = hashCustomConfigFile;
+const core = __importStar(__nccwpck_require__(7484));
+const crypto = __importStar(__nccwpck_require__(6982));
+const child_process_1 = __nccwpck_require__(5317);
+const fs = __importStar(__nccwpck_require__(9896));
+const path = __importStar(__nccwpck_require__(6928));
+const util_1 = __nccwpck_require__(9023);
+const execShellCommand = (0, util_1.promisify)(child_process_1.exec);
+const printOutput = (res) => {
+    if (res.stdout) {
+        core.info(res.stdout);
+    }
+    if (res.stderr) {
+        core.info(res.stderr);
+    }
+};
+/**
+ * Check if a custom golangci-lint config file exists.
+ * The file can be .custom-gcl.yml, .custom-gcl.yaml, or .custom-gcl.json.
+ *
+ * @param workingDirectory  the working directory to search in
+ * @returns                 the path to the custom config file, or null if not found
+ */
+function findCustomConfigFile(workingDirectory) {
+    const possibleFiles = [".custom-gcl.yml", ".custom-gcl.yaml", ".custom-gcl.json"];
+    for (const file of possibleFiles) {
+        const filePath = path.join(workingDirectory, file);
+        if (fs.existsSync(filePath)) {
+            core.info(`Found custom golangci-lint config: ${filePath}`);
+            return filePath;
+        }
+    }
+    return null;
+}
+/**
+ * Parse the custom config file to extract the binary name and destination.
+ *
+ * @param configPath  path to the custom config file
+ * @returns           object with name and destination (relative path)
+ */
+function getCustomBinaryInfo(configPath) {
+    try {
+        const content = fs.readFileSync(configPath, "utf-8");
+        let name = "custom-gcl";
+        let destination = ".";
+        // Try to parse as YAML/JSON
+        // Look for "name:" field in the config
+        const nameMatch = content.match(/^name:\s*["']?([^"'\s]+)["']?/m);
+        if (nameMatch && nameMatch[1]) {
+            name = nameMatch[1];
+        }
+        // Look for "destination:" field in the config
+        const destMatch = content.match(/^destination:\s*["']?([^"'\s]+)["']?/m);
+        if (destMatch && destMatch[1]) {
+            destination = destMatch[1];
+        }
+        // For JSON format
+        if (configPath.endsWith(".json")) {
+            try {
+                const json = JSON.parse(content);
+                if (json.name) {
+                    name = json.name;
+                }
+                if (json.destination) {
+                    destination = json.destination;
+                }
+            }
+            catch {
+                // Fallback to default
+            }
+        }
+        return { name, destination };
+    }
+    catch (err) {
+        core.warning(`Failed to parse custom config file: ${err}`);
+    }
+    // Default values
+    return { name: "custom-gcl", destination: "." };
+}
+/**
+ * Build a custom golangci-lint binary using `golangci-lint custom`.
+ *
+ * @param binPath           path to the golangci-lint binary
+ * @param workingDirectory  the working directory
+ * @param customConfigPath  path to the custom config file
+ * @returns                 path to the built custom binary
+ */
+async function buildCustomBinary(binPath, workingDirectory, customConfigPath) {
+    core.info(`Building custom golangci-lint binary from ${customConfigPath}...`);
+    const startedAt = Date.now();
+    const cmdArgs = {
+        cwd: workingDirectory,
+    };
+    const binaryInfo = getCustomBinaryInfo(customConfigPath);
+    const destinationDir = path.join(workingDirectory, binaryInfo.destination);
+    const customBinaryPath = path.join(destinationDir, binaryInfo.name);
+    // Ensure destination directory exists
+    if (!fs.existsSync(destinationDir)) {
+        core.info(`Creating destination directory: ${destinationDir}`);
+        fs.mkdirSync(destinationDir, { recursive: true });
+    }
+    // Check if the binary already exists (from cache)
+    if (fs.existsSync(customBinaryPath)) {
+        core.info(`Custom binary already exists at ${customBinaryPath}`);
+        return customBinaryPath;
+    }
+    const cmd = `${binPath} custom`;
+    core.info(`Running [${cmd}] in [${workingDirectory}] ...`);
+    try {
+        const res = await execShellCommand(cmd, cmdArgs);
+        printOutput(res);
+        core.info(`Built custom golangci-lint binary in ${Date.now() - startedAt}ms`);
+        return customBinaryPath;
+    }
+    catch (exc) {
+        core.error(`Failed to build custom golangci-lint binary: ${exc}`);
+        throw new Error(`Failed to build custom golangci-lint binary: ${exc.message}`);
+    }
+}
+/**
+ * Calculate the hash of the custom config file.
+ *
+ * @param configPath  path to the custom config file
+ * @returns           SHA256 hash of the file content
+ */
+function hashCustomConfigFile(configPath) {
+    const content = fs.readFileSync(configPath, "utf-8");
+    return crypto.createHash("sha256").update(content).digest("hex");
+}
 
 
 /***/ }),
@@ -94135,6 +94340,7 @@ const fs = __importStar(__nccwpck_require__(9896));
 const path = __importStar(__nccwpck_require__(6928));
 const util_1 = __nccwpck_require__(9023);
 const cache_1 = __nccwpck_require__(7377);
+const custom_1 = __nccwpck_require__(8000);
 const install_1 = __nccwpck_require__(232);
 const patch_1 = __nccwpck_require__(7161);
 const execShellCommand = (0, util_1.promisify)(child_process_1.exec);
@@ -94156,9 +94362,20 @@ const printOutput = (res) => {
     }
 };
 async function runLint(binPath, patchPath) {
+    // Check for custom golangci-lint plugin configuration
+    const workingDirectory = core.getInput(`working-directory`);
+    const workDir = workingDirectory ? path.resolve(workingDirectory) : process.cwd();
+    const customConfigPath = (0, custom_1.findCustomConfigFile)(workDir);
+    let effectiveBinPath = binPath;
+    // If a custom config file exists, build the custom binary
+    if (customConfigPath) {
+        core.info(`Custom plugin configuration detected: ${customConfigPath}`);
+        effectiveBinPath = await (0, custom_1.buildCustomBinary)(binPath, workDir, customConfigPath);
+        core.info(`Using custom golangci-lint binary: ${effectiveBinPath}`);
+    }
     const debug = core.getInput(`debug`);
     if (debug.split(`,`).includes(`cache`)) {
-        const res = await execShellCommand(`${binPath} cache status`);
+        const res = await execShellCommand(`${effectiveBinPath} cache status`);
         printOutput(res);
     }
     const userArgs = core.getInput(`args`);
@@ -94214,7 +94431,6 @@ async function runLint(binPath, patchPath) {
         }
     }
     const cmdArgs = {};
-    const workingDirectory = core.getInput(`working-directory`);
     if (workingDirectory) {
         if (!fs.existsSync(workingDirectory) || !fs.lstatSync(workingDirectory).isDirectory()) {
             throw new Error(`working-directory (${workingDirectory}) was not a path`);
@@ -94224,8 +94440,8 @@ async function runLint(binPath, patchPath) {
         }
         cmdArgs.cwd = path.resolve(workingDirectory);
     }
-    await runVerify(binPath, userArgsMap, cmdArgs);
-    const cmd = `${binPath} run ${addedArgs.join(` `)} ${userArgs}`.trimEnd();
+    await runVerify(effectiveBinPath, userArgsMap, cmdArgs);
+    const cmd = `${effectiveBinPath} run ${addedArgs.join(` `)} ${userArgs}`.trimEnd();
     core.info(`Running [${cmd}] in [${cmdArgs.cwd || process.cwd()}] ...`);
     const startedAt = Date.now();
     try {

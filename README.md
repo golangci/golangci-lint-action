@@ -243,6 +243,75 @@ You will also likely need to add the following `.gitattributes` file to ensure t
 
 </details>
 
+## Custom Plugins Support
+
+This action supports [golangci-lint's module plugin system](https://golangci-lint.run/plugins/module-plugins/). 
+
+To use custom plugins:
+
+1. Create a `.custom-gcl.yml` (or `.custom-gcl.yaml` or `.custom-gcl.json`) file in your repository root or working directory
+2. Define your plugins in this file following the [golangci-lint plugin documentation](https://golangci-lint.run/plugins/module-plugins/)
+3. Configure your plugins in your `.golangci.yml` configuration file
+4. The action will automatically:
+   - Detect the custom plugin configuration file
+   - Build a custom golangci-lint binary with `golangci-lint custom`
+   - Use the custom binary for linting
+   - Cache the custom binary for faster subsequent runs
+
+<details>
+<summary>Example with nilaway plugin</summary>
+
+Create a `.custom-gcl.yml` file:
+
+```yaml
+version: v2.5.0
+name: custom-gcl
+plugins:
+  - module: 'github.com/uber-go/nilaway'
+    import: 'github.com/uber-go/nilaway/golangci-lint-plugin'
+    version: v0.1.0
+```
+
+Then configure it in your `.golangci.yml`:
+
+```yaml
+version: "2"
+
+linters-settings:
+  custom:
+    nilaway:
+      path: github.com/uber-go/nilaway/golangci-lint-plugin.New
+      description: Nilaway is a static analysis tool that detects nil panics
+      original-url: github.com/uber-go/nilaway
+
+linters:
+  enable:
+    - nilaway
+```
+
+Your workflow file remains unchanged:
+
+```yaml
+- name: golangci-lint
+  uses: golangci/golangci-lint-action@v8
+  with:
+    version: v2.5
+```
+
+</details>
+
+### Caching with Custom Plugins
+
+The action automatically handles caching for custom plugins:
+- The cache key includes the hash of your `.custom-gcl.yml` file
+- The custom binary is cached alongside the golangci-lint cache
+- The cache is invalidated when:
+  - The `.custom-gcl.yml` file changes
+  - The golangci-lint version changes
+  - The cache invalidation interval expires (default: 7 days)
+
+**Important**: Always use specific versions for your plugins (e.g., `v0.1.0`) instead of `latest` to ensure proper cache invalidation and reproducible builds.
+
 ## Compatibility
 
 * `v8.0.0` works with `golangci-lint` version >= `v2.1.0`

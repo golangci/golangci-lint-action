@@ -5,6 +5,7 @@ import * as fs from "fs"
 import path from "path"
 
 import { Events, State } from "./constants"
+import { findCustomConfigFile, hashCustomConfigFile } from "./custom"
 import * as utils from "./utils/actionUtils"
 
 function checksumFile(hashName: string, path: string): Promise<string> {
@@ -56,6 +57,18 @@ async function buildCacheKeys(): Promise<string[]> {
 
   keys.push(cacheKey)
 
+  // Check for custom golangci-lint plugin configuration
+  const workDir = workingDirectory ? path.resolve(workingDirectory) : process.cwd()
+  const customConfigPath = findCustomConfigFile(workDir)
+
+  if (customConfigPath) {
+    core.info(`Custom plugin configuration detected for cache: ${customConfigPath}`)
+    // Add hash of custom config file to cache key
+    const customConfigHash = hashCustomConfigFile(customConfigPath)
+    cacheKey += `custom-${customConfigHash}-`
+    keys.push(cacheKey)
+  }
+
   // create path to go.mod prepending the workingDirectory if it exists
   const goModPath = path.join(workingDirectory, `go.mod`)
 
@@ -97,8 +110,23 @@ export async function restoreCache(): Promise<void> {
     return
   }
   core.saveState(State.CachePrimaryKey, primaryKey)
+
+  // Prepare cache paths
+  const cachePaths = [getLintCacheDir()]
+
+  // If custom plugin config exists, also cache the custom binary
+  const workingDirectory = core.getInput(`working-directory`)
+  const workDir = workingDirectory ? path.resolve(workingDirectory) : process.cwd()
+  const customConfigPath = findCustomConfigFile(workDir)
+
+  if (customConfigPath) {
+    core.info(`Will cache custom golangci-lint binary from: ${workDir}`)
+    // Cache the working directory to include the custom binary
+    cachePaths.push(workDir)
+  }
+
   try {
-    const cacheKey = await cache.restoreCache([getLintCacheDir()], primaryKey, restoreKeys)
+    const cacheKey = await cache.restoreCache(cachePaths, primaryKey, restoreKeys)
     if (!cacheKey) {
       core.info(`Cache not found for input keys: ${[primaryKey, ...restoreKeys].join(", ")}`)
       return
@@ -130,6 +158,17 @@ export async function saveCache(): Promise<void> {
   const startedAt = Date.now()
 
   const cacheDirs = [getLintCacheDir()]
+
+  // If custom plugin config exists, also cache the custom binary
+  const workingDirectory = core.getInput(`working-directory`)
+  const workDir = workingDirectory ? path.resolve(workingDirectory) : process.cwd()
+  const customConfigPath = findCustomConfigFile(workDir)
+
+  if (customConfigPath) {
+    core.info(`Will save custom golangci-lint binary from: ${workDir}`)
+    cacheDirs.push(workDir)
+  }
+
   const primaryKey = core.getState(State.CachePrimaryKey)
   if (!primaryKey) {
     utils.logWarning(`Error retrieving key from state.`)

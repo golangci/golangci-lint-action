@@ -6,6 +6,7 @@ import * as path from "path"
 import { promisify } from "util"
 
 import { restoreCache, saveCache } from "./cache"
+import { buildCustomBinary, findCustomConfigFile } from "./custom"
 import { install } from "./install"
 import { fetchPatch, isOnlyNewIssues } from "./patch"
 
@@ -45,9 +46,23 @@ const printOutput = (res: ExecRes): void => {
 }
 
 async function runLint(binPath: string, patchPath: string): Promise<void> {
+  // Check for custom golangci-lint plugin configuration
+  const workingDirectory = core.getInput(`working-directory`)
+  const workDir = workingDirectory ? path.resolve(workingDirectory) : process.cwd()
+  const customConfigPath = findCustomConfigFile(workDir)
+
+  let effectiveBinPath = binPath
+
+  // If a custom config file exists, build the custom binary
+  if (customConfigPath) {
+    core.info(`Custom plugin configuration detected: ${customConfigPath}`)
+    effectiveBinPath = await buildCustomBinary(binPath, workDir, customConfigPath)
+    core.info(`Using custom golangci-lint binary: ${effectiveBinPath}`)
+  }
+
   const debug = core.getInput(`debug`)
   if (debug.split(`,`).includes(`cache`)) {
-    const res = await execShellCommand(`${binPath} cache status`)
+    const res = await execShellCommand(`${effectiveBinPath} cache status`)
     printOutput(res)
   }
 
@@ -118,7 +133,6 @@ async function runLint(binPath: string, patchPath: string): Promise<void> {
 
   const cmdArgs: ExecOptionsWithStringEncoding = {}
 
-  const workingDirectory = core.getInput(`working-directory`)
   if (workingDirectory) {
     if (!fs.existsSync(workingDirectory) || !fs.lstatSync(workingDirectory).isDirectory()) {
       throw new Error(`working-directory (${workingDirectory}) was not a path`)
@@ -131,9 +145,9 @@ async function runLint(binPath: string, patchPath: string): Promise<void> {
     cmdArgs.cwd = path.resolve(workingDirectory)
   }
 
-  await runVerify(binPath, userArgsMap, cmdArgs)
+  await runVerify(effectiveBinPath, userArgsMap, cmdArgs)
 
-  const cmd = `${binPath} run ${addedArgs.join(` `)} ${userArgs}`.trimEnd()
+  const cmd = `${effectiveBinPath} run ${addedArgs.join(` `)} ${userArgs}`.trimEnd()
 
   core.info(`Running [${cmd}] in [${cmdArgs.cwd || process.cwd()}] ...`)
 

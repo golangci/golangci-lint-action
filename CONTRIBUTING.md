@@ -32,6 +32,15 @@
 4. Build: `npm run build`
 5. Run `npm run local` after any change to test it
 
+### Testing custom plugins
+
+To test the custom plugin support:
+
+1. Create a `.custom-gcl.yml` file in one of the sample directories (e.g., `sample-go-mod/.custom-gcl.yml`)
+2. Add a plugin configuration following the [golangci-lint plugin documentation](https://golangci-lint.run/plugins/module-plugins/)
+3. Update the `.golangci.yml` file to enable the custom linter
+4. Run the action and verify that it builds and uses the custom binary
+
 ### Releases
 
 ```bash

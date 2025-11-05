@@ -97343,11 +97343,14 @@ const cache_1 = __nccwpck_require__(7377);
 const install_1 = __nccwpck_require__(232);
 const patch_1 = __nccwpck_require__(7161);
 const execShellCommand = (0, util_1.promisify)(child_process_1.exec);
-async function prepareEnv() {
+async function prepareEnv(installOnly) {
     const startedAt = Date.now();
     // Prepare cache, lint and go in parallel.
     await (0, cache_1.restoreCache)();
     const binPath = await (0, install_1.install)();
+    if (installOnly) {
+        return { binPath, patchPath: `` };
+    }
     const patchPath = await (0, patch_1.fetchPatch)();
     core.info(`Prepared env in ${Date.now() - startedAt}ms`);
     return { binPath, patchPath };
@@ -97483,8 +97486,14 @@ async function getConfigPath(binPath, userArgsMap, cmdArgs) {
 }
 async function run() {
     try {
-        const { binPath, patchPath } = await core.group(`prepare environment`, prepareEnv);
+        const installOnly = core.getBooleanInput(`install-only`, { required: true });
+        const { binPath, patchPath } = await core.group(`prepare environment`, () => {
+            return prepareEnv(installOnly);
+        });
         core.addPath(path.dirname(binPath));
+        if (installOnly) {
+            return;
+        }
         await core.group(`run golangci-lint`, () => runLint(binPath, patchPath));
     }
     catch (error) {

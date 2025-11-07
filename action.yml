@@ -15,6 +15,10 @@ inputs:
     description: "The mode to install golangci-lint. It can be 'binary', 'goinstall', or 'none'."
     default: "binary"
     required: false
+  install-only:
+    description: "Only install golangci-lint. It does not run golangci-lint."
+    default: 'false'
+    required: false
   working-directory:
     description: "golangci-lint working directory. The default is the project root."
     required: false

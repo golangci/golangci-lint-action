@@ -302,6 +302,27 @@ with:
 
 </details>
 
+### `install-only`
+
+(optional)
+
+If set to `true`, the action will only install golangci-lint.
+It does not run golangci-lint.
+
+The default value is `false`.
+
+<details>
+<summary>Example</summary>
+
+```yml
+uses: golangci/golangci-lint-action@v8
+with:
+  install-only: true
+  # ...
+```
+
+</details>
+
 ### `github-token`
 
 (optional)

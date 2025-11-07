@@ -16,13 +16,18 @@ type Env = {
   patchPath: string
 }
 
-async function prepareEnv(): Promise<Env> {
+async function prepareEnv(installOnly: boolean): Promise<Env> {
   const startedAt = Date.now()
 
   // Prepare cache, lint and go in parallel.
   await restoreCache()
 
   const binPath = await install()
+
+  if (installOnly) {
+    return { binPath, patchPath: `` }
+  }
+
   const patchPath = await fetchPatch()
 
   core.info(`Prepared env in ${Date.now() - startedAt}ms`)
@@ -196,8 +201,18 @@ async function getConfigPath(binPath: string, userArgsMap: Map<string, string>, 
 
 export async function run(): Promise<void> {
   try {
-    const { binPath, patchPath } = await core.group(`prepare environment`, prepareEnv)
+    const installOnly = core.getBooleanInput(`install-only`, { required: true })
+
+    const { binPath, patchPath } = await core.group(`prepare environment`, () => {
+      return prepareEnv(installOnly)
+    })
+
     core.addPath(path.dirname(binPath))
+
+    if (installOnly) {
+      return
+    }
+
     await core.group(`run golangci-lint`, () => runLint(binPath, patchPath))
   } catch (error) {
     core.error(`Failed to run: ${error}, ${error.stack}`)

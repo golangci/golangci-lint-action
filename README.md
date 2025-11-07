@@ -548,6 +548,13 @@ permissions:
 
 For annotations to work, use the default format output (`text`) and either use [`actions/setup-go`](https://github.com/actions/setup-go) in the job or enable the internal [problem matchers](#problem-matchers).
 
+## Module Plugin System
+
+The action will automatically detect the custom build configuration file `.custom-gcl.yml`,
+build and run the custom version of golangci-lint.
+
+For more information, see [module plugin system](https://golangci-lint.run/docs/plugins/module-plugins/).
+
 ## Performance
 
 The action was implemented with performance in mind:

@@ -8,6 +8,7 @@ import { promisify } from "util"
 import { restoreCache, saveCache } from "./cache"
 import { install } from "./install"
 import { fetchPatch, isOnlyNewIssues } from "./patch"
+import * as plugins from "./plugins"
 
 const execShellCommand = promisify(exec)
 
@@ -22,7 +23,13 @@ async function prepareEnv(installOnly: boolean): Promise<Env> {
   // Prepare cache, lint and go in parallel.
   await restoreCache()
 
-  const binPath = await install()
+  let binPath = await install()
+
+  // Build custom golangci-lint if needed.
+  const customBinPath = await plugins.install(binPath)
+  if (customBinPath !== "") {
+    binPath = customBinPath
+  }
 
   if (installOnly) {
     return { binPath, patchPath: `` }
@@ -203,9 +210,7 @@ export async function run(): Promise<void> {
   try {
     const installOnly = core.getBooleanInput(`install-only`, { required: true })
 
-    const { binPath, patchPath } = await core.group(`prepare environment`, () => {
-      return prepareEnv(installOnly)
-    })
+    const { binPath, patchPath } = await core.group(`prepare environment`, () => prepareEnv(installOnly))
 
     core.addPath(path.dirname(binPath))
 

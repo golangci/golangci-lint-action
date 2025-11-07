@@ -114,3 +114,35 @@ jobs:
         with:
           working-directory: ${{ matrix.wd }}
           args: --timeout=5m --issues-exit-code=0 ./...
+
+  test-plugins: # make sure the action works on a clean machine with plugins
+    needs: [ build ]
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - ubuntu-22.04-arm
+          - macos-latest
+          - windows-latest
+        version:
+          - ""
+          - "latest"
+          - "v2.5"
+          - "v2.5.0"
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.x
+      - uses: actions/setup-go@v6
+        with:
+          go-version: oldstable
+      - uses: ./
+        with:
+          version: ${{ matrix.version }}
+          working-directory: sample-plugins
+          args: --timeout=5m --issues-exit-code=0 ./...

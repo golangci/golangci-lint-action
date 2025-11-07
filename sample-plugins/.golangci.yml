@@ -1,0 +1,25 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - example
+
+  settings:
+    custom:
+      example:
+        type: module
+        # Description is optional
+        description: The description of the linter. This is optional, but shows up when running `golangci-lint linters`.
+        # Original-url is optional, and is only used for documentation purposes.
+        original-url: github.com/golangci/example-plugin-module-linter
+        settings:
+          one: Foo
+          two:
+            - name: Bar
+          three:
+            name: Bar
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

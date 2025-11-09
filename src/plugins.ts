@@ -34,8 +34,9 @@ export async function install(binPath: string): Promise<string> {
     rootDir = process.cwd()
   }
 
-  const configFile = [".custom-gcl.yml", ".custom-gcl.yaml", ".custom-gcl.json"]
-    .map((v) => path.join(rootDir, v))
+  const configFile = ["yml", "yaml", "json"]
+    .map((ext) => `.custom-gcl.${ext}`)
+    .map((filename) => path.join(rootDir, filename))
     .find((filePath) => fs.existsSync(filePath))
 
   if (!configFile || configFile === "") {
@@ -53,7 +54,7 @@ export async function install(binPath: string): Promise<string> {
   const v: string = core.getInput(`version`)
   if (v !== "" && config.version !== v) {
     core.warning(
-      `The golangci-lint version (${config.version}) defined inside in ${configFile} does not match the version defined in the action (${v})`
+      `The golangci-lint version (${config.version}) defined inside ${configFile} does not match the version defined in the action (${v})`
     )
   }
 

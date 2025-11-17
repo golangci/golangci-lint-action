@@ -34,12 +34,12 @@
     "@actions/http-client": "^3.0.0",
     "@octokit/plugin-retry": "^6.1.0",
     "@actions/tool-cache": "^2.0.2",
-    "@types/node": "^24.10.0",
+    "@types/node": "^24.10.1",
     "@types/semver": "^7.7.1",
     "@types/tmp": "^0.2.6",
     "@types/which": "^3.0.4",
     "tmp": "^0.2.5",
-    "which": "^5.0.0",
+    "which": "^6.0.0",
     "yaml": "^2.8.1"
   },
   "devDependencies": {

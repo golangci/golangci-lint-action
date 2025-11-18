@@ -54,9 +54,9 @@ jobs:
         with:
           go-version: stable
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.1
+          version: v2.6
 ```
 
 </details>
@@ -92,9 +92,9 @@ jobs:
         with:
           go-version: ${{ matrix.go }}
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.1
+          version: v2.6
 ```
 
 You will also likely need to add the following `.gitattributes` file to ensure that line endings for Windows builds are properly formatted:
@@ -120,7 +120,7 @@ on:
 
 env:
   GO_VERSION: stable
-  GOLANGCI_LINT_VERSION: v2.1
+  GOLANGCI_LINT_VERSION: v2.6
 
 jobs:
   detect-modules:
@@ -147,7 +147,7 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
       - name: golangci-lint ${{ matrix.modules }}
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           working-directory: ${{ matrix.modules }}
@@ -179,7 +179,7 @@ jobs:
     with:
       os: ${{ matrix.os }}
       go-version: ${{ matrix.go-version }}
-      golangci-lint-version: v2.1
+      golangci-lint-version: v2.6
 ```
 
 ```yaml
@@ -201,7 +201,7 @@ on:
       golangci-lint-version:
         description: 'Golangci-lint version'
         type: string
-        default: 'v2.1'
+        default: 'v2.6'
 
 jobs:
   detect-modules:
@@ -229,7 +229,7 @@ jobs:
         with:
           go-version: ${{ inputs.go-version }}
       - name: golangci-lint ${{ matrix.modules }}
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
           version: ${{ inputs.golangci-lint-version }}
           working-directory: ${{ matrix.modules }}
@@ -274,9 +274,9 @@ When `install-mode` is:
 <summary>Example</summary>
 
 ```yml
-uses: golangci/golangci-lint-action@v8
+uses: golangci/golangci-lint-action@v9
 with:
-  version: v2.1
+  version: v2.6
   # ...
 ```
 
@@ -296,7 +296,7 @@ The default value is `binary`.
 <summary>Example</summary>
 
 ```yml
-uses: golangci/golangci-lint-action@v8
+uses: golangci/golangci-lint-action@v9
 with:
   install-mode: "none"
   # ...
@@ -317,7 +317,7 @@ The default value is `false`.
 <summary>Example</summary>
 
 ```yml
-uses: golangci/golangci-lint-action@v8
+uses: golangci/golangci-lint-action@v9
 with:
   install-only: true
   # ...
@@ -337,7 +337,7 @@ By default, it uses the `github.token` from the action.
 <summary>Example</summary>
 
 ```yml
-uses: golangci/golangci-lint-action@v8
+uses: golangci/golangci-lint-action@v9
 with:
   github-token: xxx
   # ...
@@ -360,7 +360,7 @@ The JSON Schema used to validate the configuration depends on the version of gol
 <summary>Example</summary>
 
 ```yml
-uses: golangci/golangci-lint-action@v8
+uses: golangci/golangci-lint-action@v9
 with:
   verify: false
   # ...
@@ -385,7 +385,7 @@ The default value is `false`.
 <summary>Example</summary>
 
 ```yml
-uses: golangci/golangci-lint-action@v8
+uses: golangci/golangci-lint-action@v9
 with:
   only-new-issues: true
   # ...
@@ -403,7 +403,7 @@ The golangci-lint working directory, useful for monorepos. The default is the pr
 <summary>Example</summary>
 
 ```yml
-uses: golangci/golangci-lint-action@v8
+uses: golangci/golangci-lint-action@v9
 with:
   working-directory: somedir
   # ...
@@ -428,7 +428,7 @@ golangci-lint command line arguments.
 <summary>Example</summary>
 
 ```yml
-uses: golangci/golangci-lint-action@v8
+uses: golangci/golangci-lint-action@v9
 with:
   # In some rare cases,
   # you may need to use `${{ github.workspace }}` as the base directory to reference your configuration file.
@@ -456,7 +456,7 @@ The default value is `false`.
 <summary>Example</summary>
 
 ```yml
-uses: golangci/golangci-lint-action@v8
+uses: golangci/golangci-lint-action@v9
 with:
   problem-matchers: true
   # ...
@@ -477,7 +477,7 @@ The default value is `false`.
 <summary>Example</summary>
 
 ```yml
-uses: golangci/golangci-lint-action@v8
+uses: golangci/golangci-lint-action@v9
 with:
   skip-cache: true
   # ...
@@ -497,7 +497,7 @@ The default value is `false`.
 <summary>Example</summary>
 
 ```yml
-uses: golangci/golangci-lint-action@v8
+uses: golangci/golangci-lint-action@v9
 with:
   skip-save-cache: true
   # ...
@@ -519,7 +519,7 @@ If the number is `<= 0`, the cache will always be invalidated (not recommended).
 <summary>Example</summary>
 
 ```yml
-uses: golangci/golangci-lint-action@v8
+uses: golangci/golangci-lint-action@v9
 with:
   cache-invalidation-interval: 15
   # ...

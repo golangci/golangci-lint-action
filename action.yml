@@ -34,6 +34,10 @@ inputs:
     description: "If set to true and the action runs on a pull request, the action outputs only newly found issues."
     default: 'false'
     required: false
+  args:
+    description: "golangci-lint command line arguments."
+    default: ""
+    required: false
   skip-cache:
     description: |
       If set to true, all caching functionality will be completely disabled.
@@ -42,21 +46,24 @@ inputs:
     required: false
   skip-save-cache:
     description: |
-      If set to true, the action will not save any caches, but it may still
-      restore existing caches, subject to other options.
+      If set to true, the action will not save any caches,
+      but it may still restore existing caches, subject to other options.
     default: 'false'
+    required: false
+  cache-invalidation-interval:
+    description: "Periodically invalidate a cache when new code is added (number of days)."
+    default: '7'
     required: false
   problem-matchers:
     description: "Force the usage of the embedded problem matchers."
     default: 'false'
     required: false
-  args:
-    description: "golangci-lint command line arguments."
+  debug:
+    description: |
+      Debug options for the action.
+      List of comma separated options, the values are `cache`, `clean`.
+      example: "cache,clean"
     default: ""
-    required: false
-  cache-invalidation-interval:
-    description: "Periodically invalidate a cache when new code is added (number of days)."
-    default: '7'
     required: false
 runs:
   using: "node24"

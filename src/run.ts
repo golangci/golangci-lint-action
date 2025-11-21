@@ -10,37 +10,7 @@ import { install } from "./install"
 import { fetchPatch, isOnlyNewIssues } from "./patch"
 import * as plugins from "./plugins"
 
-const execShellCommand = promisify(exec)
-
-type Env = {
-  binPath: string
-  patchPath: string
-}
-
-async function prepareEnv(installOnly: boolean): Promise<Env> {
-  const startedAt = Date.now()
-
-  // Prepare cache, lint and go in parallel.
-  await restoreCache()
-
-  let binPath = await install()
-
-  // Build custom golangci-lint if needed.
-  const customBinPath = await plugins.install(binPath)
-  if (customBinPath !== "") {
-    binPath = customBinPath
-  }
-
-  if (installOnly) {
-    return { binPath, patchPath: `` }
-  }
-
-  const patchPath = await fetchPatch()
-
-  core.info(`Prepared env in ${Date.now() - startedAt}ms`)
-
-  return { binPath, patchPath }
-}
+const execCommand = promisify(exec)
 
 type ExecRes = {
   stdout: string
@@ -56,13 +26,7 @@ const printOutput = (res: ExecRes): void => {
   }
 }
 
-async function runLint(binPath: string, patchPath: string): Promise<void> {
-  const debug = core.getInput(`debug`)
-  if (debug.split(`,`).includes(`cache`)) {
-    const res = await execShellCommand(`${binPath} cache status`)
-    printOutput(res)
-  }
-
+async function runGolangciLint(binPath: string, rootDir: string): Promise<void> {
   const userArgs = core.getInput(`args`)
   const addedArgs: string[] = []
 
@@ -77,17 +41,6 @@ async function runLint(binPath: string, patchPath: string): Promise<void> {
   const userArgsMap = new Map<string, string>(userArgsList)
   const userArgNames = new Set<string>(userArgsList.map(([key]) => key))
 
-  const problemMatchers = core.getBooleanInput(`problem-matchers`)
-
-  if (problemMatchers) {
-    const matchersPath = path.join(__dirname, "../..", "problem-matchers.json")
-    if (fs.existsSync(matchersPath)) {
-      // Adds problem matchers.
-      // https://github.com/actions/setup-go/blob/cdcb36043654635271a94b9a6d1392de5bb323a7/src/main.ts#L81-L83
-      core.info(`##[add-matcher]${matchersPath}`)
-    }
-  }
-
   if (isOnlyNewIssues()) {
     if (
       userArgNames.has(`new`) ||
@@ -99,6 +52,7 @@ async function runLint(binPath: string, patchPath: string): Promise<void> {
     }
 
     const ctx = github.context
+    const patchPath = await fetchPatch()
 
     core.info(`only new issues on ${ctx.eventName}: ${patchPath}`)
 
@@ -130,17 +84,12 @@ async function runLint(binPath: string, patchPath: string): Promise<void> {
 
   const cmdArgs: ExecOptionsWithStringEncoding = {}
 
-  const workingDirectory = core.getInput(`working-directory`)
-  if (workingDirectory) {
-    if (!fs.existsSync(workingDirectory) || !fs.lstatSync(workingDirectory).isDirectory()) {
-      throw new Error(`working-directory (${workingDirectory}) was not a path`)
-    }
-
+  if (rootDir) {
     if (!userArgNames.has(`path-prefix`) && !userArgNames.has(`path-mode`)) {
       addedArgs.push(`--path-mode=abs`)
     }
 
-    cmdArgs.cwd = path.resolve(workingDirectory)
+    cmdArgs.cwd = path.resolve(rootDir)
   }
 
   await runVerify(binPath, userArgsMap, cmdArgs)
@@ -150,22 +99,21 @@ async function runLint(binPath: string, patchPath: string): Promise<void> {
   core.info(`Running [${cmd}] in [${cmdArgs.cwd || process.cwd()}] ...`)
 
   const startedAt = Date.now()
-  try {
-    const res = await execShellCommand(cmd, cmdArgs)
-    printOutput(res)
-    core.info(`golangci-lint found no issues`)
-  } catch (exc) {
-    // This logging passes issues to GitHub annotations but comments can be more convenient for some users.
-    printOutput(exc)
 
-    if (exc.code === 1) {
-      core.setFailed(`issues found`)
-    } else {
-      core.setFailed(`golangci-lint exit with code ${exc.code}`)
-    }
-  }
+  return execCommand(cmd, cmdArgs)
+    .then(printOutput)
+    .then(() => core.info(`golangci-lint found no issues`))
+    .catch((exc) => {
+      // This logging passes issues to GitHub annotations.
+      printOutput(exc)
 
-  core.info(`Ran golangci-lint in ${Date.now() - startedAt}ms`)
+      if (exc.code === 1) {
+        core.setFailed(`issues found`)
+      } else {
+        core.setFailed(`golangci-lint exit with code ${exc.code}`)
+      }
+    })
+    .finally(() => core.info(`Ran golangci-lint in ${Date.now() - startedAt}ms`))
 }
 
 async function runVerify(binPath: string, userArgsMap: Map<string, string>, cmdArgs: ExecOptionsWithStringEncoding): Promise<void> {
@@ -186,8 +134,7 @@ async function runVerify(binPath: string, userArgsMap: Map<string, string>, cmdA
 
   core.info(`Running [${cmdVerify}] in [${cmdArgs.cwd || process.cwd()}] ...`)
 
-  const res = await execShellCommand(cmdVerify, cmdArgs)
-  printOutput(res)
+  await execCommand(cmdVerify, cmdArgs).then(printOutput)
 }
 
 async function getConfigPath(binPath: string, userArgsMap: Map<string, string>, cmdArgs: ExecOptionsWithStringEncoding): Promise<string> {
@@ -199,26 +146,98 @@ async function getConfigPath(binPath: string, userArgsMap: Map<string, string>, 
   core.info(`Running [${cmdConfigPath}] in [${cmdArgs.cwd || process.cwd()}] ...`)
 
   try {
-    const resPath = await execShellCommand(cmdConfigPath, cmdArgs)
+    const resPath = await execCommand(cmdConfigPath, cmdArgs)
     return resPath.stderr.trim()
   } catch {
     return ``
   }
 }
 
+async function debugAction(binPath: string) {
+  const flags = core.getInput(`debug`).split(`,`)
+
+  if (flags.includes(`clean`)) {
+    const cmd = `${binPath} cache clean`
+
+    core.info(`Running [${cmd}] ...`)
+
+    await execCommand(cmd).then(printOutput)
+  }
+
+  if (flags.includes(`cache`)) {
+    const cmd = `${binPath} cache status`
+
+    core.info(`Running [${cmd}] ...`)
+
+    await execCommand(cmd).then(printOutput)
+  }
+}
+
+function getWorkingDirectory(): string {
+  const workingDirectory = core.getInput(`working-directory`)
+  if (workingDirectory) {
+    if (!fs.existsSync(workingDirectory) || !fs.lstatSync(workingDirectory).isDirectory()) {
+      throw new Error(`working-directory (${workingDirectory}) was not a path`)
+    }
+  }
+
+  return workingDirectory
+}
+
+function modulesAutoDetection(rootDir: string): string[] {
+  const o: fs.GlobOptions = {
+    cwd: rootDir,
+    exclude: ["**/vendor/**", "**/node_modules/**", "**/.git/**", "**/dist/**"],
+  }
+
+  const matches = fs.globSync("**/go.mod", o)
+
+  const dirs = matches
+    .filter((m) => typeof m === "string")
+    .map((m) => path.resolve(rootDir, path.dirname(m)))
+    .sort()
+
+  return [...new Set(dirs)]
+}
+
+async function runLint(binPath: string): Promise<void> {
+  const workingDirectory = getWorkingDirectory()
+
+  const experimental = core.getInput(`experimental`).split(`,`)
+
+  if (experimental.includes(`automatic-module-directories`)) {
+    const wds = modulesAutoDetection(workingDirectory)
+
+    const cwd = process.cwd()
+
+    for (const wd of wds) {
+      await core.group(`run golangci-lint in ${path.relative(cwd, wd)}`, () => runGolangciLint(binPath, wd))
+    }
+
+    return
+  }
+
+  await core.group(`run golangci-lint`, () => runGolangciLint(binPath, workingDirectory))
+}
+
 export async function run(): Promise<void> {
   try {
-    const installOnly = core.getBooleanInput(`install-only`, { required: true })
+    await core.group(`Restore cache`, restoreCache)
 
-    const { binPath, patchPath } = await core.group(`prepare environment`, () => prepareEnv(installOnly))
+    const binPath = await core.group(`Install`, () => install().then(plugins.install))
 
     core.addPath(path.dirname(binPath))
 
+    if (core.getInput(`debug`)) {
+      await core.group(`Debug`, () => debugAction(binPath))
+    }
+
+    const installOnly = core.getBooleanInput(`install-only`, { required: true })
     if (installOnly) {
       return
     }
 
-    await core.group(`run golangci-lint`, () => runLint(binPath, patchPath))
+    await runLint(binPath)
   } catch (error) {
     core.error(`Failed to run: ${error}, ${error.stack}`)
     core.setFailed(error.message)

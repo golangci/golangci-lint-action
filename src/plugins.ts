@@ -5,7 +5,7 @@ import * as path from "path"
 import { promisify } from "util"
 import YAML from "yaml"
 
-const execShellCommand = promisify(exec)
+const execCommand = promisify(exec)
 
 type ExecRes = {
   stdout: string
@@ -40,7 +40,7 @@ export async function install(binPath: string): Promise<string> {
     .find((filePath) => fs.existsSync(filePath))
 
   if (!configFile || configFile === "") {
-    return ""
+    return binPath
   }
 
   core.info(`Found configuration for the plugin module system : ${configFile}`)
@@ -74,18 +74,15 @@ export async function install(binPath: string): Promise<string> {
 
   core.info(`Running [${cmd}] in [${rootDir}] ...`)
 
-  try {
-    const options: ExecOptionsWithStringEncoding = {
-      cwd: rootDir,
-    }
-
-    const res = await execShellCommand(cmd, options)
-    printOutput(res)
-
-    core.info(`Built custom golangci-lint binary in ${Date.now() - startedAt}ms`)
-
-    return path.join(rootDir, config.destination, config.name)
-  } catch (exc) {
-    throw new Error(`Failed to build custom golangci-lint binary: ${exc.message}`)
+  const options: ExecOptionsWithStringEncoding = {
+    cwd: rootDir,
   }
+
+  return execCommand(cmd, options)
+    .then(printOutput)
+    .then(() => core.info(`Built custom golangci-lint binary in ${Date.now() - startedAt}ms`))
+    .then(() => path.join(rootDir, config.destination, config.name))
+    .catch((exc) => {
+      throw new Error(`Failed to build custom golangci-lint binary: ${exc.message}`)
+    })
 }

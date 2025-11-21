@@ -1,6 +1,7 @@
 import * as core from "@actions/core"
 import * as tc from "@actions/tool-cache"
 import { exec, ExecOptionsWithStringEncoding } from "child_process"
+import fs from "fs"
 import os from "os"
 import path from "path"
 import { promisify } from "util"
@@ -8,7 +9,7 @@ import which from "which"
 
 import { getVersion, VersionInfo } from "./version"
 
-const execShellCommand = promisify(exec)
+const execCommand = promisify(exec)
 
 export enum InstallMode {
   Binary = "binary",
@@ -21,13 +22,15 @@ type ExecRes = {
   stderr: string
 }
 
-const printOutput = (res: ExecRes): void => {
+const printOutput = (res: ExecRes): ExecRes => {
   if (res.stdout) {
     core.info(res.stdout)
   }
   if (res.stderr) {
     core.info(res.stderr)
   }
+
+  return res
 }
 
 /**
@@ -36,6 +39,17 @@ const printOutput = (res: ExecRes): void => {
  * @returns             path to installed binary of golangci-lint.
  */
 export async function install(): Promise<string> {
+  const problemMatchers = core.getBooleanInput(`problem-matchers`)
+
+  if (problemMatchers) {
+    const matchersPath = path.join(__dirname, "../..", "problem-matchers.json")
+    if (fs.existsSync(matchersPath)) {
+      // Adds problem matchers.
+      // https://github.com/actions/setup-go/blob/cdcb36043654635271a94b9a6d1392de5bb323a7/src/main.ts#L81-L83
+      core.info(`##[add-matcher]${matchersPath}`)
+    }
+  }
+
   const mode = core.getInput("install-mode").toLowerCase()
 
   if (mode === InstallMode.None) {
@@ -84,17 +98,14 @@ async function goInstall(versionInfo: VersionInfo): Promise<string> {
 
   const options: ExecOptionsWithStringEncoding = { env: { ...process.env, CGO_ENABLED: "1" } }
 
-  const exres = await execShellCommand(
-    `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${versionInfo.TargetVersion}`,
-    options
+  await execCommand(`go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${versionInfo.TargetVersion}`, options).then(
+    printOutput
   )
-  printOutput(exres)
 
-  const res = await execShellCommand(
+  const res = await execCommand(
     `go install -n github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${versionInfo.TargetVersion}`,
     options
-  )
-  printOutput(res)
+  ).then(printOutput)
 
   // The output of `go install -n` when the binary is already installed is `touch <path_to_the_binary>`.
   const binPath = res.stderr

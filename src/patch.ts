@@ -17,10 +17,6 @@ export function isOnlyNewIssues(): boolean {
 }
 
 export async function fetchPatch(): Promise<string> {
-  if (!isOnlyNewIssues()) {
-    return ``
-  }
-
   const ctx = github.context
 
   switch (ctx.eventName) {
@@ -70,8 +66,7 @@ async function fetchPullRequestPatch(ctx: Context): Promise<string> {
   }
 
   try {
-    const tempDir = await createTempDir()
-    const patchPath = path.join(tempDir, "pull.patch")
+    const patchPath = await createTempDir().then((tempDir) => path.join(tempDir, "pull.patch"))
     core.info(`Writing patch to ${patchPath}`)
     await writeFile(patchPath, alterDiffPatch(patch))
     return patchPath
@@ -108,8 +103,7 @@ async function fetchPushPatch(ctx: Context): Promise<string> {
   }
 
   try {
-    const tempDir = await createTempDir()
-    const patchPath = path.join(tempDir, "push.patch")
+    const patchPath = await createTempDir().then((tempDir) => path.join(tempDir, "push.patch"))
     core.info(`Writing patch to ${patchPath}`)
     await writeFile(patchPath, alterDiffPatch(patch))
     return patchPath

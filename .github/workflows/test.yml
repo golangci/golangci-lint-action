@@ -146,3 +146,30 @@ jobs:
           version: ${{ matrix.version }}
           working-directory: sample-plugins
           args: --timeout=5m --issues-exit-code=0 ./...
+
+  test-monorepo:
+    needs: [ build ]
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - ubuntu-22.04-arm
+          - macos-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.x
+      - uses: actions/setup-go@v6
+        with:
+          go-version: oldstable
+      - uses: ./
+        with:
+          working-directory: sample-monorepo
+          experimental: "automatic-module-directories"
+          args: --timeout=5m --issues-exit-code=0 ./...

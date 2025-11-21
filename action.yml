@@ -65,6 +65,12 @@ inputs:
       example: "cache,clean"
     default: ""
     required: false
+  experimental:
+    description: |
+      Experimental options for the action.
+      List of comma separated options.
+    default: ""
+    required: false
 runs:
   using: "node24"
   main: "dist/run/index.js"

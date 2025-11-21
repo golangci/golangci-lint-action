@@ -26,7 +26,7 @@ const printOutput = (res: ExecRes): void => {
   }
 }
 
-async function runLint(binPath: string): Promise<void> {
+async function runLint(binPath: string, rootDir: string): Promise<void> {
   const userArgs = core.getInput(`args`)
   const addedArgs: string[] = []
 
@@ -84,17 +84,12 @@ async function runLint(binPath: string): Promise<void> {
 
   const cmdArgs: ExecOptionsWithStringEncoding = {}
 
-  const workingDirectory = core.getInput(`working-directory`)
-  if (workingDirectory) {
-    if (!fs.existsSync(workingDirectory) || !fs.lstatSync(workingDirectory).isDirectory()) {
-      throw new Error(`working-directory (${workingDirectory}) was not a path`)
-    }
-
+  if (rootDir) {
     if (!userArgNames.has(`path-prefix`) && !userArgNames.has(`path-mode`)) {
       addedArgs.push(`--path-mode=abs`)
     }
 
-    cmdArgs.cwd = path.resolve(workingDirectory)
+    cmdArgs.cwd = path.resolve(rootDir)
   }
 
   await runVerify(binPath, userArgsMap, cmdArgs)
@@ -178,6 +173,17 @@ async function debugAction(binPath: string) {
   }
 }
 
+function getWorkingDirectory(): string {
+  const workingDirectory = core.getInput(`working-directory`)
+  if (workingDirectory) {
+    if (!fs.existsSync(workingDirectory) || !fs.lstatSync(workingDirectory).isDirectory()) {
+      throw new Error(`working-directory (${workingDirectory}) was not a path`)
+    }
+  }
+
+  return workingDirectory
+}
+
 export async function run(): Promise<void> {
   try {
     await core.group(`Restore cache`, restoreCache)
@@ -195,7 +201,7 @@ export async function run(): Promise<void> {
       return
     }
 
-    await core.group(`run golangci-lint`, () => runLint(binPath))
+    await core.group(`run golangci-lint`, () => runLint(binPath, getWorkingDirectory()))
   } catch (error) {
     core.error(`Failed to run: ${error}, ${error.stack}`)
     core.setFailed(error.message)

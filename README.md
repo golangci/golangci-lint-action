@@ -275,6 +275,7 @@ You will also likely need to add the following `.gitattributes` file to ensure t
 | [`skip-save-cache`](#skip-save-cache)                         | Don't save cache.                                  |
 | [`cache-invalidation-interval`](#cache-invalidation-interval) | Number of days before cache invalidation.          |
 | [`problem-matchers`](#problem-matchers)                       | Forces the usage of the embedded problem matchers. |
+| [Experimental](#experimental)                                 | Experimental options                               |
 
 ### Installation
 
@@ -548,6 +549,47 @@ uses: golangci/golangci-lint-action@v9
 with:
   problem-matchers: true
   # ...
+```
+
+</details>
+
+### Experimental
+
+The following options are experimental: those may or may not be supported in the future, and so they will be either converted into a dedicated option or removed.
+
+List of comma-separated options.
+
+<details>
+<summary>Example</summary>
+
+```yaml
+uses: golangci/golangci-lint-action@v9
+with:
+  experimental: "foo,bar"
+```
+
+</details>
+
+#### `automatic-module-directories`
+
+(optional)
+
+This option will run golangci-lint in each module directory, useful for monorepos.
+
+The automatic detection of modules uses the `working-directory` as the base directory if defined, otherwise the root directory.
+
+> [!IMPORTANT]
+> - The cache key will refer to the `working-directory` (if defined) because all the golangci-lint runs must use the same cache directory/key.
+> - The version detection will only work if the project has a single module.
+> - If the project has multiple modules, the custom build file must be located in the repository root ( or `working-directory`).
+
+<details>
+<summary>Example</summary>
+
+```yaml
+uses: golangci/golangci-lint-action@v9
+with:
+  experimental: "automatic-module-directories"
 ```
 
 </details>

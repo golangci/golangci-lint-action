@@ -259,7 +259,26 @@ You will also likely need to add the following `.gitattributes` file to ensure t
 
 ## Options
 
-### `version`
+### Overview
+
+| Option                                                        | Description                                        |
+|---------------------------------------------------------------|----------------------------------------------------|
+| [`version`](#version)                                         | The version of golangci-lint to use.               |
+| [`install-mode`](#install-mode)                               | The mode to install golangci-lint.                 |
+| [`install-only`](#install-only)                               | Only install golangci-lint.                        |
+| [`verify`](#verify)                                           | Validates golangci-lint configuration file.        |
+| [`github-token`](#github-token)                               | Used by the `only-new-issues` option.              |
+| [`only-new-issues`](#only-new-issues)                         | Show only new issues.                              |
+| [`working-directory`](#working-directory)                     | The golangci-lint working directory.               |
+| [`args`](#args)                                               | Golangci-lint command line arguments.              |
+| [`skip-cache`](#skip-cache)                                   | Disable cache support.                             |
+| [`skip-save-cache`](#skip-save-cache)                         | Don't save cache.                                  |
+| [`cache-invalidation-interval`](#cache-invalidation-interval) | Number of days before cache invalidation.          |
+| [`problem-matchers`](#problem-matchers)                       | Forces the usage of the embedded problem matchers. |
+
+### Installation
+
+#### `version`
 
 (optional)
 
@@ -282,7 +301,7 @@ with:
 
 </details>
 
-### `install-mode`
+#### `install-mode`
 
 (optional)
 
@@ -304,7 +323,7 @@ with:
 
 </details>
 
-### `install-only`
+#### `install-only`
 
 (optional)
 
@@ -325,27 +344,9 @@ with:
 
 </details>
 
-### `github-token`
+### Run
 
-(optional)
-
-When using the `only-new-issues` option, the GitHub API is used, so a token is required.
-
-By default, it uses the `github.token` from the action.
-
-<details>
-<summary>Example</summary>
-
-```yml
-uses: golangci/golangci-lint-action@v9
-with:
-  github-token: xxx
-  # ...
-```
-
-</details>
-
-### `verify`
+#### `verify`
 
 (optional)
 
@@ -368,7 +369,27 @@ with:
 
 </details>
 
-### `only-new-issues`
+#### `github-token`
+
+(optional)
+
+When using the `only-new-issues` option, the GitHub API is used, so a token is required.
+
+By default, it uses the `github.token` from the action.
+
+<details>
+<summary>Example</summary>
+
+```yml
+uses: golangci/golangci-lint-action@v9
+with:
+  github-token: xxx
+  # ...
+```
+
+</details>
+
+#### `only-new-issues`
 
 (optional)
 
@@ -393,7 +414,7 @@ with:
 
 </details>
 
-### `working-directory`
+#### `working-directory`
 
 (optional)
 
@@ -411,7 +432,7 @@ with:
 
 </details>
 
-### `args`
+#### `args`
 
 (optional)
 
@@ -438,33 +459,9 @@ with:
 
 </details>
 
-### `problem-matchers`
+### Cache
 
-(optional)
-
-Forces the usage of the embedded problem matchers.
-
-By default, the [problem matcher of Go (`actions/setup-go`)](https://github.com/actions/setup-go/blob/main/matchers.json) already handles the default golangci-lint output (`text`).
-
-Works only with the `text` format (the golangci-lint default).
-
-https://golangci-lint.run/usage/configuration/#output-configuration
-
-The default value is `false`.
-
-<details>
-<summary>Example</summary>
-
-```yml
-uses: golangci/golangci-lint-action@v9
-with:
-  problem-matchers: true
-  # ...
-```
-
-</details>
-
-### `skip-cache`
+#### `skip-cache`
 
 (optional)
 
@@ -485,7 +482,7 @@ with:
 
 </details>
 
-### `skip-save-cache`
+#### `skip-save-cache`
 
 (optional)
 
@@ -505,7 +502,7 @@ with:
 
 </details>
 
-### `cache-invalidation-interval`
+#### `cache-invalidation-interval`
 
 (optional)
 
@@ -522,6 +519,34 @@ If the number is `<= 0`, the cache will always be invalidated (not recommended).
 uses: golangci/golangci-lint-action@v9
 with:
   cache-invalidation-interval: 15
+  # ...
+```
+
+</details>
+
+### Extra
+
+#### `problem-matchers`
+
+(optional)
+
+Forces the usage of the embedded problem matchers.
+
+By default, the [problem matcher of Go (`actions/setup-go`)](https://github.com/actions/setup-go/blob/main/matchers.json) already handles the default golangci-lint output (`text`).
+
+Works only with the `text` format (the golangci-lint default).
+
+https://golangci-lint.run/usage/configuration/#output-configuration
+
+The default value is `false`.
+
+<details>
+<summary>Example</summary>
+
+```yml
+uses: golangci/golangci-lint-action@v9
+with:
+  problem-matchers: true
   # ...
 ```
 

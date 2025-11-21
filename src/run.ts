@@ -26,7 +26,7 @@ const printOutput = (res: ExecRes): void => {
   }
 }
 
-async function runLint(binPath: string, rootDir: string): Promise<void> {
+async function runGolangciLint(binPath: string, rootDir: string): Promise<void> {
   const userArgs = core.getInput(`args`)
   const addedArgs: string[] = []
 
@@ -184,6 +184,42 @@ function getWorkingDirectory(): string {
   return workingDirectory
 }
 
+function modulesAutoDetection(rootDir: string): string[] {
+  const o: fs.GlobOptions = {
+    cwd: rootDir,
+    exclude: ["**/vendor/**", "**/node_modules/**", "**/.git/**", "**/dist/**"],
+  }
+
+  const matches = fs.globSync("**/go.mod", o)
+
+  const dirs = matches
+    .filter((m) => typeof m === "string")
+    .map((m) => path.resolve(rootDir, path.dirname(m)))
+    .sort()
+
+  return [...new Set(dirs)]
+}
+
+async function runLint(binPath: string): Promise<void> {
+  const workingDirectory = getWorkingDirectory()
+
+  const experimental = core.getInput(`experimental`).split(`,`)
+
+  if (experimental.includes(`automatic-module-directories`)) {
+    const wds = modulesAutoDetection(workingDirectory)
+
+    const cwd = process.cwd()
+
+    for (const wd of wds) {
+      await core.group(`run golangci-lint in ${path.relative(cwd, wd)}`, () => runGolangciLint(binPath, wd))
+    }
+
+    return
+  }
+
+  await core.group(`run golangci-lint`, () => runGolangciLint(binPath, workingDirectory))
+}
+
 export async function run(): Promise<void> {
   try {
     await core.group(`Restore cache`, restoreCache)
@@ -201,7 +237,7 @@ export async function run(): Promise<void> {
       return
     }
 
-    await core.group(`run golangci-lint`, () => runLint(binPath, getWorkingDirectory()))
+    await runLint(binPath)
   } catch (error) {
     core.error(`Failed to run: ${error}, ${error.stack}`)
     core.setFailed(error.message)

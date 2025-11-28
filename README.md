@@ -261,21 +261,22 @@ You will also likely need to add the following `.gitattributes` file to ensure t
 
 ### Overview
 
-| Option                                                        | Description                                        |
-|---------------------------------------------------------------|----------------------------------------------------|
-| [`version`](#version)                                         | The version of golangci-lint to use.               |
-| [`install-mode`](#install-mode)                               | The mode to install golangci-lint.                 |
-| [`install-only`](#install-only)                               | Only install golangci-lint.                        |
-| [`verify`](#verify)                                           | Validates golangci-lint configuration file.        |
-| [`github-token`](#github-token)                               | Used by the `only-new-issues` option.              |
-| [`only-new-issues`](#only-new-issues)                         | Show only new issues.                              |
-| [`working-directory`](#working-directory)                     | The golangci-lint working directory.               |
-| [`args`](#args)                                               | Golangci-lint command line arguments.              |
-| [`skip-cache`](#skip-cache)                                   | Disable cache support.                             |
-| [`skip-save-cache`](#skip-save-cache)                         | Don't save cache.                                  |
-| [`cache-invalidation-interval`](#cache-invalidation-interval) | Number of days before cache invalidation.          |
-| [`problem-matchers`](#problem-matchers)                       | Forces the usage of the embedded problem matchers. |
-| [Experimental](#experimental)                                 | Experimental options                               |
+| Option                                                        | Description                                           |
+|---------------------------------------------------------------|-------------------------------------------------------|
+| [`version`](#version)                                         | The version of golangci-lint to use.                  |
+| [`version-file`](#version-file)                               | Gets the version of golangci-lint to use from a file. |
+| [`install-mode`](#install-mode)                               | The mode to install golangci-lint.                    |
+| [`install-only`](#install-only)                               | Only install golangci-lint.                           |
+| [`verify`](#verify)                                           | Validates golangci-lint configuration file.           |
+| [`github-token`](#github-token)                               | Used by the `only-new-issues` option.                 |
+| [`only-new-issues`](#only-new-issues)                         | Show only new issues.                                 |
+| [`working-directory`](#working-directory)                     | The golangci-lint working directory.                  |
+| [`args`](#args)                                               | Golangci-lint command line arguments.                 |
+| [`skip-cache`](#skip-cache)                                   | Disable cache support.                                |
+| [`skip-save-cache`](#skip-save-cache)                         | Don't save cache.                                     |
+| [`cache-invalidation-interval`](#cache-invalidation-interval) | Number of days before cache invalidation.             |
+| [`problem-matchers`](#problem-matchers)                       | Forces the usage of the embedded problem matchers.    |
+| [Experimental](#experimental)                                 | Experimental options                                  |
 
 ### Installation
 
@@ -297,6 +298,28 @@ When `install-mode` is:
 uses: golangci/golangci-lint-action@v9
 with:
   version: v2.6
+  # ...
+```
+
+</details>
+
+#### `version-file`
+
+Gets the version of golangci-lint to use from a file.
+
+The path must be relative to the root of the project, or the `working-directory` if defined.
+
+This parameter supports `.golangci-lint-version`, and `.tool-versions` files.
+
+Only works with `install-mode: binary` (the default).
+
+<details>
+<summary>Example</summary>
+
+```yml
+uses: golangci/golangci-lint-action@v9
+with:
+  version-file: .tool-versions
   # ...
 ```
 

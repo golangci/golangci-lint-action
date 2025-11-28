@@ -11,6 +11,13 @@ inputs:
       - `goinstall`: the value can be v2.3.4, `latest`, or the hash of a commit.
       - `none`: the value is ignored.
     required: false
+  version-file:
+    description: |
+      Gets the version of golangci-lint to use from a file.
+      The path must be relative to the root of the project, or the `working-directory` if defined.
+      This parameter supports `.golangci-lint-version`, and `.tool-versions` files.
+      Only works with `install-mode: binary` (the default).
+    required: false
   install-mode:
     description: "The mode to install golangci-lint. It can be 'binary', 'goinstall', or 'none'."
     default: "binary"

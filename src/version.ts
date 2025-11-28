@@ -67,6 +67,12 @@ const isLessVersion = (a: Version, b: Version): boolean => {
 
 const getRequestedVersion = (): Version => {
   let requestedVersion = core.getInput(`version`)
+  let versionFilePath = core.getInput(`version-file`)
+
+  if (requestedVersion && versionFilePath) {
+    core.warning(`Both version (${requestedVersion}) and version-file (${versionFilePath}) inputs are specified, only version will be used`)
+  }
+
   const workingDirectory = core.getInput(`working-directory`)
 
   let goMod = "go.mod"
@@ -80,6 +86,27 @@ const getRequestedVersion = (): Version => {
     if (match) {
       requestedVersion = match[1]
       core.info(`Found golangci-lint version '${requestedVersion}' in '${goMod}' file`)
+    }
+  }
+
+  if (requestedVersion == "" && versionFilePath) {
+    if (workingDirectory) {
+      versionFilePath = path.join(workingDirectory, versionFilePath)
+    }
+
+    if (!fs.existsSync(versionFilePath)) {
+      throw new Error(`The specified golangci-lint version file at: ${versionFilePath} does not exist`)
+    }
+
+    const content = fs.readFileSync(versionFilePath, "utf-8")
+
+    if (path.basename(versionFilePath) === ".tool-versions") {
+      // asdf/mise file.
+      const match = content.match(/^golangci-lint\s+([^\n#]+)/m)
+      requestedVersion = match ? "v" + match[1].trim().replace(/^v/gi, "") : ""
+    } else {
+      // .golangci-lint-version file.
+      requestedVersion = "v" + content.trim().replace(/^v/gi, "")
     }
   }
 

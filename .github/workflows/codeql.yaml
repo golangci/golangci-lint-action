@@ -12,7 +12,9 @@ on:
     - cron: '0 17 * * 5'
 
 permissions:
+  actions: read
   contents: read
+  security-events: write
 
 jobs:
   codeQL:
@@ -39,7 +41,7 @@ jobs:
         uses: github/codeql-action/init@v4
         # Override language selection by uncommenting this and choosing your languages
         with:
-          language: 'javascript'
+          languages: 'javascript-typescript'
 
       - run: |
           npm install

@@ -11,6 +11,9 @@ on:
   schedule:
     - cron: '0 17 * * 5'
 
+permissions:
+  contents: read
+
 jobs:
   codeQL:
     # CodeQL runs on ubuntu-latest, windows-latest, and macos-latest

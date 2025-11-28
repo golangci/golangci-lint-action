@@ -1,5 +1,6 @@
 name: "build-and-test"
-on: # rebuild any PRs and main branch changes
+
+on:
   pull_request:
     branches:
       - main
@@ -7,8 +8,12 @@ on: # rebuild any PRs and main branch changes
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
-  build: # make sure build/ci work properly
+  # make sure build/ci work properly
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/setup-node@v6
@@ -19,10 +24,11 @@ jobs:
           npm install
           npm run all
 
-      # Fail the build if there is dirty change
+      # Fail the build if there are changes.
       - run: git diff --exit-code -- dist
 
-  test: # make sure the action works on a clean machine without building
+  # make sure the action works on a clean machine without building
+  test:
     needs: [ build ]
     strategy:
       matrix:
@@ -54,7 +60,8 @@ jobs:
           args: --timeout=5m --issues-exit-code=0 ./fixtures/simple/...
           only-new-issues: true
 
-  test-go-install: # make sure the action works on a clean machine without building (go-install mode)
+  # make sure the action works on a clean machine without building (go-install mode)
+  test-go-install:
     needs: [ build ]
     strategy:
       matrix:
@@ -115,7 +122,8 @@ jobs:
           working-directory: ${{ matrix.wd }}
           args: --timeout=5m --issues-exit-code=0 ./...
 
-  test-plugins: # make sure the action works on a clean machine with plugins
+  # make sure the action works on a clean machine with plugins
+  test-plugins:
     needs: [ build ]
     strategy:
       matrix:

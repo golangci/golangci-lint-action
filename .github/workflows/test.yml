@@ -51,7 +51,7 @@ jobs:
       - uses: ./
         with:
           version: ${{ matrix.version }}
-          args: --timeout=5m --issues-exit-code=0 ./sample/...
+          args: --timeout=5m --issues-exit-code=0 ./fixtures/simple/...
           only-new-issues: true
 
   test-go-install: # make sure the action works on a clean machine without building (go-install mode)
@@ -83,7 +83,7 @@ jobs:
       - uses: ./
         with:
           version: ${{ matrix.version }}
-          args: --timeout=5m --issues-exit-code=0 ./sample/...
+          args: --timeout=5m --issues-exit-code=0 ./fixtures/simple/...
           only-new-issues: true
           install-mode: goinstall
 
@@ -97,8 +97,8 @@ jobs:
           - macos-latest
           - windows-latest
         wd:
-          - sample-go-mod
-          - sample-go-tool
+          - fixtures/go-mod
+          - fixtures/go-tool
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -144,7 +144,7 @@ jobs:
       - uses: ./
         with:
           version: ${{ matrix.version }}
-          working-directory: sample-plugins
+          working-directory: fixtures/plugins
           args: --timeout=5m --issues-exit-code=0 ./...
 
   test-monorepo:
@@ -170,6 +170,6 @@ jobs:
           go-version: oldstable
       - uses: ./
         with:
-          working-directory: sample-monorepo
+          working-directory: fixtures/monorepo
           experimental: "automatic-module-directories"
           args: --timeout=5m --issues-exit-code=0 ./...

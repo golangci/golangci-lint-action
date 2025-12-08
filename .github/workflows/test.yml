@@ -40,8 +40,8 @@ jobs:
         version:
           - ""
           - "latest"
-          - "v2.5"
-          - "v2.5.0"
+          - "v2.7"
+          - "v2.7.2"
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -73,7 +73,7 @@ jobs:
         version:
           - ""
           - "latest"
-          - "v2.5.0"
+          - "v2.7.0"
           - "655e8ede5178280b2a640e185bc4a343aed0f54e"
     runs-on: ${{ matrix.os }}
     permissions:
@@ -135,8 +135,8 @@ jobs:
         version:
           - ""
           - "latest"
-          - "v2.5"
-          - "v2.5.0"
+          - "v2.7"
+          - "v2.7.1"
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read

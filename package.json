@@ -43,7 +43,7 @@
     "yaml": "^2.8.2"
   },
   "devDependencies": {
-    "@typescript-eslint/eslint-plugin": "^8.49.0",
+    "@typescript-eslint/eslint-plugin": "^8.50.0",
     "@typescript-eslint/parser": "^8.32.1",
     "@vercel/ncc": "^0.38.4",
     "eslint": "^8.57.1",

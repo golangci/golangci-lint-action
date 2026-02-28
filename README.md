@@ -56,7 +56,7 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.6
+          version: v2.10
 ```
 
 </details>
@@ -94,7 +94,7 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.6
+          version: v2.10
 ```
 
 You will also likely need to add the following `.gitattributes` file to ensure that line endings for Windows builds are properly formatted:
@@ -120,7 +120,7 @@ on:
 
 env:
   GO_VERSION: stable
-  GOLANGCI_LINT_VERSION: v2.6
+  GOLANGCI_LINT_VERSION: v2.10
 
 jobs:
   detect-modules:
@@ -179,7 +179,7 @@ jobs:
     with:
       os: ${{ matrix.os }}
       go-version: ${{ matrix.go-version }}
-      golangci-lint-version: v2.6
+      golangci-lint-version: v2.10
 ```
 
 ```yaml
@@ -201,7 +201,7 @@ on:
       golangci-lint-version:
         description: 'Golangci-lint version'
         type: string
-        default: 'v2.6'
+        default: 'v2.10'
 
 jobs:
   detect-modules:
@@ -297,7 +297,7 @@ When `install-mode` is:
 ```yml
 uses: golangci/golangci-lint-action@v9
 with:
-  version: v2.6
+  version: v2.10
   # ...
 ```
 

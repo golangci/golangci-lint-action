@@ -1,4 +1,4 @@
-version: v2.6.1
+version: v2.10.1
 name: custom-golangci-lint
 #destination: ./zzz/path/
 

@@ -247,7 +247,6 @@ You will also likely need to add the following `.gitattributes` file to ensure t
 
 * `v9.0.0` requires Nodejs runtime [`node24`](https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/)
 * `v8.0.0` works with `golangci-lint` version >= `v2.1.0`
-* `v8.0.0` works with `golangci-lint` version >= `v2.1.0`
 * `v7.0.0` supports golangci-lint v2 only.
 * `v6.0.0+` removes `annotations` option, removes the default output format (`github-actions`).
 * `v5.0.0+` removes `skip-pkg-cache` and `skip-build-cache` because the cache related to Go itself is already handled by `actions/setup-go`.

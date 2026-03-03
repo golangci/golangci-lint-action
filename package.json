@@ -27,19 +27,19 @@
     "node": ">=24.0.0"
   },
   "dependencies": {
-    "@actions/cache": "^5.0.3",
-    "@actions/core": "^2.0.2",
-    "@actions/exec": "^2.0.0",
-    "@actions/github": "^7.0.0",
+    "@actions/cache": "^6.0.0",
+    "@actions/core": "^3.0.0",
+    "@actions/exec": "^3.0.0",
+    "@actions/github": "^9.0.0",
     "@actions/http-client": "^3.0.0",
-    "@actions/tool-cache": "^3.0.0",
+    "@actions/tool-cache": "^4.0.0",
     "@octokit/plugin-retry": "^6.1.0",
-    "@types/node": "^25.0.10",
+    "@types/node": "^25.3.2",
     "@types/semver": "^7.7.1",
     "@types/tmp": "^0.2.6",
     "@types/which": "^3.0.4",
     "tmp": "^0.2.5",
-    "which": "^6.0.0",
+    "which": "^6.0.1",
     "yaml": "^2.8.2"
   },
   "devDependencies": {

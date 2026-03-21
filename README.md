@@ -49,14 +49,14 @@ jobs:
     name: lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
           go-version: stable
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.10
+          version: v2.11
 ```
 
 </details>
@@ -87,14 +87,14 @@ jobs:
     name: lint
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
           go-version: ${{ matrix.go }}
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.10
+          version: v2.11
 ```
 
 You will also likely need to add the following `.gitattributes` file to ensure that line endings for Windows builds are properly formatted:
@@ -120,7 +120,7 @@ on:
 
 env:
   GO_VERSION: stable
-  GOLANGCI_LINT_VERSION: v2.10
+  GOLANGCI_LINT_VERSION: v2.11
 
 jobs:
   detect-modules:
@@ -128,7 +128,7 @@ jobs:
     outputs:
       modules: ${{ steps.set-modules.outputs.modules }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -142,7 +142,7 @@ jobs:
       matrix:
         modules: ${{ fromJSON(needs.detect-modules.outputs.modules) }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -179,7 +179,7 @@ jobs:
     with:
       os: ${{ matrix.os }}
       go-version: ${{ matrix.go-version }}
-      golangci-lint-version: v2.10
+      golangci-lint-version: v2.11
 ```
 
 ```yaml
@@ -201,7 +201,7 @@ on:
       golangci-lint-version:
         description: 'Golangci-lint version'
         type: string
-        default: 'v2.10'
+        default: 'v2.11'
 
 jobs:
   detect-modules:
@@ -209,7 +209,7 @@ jobs:
     outputs:
       modules: ${{ steps.set-modules.outputs.modules }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
           go-version: ${{ inputs.go-version }}
@@ -224,7 +224,7 @@ jobs:
       matrix:
         modules: ${{ fromJSON(needs.detect-modules.outputs.modules) }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
           go-version: ${{ inputs.go-version }}
@@ -296,7 +296,7 @@ When `install-mode` is:
 ```yml
 uses: golangci/golangci-lint-action@v9
 with:
-  version: v2.10
+  version: v2.11
   # ...
 ```
 

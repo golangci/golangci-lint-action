@@ -132,6 +132,10 @@ async function runVerify(binPath: string, userArgsMap: Map<string, string>, cmdA
     cmdVerify += ` --config=${userArgsMap.get("config")}`
   }
 
+  if (userArgsMap.get("verify-with-schema")) {
+    cmdVerify += ` --schema=${userArgsMap.get("verify-with-schema")}`
+  }
+
   core.info(`Running [${cmdVerify}] in [${cmdArgs.cwd || process.cwd()}] ...`)
 
   await execCommand(cmdVerify, cmdArgs).then(printOutput)

@@ -332,7 +332,7 @@ The mode to install golangci-lint: it can be `binary`, `goinstall`, or `none`.
 
 The default value is `binary`.
 
-`goinstall` is not recommended, more explanations [here](https://golangci-lint.run/docs/welcome/install/#install-from-sources).
+`goinstall` is not recommended, more explanations [here](https://golangci-lint.run/docs/welcome/install/local/#install-from-sources).
 
 <details>
 <summary>Example</summary>

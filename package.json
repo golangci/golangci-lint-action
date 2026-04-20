@@ -42,6 +42,9 @@
     "which": "^6.0.0",
     "yaml": "^2.8.3"
   },
+  "overrides": {
+    "undici": "^6.24.0"
+  },
   "devDependencies": {
     "@eslint/compat": "^2.0.2",
     "@eslint/eslintrc": "^3.3.3",

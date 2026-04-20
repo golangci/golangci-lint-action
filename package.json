@@ -39,7 +39,7 @@
     "@types/tmp": "^0.2.6",
     "@types/which": "^3.0.4",
     "tmp": "^0.2.5",
-    "which": "^6.0.0",
+    "which": "^6.0.1",
     "yaml": "^2.8.3"
   },
   "devDependencies": {

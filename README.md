@@ -646,6 +646,22 @@ build and run the custom version of golangci-lint.
 
 For more information, see [module plugin system](https://golangci-lint.run/docs/plugins/module-plugins/).
 
+## Tips
+
+### Using Renovate to update the golangci-lint version
+
+[Renovate](https://docs.renovatebot.com/) can update both the action and the
+`golangci-lint` version it uses via its [github-actions manager](https://docs.renovatebot.com/modules/manager/github-actions/#commonly-used-community-actions)
+which is included in presets like `config:recommended`.
+
+It can also be enabled explicitly in `renovate.json`:
+
+```json
+{
+  "enabledManagers": ["github-actions"]
+}
+```
+
 ## Performance
 
 The action was implemented with performance in mind:

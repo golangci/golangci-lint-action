@@ -1,0 +1,172 @@
+baseURL: https://golangci-lint.run
+languageCode: en-us
+title: Golangci-lint
+
+enableRobotsTXT: true
+
+enableGitInfo: true
+
+markup:
+  highlight:
+    noClasses: false
+  goldmark:
+    renderer:
+      unsafe: true
+    extensions:
+      passthrough:
+        delimiters:
+          block: [['\[', '\]'], ['$$', '$$']]
+          inline: [['\(', '\)']]
+        enable: true
+
+enableInlineShortcodes: true
+
+defaultContentLanguage: en
+
+module:
+  hugoVersion:
+    extended: true
+    min: "0.148.1"
+
+  imports:
+    - path: github.com/imfing/hextra
+
+outputs:
+  home: [HTML]
+  page: [HTML]
+  section: [HTML, RSS]
+
+menu:
+  main:
+    - name: Documentation
+      pageRef: /docs
+      weight: 1
+    - identifier: donate
+      name: "Support us"
+      pageRef: /docs/donate/
+      weight: 2
+      params:
+        icon: "heart-red"
+    - identifier: linters
+      name: Linters
+      pageRef: /docs/linters/
+      weight: 3
+    - name: Formatters
+      pageRef: /docs/formatters/
+      weight: 4
+    - name: Search
+      weight: 5
+      params:
+        type: search
+    - name: Theme Toggle
+      weight: 6
+      params:
+        type: theme-toggle
+    - name: GitHub
+      weight: 7
+      url: "https://github.com/golangci/golangci-lint"
+      params:
+        icon: github
+  sidebar:
+    - identifier: more
+      name: More
+      params:
+        type: separator
+      weight: 2
+    - identifier: doc-v1
+      name: "Documentation v1 ↗"
+      url: "https://golangci.github.io/legacy-v1-doc/"
+      weight: 3
+
+
+params:
+  description: Golangci-lint is a fast linters runner for Go.
+
+  banner:
+    key: 'banner-2025-001'
+    message: |
+      If golangci-lint is useful for you, please consider [supporting us](/docs/donate/)! 
+      You are the only one who can make a difference!
+
+  navbar:
+    displayTitle: true
+    displayLogo: true
+    logo:
+      path: images/logo-circle.svg
+      dark: images/logo-nocircle.svg
+    width: wide
+
+  theme:
+    # light | dark | system
+    default: system
+    displayToggle: true
+
+  footer:
+    enable: true
+    displayCopyright: false
+    displayPoweredBy: true
+    width: wide
+    links:
+      - title: Bluesky
+        url: "https://bsky.app/profile/golangci-lint.run"
+        icon: bluesky
+      - title: Mastodon
+        url: "https://fosstodon.org/@golangcilint"
+        icon: mastodon
+      - title: Twitter
+        url: "https://twitter.com/golangci"
+        icon: twitter
+      - title: Slack
+        url: "https://gophers.slack.com/archives/CS0TBRKPC"
+        icon: slack
+      - title: GitHub
+        url: "https://github.com/golangci/golangci-lint"
+        icon: github
+
+  # Display the last modification date
+  displayUpdatedDate: true
+  dateFormat: "2006-01-02 03:04:05"
+
+  # Search
+  # flexsearch is enabled by default
+  search:
+    enable: true
+    type: flexsearch
+
+    flexsearch:
+      # index page by: content | summary | heading | title
+      index: content
+      # full | forward | reverse | strict
+      # https://github.com/nextapps-de/flexsearch/#tokenizer-prefix-search
+      tokenize: forward
+
+  editURL:
+    enable: true
+    base: "https://github.com/golangci/golangci-lint/edit/main/docs/content"
+
+  blog:
+    list:
+      displayTags: true
+      # date | lastmod | publishDate | title | weight
+      sortBy: date
+      sortOrder: desc # or "asc"
+      # Pagination
+      pagerSize: 20
+
+    article:
+      displayPagination: true
+
+  toc:
+    displayTags: true
+
+  highlight:
+    copy:
+      enable: true
+      # hover | always
+      display: hover
+
+  page:
+    # full (100%), wide (90rem), normal (80rem)
+    width: full
+    tabs:
+      sync: false

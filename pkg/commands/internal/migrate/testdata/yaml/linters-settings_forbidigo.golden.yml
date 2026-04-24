@@ -1,0 +1,16 @@
+version: "2"
+linters:
+  settings:
+    forbidigo:
+      forbid:
+        - pattern: ^print(ln)?$
+        - pattern: ^fmt\.Print.*$
+          msg: Do not commit print statements.
+        - pattern: fmt\.Print.*(# Do not commit print statements\.)?
+        - pattern: ^spew\.(ConfigState\.)?Dump$
+        - pattern: ^v1.Dump$
+          pkg: ^example.com/pkg/api/v1$
+        - pkg: ^github.com/howeyc/gopass$
+          msg: github.com/howeyc/gopass is archived, use golang.org/x/term instead
+      exclude-godoc-examples: false
+      analyze-types: true

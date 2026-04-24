@@ -1,0 +1,99 @@
+name: "Release a tag"
+on:
+  push:
+    tags:
+      - v*
+
+permissions:
+  contents: write
+  # Allow the workflow to write attestations.
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      # https://github.com/actions/setup-go#supported-version-syntax
+      # ex:
+      # - 1.18beta1 -> 1.18.0-beta.1
+      # - 1.18rc1 -> 1.18.0-rc.1
+      GO_VERSION: '1.26'
+      CHOCOLATEY_VERSION: 2.2.0
+    steps:
+      # temporary workaround for an error in free disk space action
+      # https://github.com/jlumbroso/free-disk-space/issues/14
+      - name: Update Package List and Remove Dotnet
+        run: |
+          sudo apt-get update
+          sudo apt-get remove -y '^dotnet-.*'
+
+      # https://github.com/marketplace/actions/free-disk-space-ubuntu
+      - name: Free Disk Space
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # main
+        with:
+          # this might remove tools that are actually needed
+          tool-cache: false
+
+          # all of these default to true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: false
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+
+#      - name: Install chocolatey
+#        run: |
+#          mono --version
+#          mkdir -p /opt/chocolatey
+#          wget -q -O - "https://github.com/chocolatey/choco/releases/download/${CHOCOLATEY_VERSION}/chocolatey.v${CHOCOLATEY_VERSION}.tar.gz" | tar -xz -C "/opt/chocolatey"
+#          echo '#!/bin/bash' >> /usr/local/bin/choco
+#          echo 'mono /opt/chocolatey/choco.exe $@' >> /usr/local/bin/choco
+#          chmod +x /usr/local/bin/choco
+#          choco --version
+
+      - name: Install snapcraft
+        run: sudo snap install snapcraft --classic
+
+      - name: Setup Syft
+        uses: anchore/sbom-action/download-syft@v0.24.0
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Login do docker.io
+        run: docker login -u golangci -p ${{ secrets.GOLANGCI_LINT_DOCKER_TOKEN }}
+
+      - name: Create release
+        id: goreleaser
+        uses: goreleaser/goreleaser-action@e24998b8b67b290c2fa8b7c14fcfa7de2c5c9b8c # v7.1.0
+        with:
+          version: latest
+          args: release --clean --timeout=90m
+        env:
+          AUR_KEY: ${{ secrets.AUR_KEY }}
+          CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        with:
+          subject-checksums: ./dist/golangci-lint-${{ fromJSON(steps.goreleaser.outputs.metadata).version }}-checksums.txt
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        with:
+          subject-checksums: ./dist/digests.txt
+          github-token: ${{ secrets.GITHUB_TOKEN }}

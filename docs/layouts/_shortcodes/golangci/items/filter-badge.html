@@ -1,0 +1,30 @@
+{{- /* Modified version of https://github.com/imfing/hextra/blob/v0.10.0/layouts/_shortcodes/badge.html */ -}}
+{{- /*
+Creates a badge with the given "data-filter" value.
+
+@param {string} content The content of the badge.
+@param {string} type The type of the badge.
+@param {string} data The "data-filter" value for the badge.
+@param {string} class The class of the badge.
+@param {boolean} border Whether to render a border around the badge.
+@param {string} icon The icon of the badge.
+
+@example {{< golangci/items/filter-badge icon="inbox" data="my-data" content="Text" class="my-class" type="info" border=true >}}
+*/}}
+
+{{- $content := .Get "content" -}}
+{{- $color := .Get "color" | default "" -}}
+{{- $data := .Get "data" | default "" -}}
+{{- $class := .Get "class" | default "" -}}
+{{- $icon := .Get "icon" | default "" -}}
+{{- $border := .Get "border" | default false -}}
+
+{{- partial "shortcodes/badge" (dict
+  "data" $data
+  "class" (printf "hx:mt-2 hx:mx-1 hx:cursor-pointer %s" $class)
+  "content" $content
+  "color" $color
+  "border" $border
+  "icon" $icon
+  )
+-}}

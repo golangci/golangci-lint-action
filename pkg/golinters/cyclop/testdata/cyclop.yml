@@ -1,0 +1,6 @@
+version: "2"
+
+linters:
+  settings:
+    cyclop:
+      max-complexity: 15

@@ -1,0 +1,263 @@
+# This configuration file is not a recommendation.
+#
+# We intentionally use a limited set of linters.
+# This configuration file is used with different version of golangci-lint to avoid regressions:
+# the linters can change between version,
+# their configuration may be not compatible or their reports can be different,
+# and this can break some of our tests.
+# Also, some linters are not relevant for the project (e.g. linters related to SQL).
+#
+# We have specific constraints, so we use a specific configuration.
+#
+# See the file `.golangci.reference.yml` to have a list of all available configuration options.
+
+version: "2"
+
+linters:
+  default: none
+  # This list of linters is not a recommendation (same thing for all this configuration file).
+  # We intentionally use a limited set of linters.
+  # See the comment on top of this file.
+  enable:
+    - bodyclose
+    - copyloopvar
+    - depguard
+    - dogsled
+    - dupl
+    - errcheck
+    - errorlint
+    - funlen
+    - gocheckcompilerdirectives
+    - gochecknoinits
+    - goconst
+    - gocritic
+    - gocyclo
+    - godox
+    - mnd
+    - goprintffuncname
+    - gosec
+    - govet
+    - intrange
+    - ineffassign
+    - lll
+    - misspell
+    - nakedret
+    - noctx
+    - nolintlint
+    - revive
+    - staticcheck
+    - testifylint
+    - unconvert
+    - unparam
+    - unused
+    - whitespace
+
+  settings:
+    depguard:
+      rules:
+        logger:
+          deny:
+            # logging is allowed only by logutils.Log,
+            - pkg: "github.com/sirupsen/logrus"
+              desc: logging is allowed only by logutils.Log.
+            - pkg: "github.com/pkg/errors"
+              desc: Should be replaced by standard lib errors package.
+            - pkg: "github.com/instana/testify"
+              desc: It's a fork of github.com/stretchr/testify.
+          files:
+            # logrus is allowed to use only in logutils package.
+            - "!**/pkg/logutils/**.go"
+    dupl:
+      threshold: 100
+    funlen:
+      lines: -1 # the number of lines (code + empty lines) is not a right metric and leads to code without empty line or one-liner.
+      statements: 50
+    goconst:
+      min-len: 2
+      min-occurrences: 3
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - experimental
+        - opinionated
+        - performance
+        - style
+      disabled-checks:
+        - dupImport # https://github.com/go-critic/go-critic/issues/845
+        - ifElseChain
+        - octalLiteral
+        - whyNoLint
+    gocyclo:
+      min-complexity: 15
+    godox:
+      keywords:
+        - FIXME
+    mnd:
+      # don't include the "operation" and "assign"
+      checks:
+        - argument
+        - case
+        - condition
+        - return
+      ignored-numbers:
+        - '0'
+        - '1'
+        - '2'
+        - '3'
+      ignored-functions:
+        - strings.SplitN
+    govet:
+      settings:
+        printf:
+          funcs:
+            - (github.com/golangci/golangci-lint/v2/pkg/logutils.Log).Infof
+            - (github.com/golangci/golangci-lint/v2/pkg/logutils.Log).Warnf
+            - (github.com/golangci/golangci-lint/v2/pkg/logutils.Log).Errorf
+            - (github.com/golangci/golangci-lint/v2/pkg/logutils.Log).Fatalf
+      enable:
+        - nilness
+        - shadow
+    errorlint:
+      asserts: false
+    lll:
+      line-length: 140
+    misspell:
+      locale: US
+      ignore-rules:
+        - "importas" # linter name
+    nolintlint:
+      allow-unused: false # report any unused nolint directives
+      require-explanation: true # require an explanation for nolint directives
+      require-specific: true # require nolint directives to be specific about which linter is being skipped
+    revive:
+      rules:
+        - name: indent-error-flow
+        - name: unexported-return
+          disabled: true
+        - name: unused-parameter
+        - name: unused-receiver
+
+  exclusions:
+    presets:
+      - comments
+      - std-error-handling
+      - common-false-positives
+      - legacy
+    paths:
+      - test/testdata_etc # test files
+      - internal/go # extracted from Go code
+      - internal/x # extracted from x/tools code
+      - pkg/goformatters/gci/internal # extracted from gci code
+      - pkg/goanalysis/runner_checker.go # extracted from x/tools code
+    rules:
+      - path: (.+)_test\.go
+        linters:
+          - dupl
+          - mnd
+          - lll
+          - goconst
+
+      - path: pkg/commands/internal/migrate/.+
+        linters:
+          - goconst
+
+      - path: scripts/website/dump_info/thanks.go
+        linters:
+          - goconst
+
+      - path: pkg/result/processors/.+
+        text: "string `(go\\.mod|errcheck|revive|gosec|error|high)` has \\d+ occurrences, make it a constant"
+        linters:
+          - goconst
+
+      - path: pkg/commands/.+
+        text: "string `(\\(devel\\)|unknown)` has \\d+ occurrences, make it a constant"
+        linters:
+          - goconst
+
+      - path: pkg/printers/.+
+        text: "string `(golangci-lint|warning)` has \\d+ occurrences, make it a constant"
+        linters:
+          - goconst
+
+      - path: pkg/config/output(_test)?.go
+        text: "string `(file|linter|severity)` has \\d+ occurrences, make it a constant"
+        linters:
+          - goconst
+
+      # Based on existing code, the modifications should be limited to make maintenance easier.
+      - path: pkg/golinters/unused/unused.go
+        linters: [gocritic]
+        text: "rangeValCopy: each iteration copies 160 bytes \\(consider pointers or indexing\\)"
+
+      # Related to the result of computation but divided multiple times by 1024.
+      - path: test/bench/bench_test.go
+        linters: [gosec]
+        text: "G115: integer overflow conversion uint64 -> int"
+
+      # The files created during the tests don't need to be secured.
+      - path: scripts/website/expand_templates/linters_test.go
+        linters: [gosec]
+        text: "G306: Expect WriteFile permissions to be 0600 or less"
+
+      # For compatibility with previous versions.
+      # Also, those reports are not relevant.
+      - linters: [gosec]
+        text: "(G704: SSRF via taint analysis|G703: Path traversal via taint analysis|G702: Command injection via taint analysis|G115: integer overflow conversion uintptr)"
+
+      # Related to migration command.
+      - path: pkg/commands/internal/migrate/two/
+        linters:
+          - lll
+
+      # Related to migration command.
+      - path: pkg/commands/internal/migrate/
+        linters:
+          - gocritic
+        text: "hugeParam:"
+
+      # The codes are close but this is not duplication.
+      - path: pkg/commands/(formatters|linters).go
+        linters:
+          - dupl
+
+      # Deprecated linters
+      - path: pkg/lint/lintersdb/builder_linter.go
+        text: "SA1019: wsl.NewV4 is deprecated: use NewV5 instead."
+        linters:
+          - staticcheck
+      - path: pkg/golinters/wsl/wsl.go
+        text: "SA1019: config.WSLv4Settings is deprecated: use WSLv5Settings instead."
+        linters:
+          - staticcheck
+      - path: pkg/golinters/gomodguard/gomodguard.go
+        text: "SA1019: config.GoModGuardSettings is deprecated: use GoModGuardv2Settings instead."
+        linters:
+          - staticcheck
+      - path: pkg/golinters/gomodguard/
+        linters:
+          - dupl
+      # TODO(ldez): temporary fix, it will change in the future.
+      - path: internal/cache/cache.go
+        linters:
+          - goconst
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    gofmt:
+      rewrite-rules:
+        - pattern: 'interface{}'
+          replacement: 'any'
+    goimports:
+      local-prefixes:
+        - github.com/golangci/golangci-lint/v2
+  exclusions:
+    paths:
+      - test/testdata_etc # test files
+      - internal/go # extracted from Go code
+      - internal/x # extracted from x/tools code
+      - pkg/goformatters/gci/internal # extracted from gci code
+      - pkg/goanalysis/runner_checker.go # extracted from x/tools code

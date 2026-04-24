@@ -1,0 +1,6 @@
+firstPRWelcomeComment: Hey, thank you for opening your first Pull Request !
+
+# Comment to be posted to on first time issues
+firstIssueWelcomeComment: >
+  Hey, thank you for opening your first Issue ! 🙂
+  If you would like to contribute we have a [guide for contributors](https://golangci-lint.run/docs/contributing/).

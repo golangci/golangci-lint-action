@@ -1,0 +1,6 @@
+version: "2"
+
+linters:
+  settings:
+    tagalign:
+      sort: false

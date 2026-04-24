@@ -1,1 +1,4 @@
-dist/** linguist-generated=true
+go.sum linguist-generated
+assets/* linguist-generated
+*       text=auto eol=lf
+*.ps1   text eol=crlf

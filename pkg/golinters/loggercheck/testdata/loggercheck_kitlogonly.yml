@@ -1,0 +1,10 @@
+version: "2"
+
+linters:
+  settings:
+    loggercheck:
+      kitlog: true
+      klog: false
+      logr: false
+      slog: false
+      zap: false

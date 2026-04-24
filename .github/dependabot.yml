@@ -1,15 +1,55 @@
 version: 2
 updates:
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: "sunday"
+      time: "11:00" # 11am UTC
+    ignore:
+      # Ignore forked linters because of their versioning issues.
+      - dependency-name: "github.com/golangci/dupl"
+      - dependency-name: "github.com/golangci/gofmt"
+      - dependency-name: "github.com/golangci/swaggoswag"
+      - dependency-name: "github.com/golangci/unconvert"
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: weekly
-  - package-ecosystem: npm
-    directory: "/"
     groups:
-      dev-dependencies:
-        dependency-type: development
-      dependencies:
-        dependency-type: production
+      github-actions:
+        patterns:
+          - "*"  # Group all updates into a single larger pull request.
+  - package-ecosystem: docker
+    directory: "/build"
     schedule:
       interval: weekly
+    groups:
+      docker:
+        patterns:
+          - "*"  # Group all updates into a single larger pull request.
+  - package-ecosystem: gomod
+    directory: "/scripts/gen_github_action_config"
+    schedule:
+      interval: weekly
+    groups:
+      scripts:
+        patterns:
+          - "*"  # Group all updates into a single larger pull request.
+  - package-ecosystem: gomod
+    directories:
+      - pkg/golinters/arangolint/testdata/
+      - pkg/golinters/clickhouselint/testdata/
+      - pkg/golinters/ginkgolinter/testdata/
+      - pkg/golinters/loggercheck/testdata/
+      - pkg/golinters/protogetter/testdata/
+      - pkg/golinters/spancheck/testdata/
+      - pkg/golinters/zerologlint/testdata/
+    groups:
+      linter-testdata:
+        patterns:
+          - "*"  # Group all updates into a single larger pull request.
+    schedule:
+      interval: monthly
+      day: "wednesday"
+      time: "11:00" # 11am UTC

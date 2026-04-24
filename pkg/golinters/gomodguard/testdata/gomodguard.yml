@@ -1,0 +1,12 @@
+version: "2"
+
+linters:
+  settings:
+    gomodguard_v2:
+      allowed:
+        - module: golang.org/x/mod
+      blocked:
+        - module: gopkg.in/yaml.v3
+          reason: "This is an example of a reason."
+          recommendations:
+            - github.com/kylelemons/go-gypsy

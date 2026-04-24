@@ -1,0 +1,1070 @@
+[
+  {
+    "name": "arangolint",
+    "desc": "opinionated best practices for arangodb client",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/Crocmagnon/arangolint",
+    "internal": false,
+    "isSlow": true,
+    "since": "v2.2.0"
+  },
+  {
+    "name": "asasalint",
+    "desc": "check for pass []any as any in variadic func(...any)",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/alingse/asasalint",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.47.0"
+  },
+  {
+    "name": "asciicheck",
+    "desc": "checks that all code identifiers does not have non-ASCII symbols in the name",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/golangci/asciicheck",
+    "internal": false,
+    "isSlow": false,
+    "since": "v1.26.0"
+  },
+  {
+    "name": "bidichk",
+    "desc": "Checks for dangerous unicode character sequences",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/breml/bidichk",
+    "internal": false,
+    "isSlow": false,
+    "since": "v1.43.0"
+  },
+  {
+    "name": "bodyclose",
+    "desc": "checks whether HTTP response body is closed successfully",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/timakin/bodyclose",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.18.0"
+  },
+  {
+    "name": "canonicalheader",
+    "desc": "canonicalheader checks whether net/http.Header uses canonical header",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/lasiar/canonicalheader",
+    "internal": false,
+    "canAutoFix": true,
+    "isSlow": true,
+    "since": "v1.58.0"
+  },
+  {
+    "name": "containedctx",
+    "desc": "containedctx is a linter that detects struct contained context.Context field",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/sivchari/containedctx",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.44.0"
+  },
+  {
+    "name": "contextcheck",
+    "desc": "check whether the function uses a non-inherited context",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/kkHAIKE/contextcheck",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.43.0"
+  },
+  {
+    "name": "copyloopvar",
+    "desc": "a linter detects places where loop variables are copied",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/karamaru-alpha/copyloopvar",
+    "internal": false,
+    "canAutoFix": true,
+    "isSlow": false,
+    "since": "v1.57.0"
+  },
+  {
+    "name": "cyclop",
+    "desc": "checks function and package cyclomatic complexity",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/bkielbasa/cyclop",
+    "internal": false,
+    "isSlow": false,
+    "since": "v1.37.0"
+  },
+  {
+    "name": "decorder",
+    "desc": "check declaration order and count of types, constants, variables and functions",
+    "loadMode": 8199,
+    "originalURL": "https://gitlab.com/bosi/decorder",
+    "internal": false,
+    "isSlow": false,
+    "since": "v1.44.0"
+  },
+  {
+    "name": "depguard",
+    "desc": "Go linter that checks if package imports are in a list of acceptable packages",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/OpenPeeDeeP/depguard",
+    "internal": false,
+    "isSlow": false,
+    "since": "v1.4.0"
+  },
+  {
+    "name": "dogsled",
+    "desc": "Checks assignments with too many blank identifiers (e.g. x, _, _, _, := f())",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/alexkohler/dogsled",
+    "internal": false,
+    "isSlow": false,
+    "since": "v1.19.0"
+  },
+  {
+    "name": "dupl",
+    "desc": "Detects duplicate fragments of code.",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/mibk/dupl",
+    "internal": false,
+    "isSlow": false,
+    "since": "v1.0.0"
+  },
+  {
+    "name": "dupword",
+    "desc": "Checks for duplicate words in the source code",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/Abirdcfly/dupword",
+    "internal": false,
+    "canAutoFix": true,
+    "isSlow": false,
+    "since": "v1.50.0"
+  },
+  {
+    "name": "durationcheck",
+    "desc": "check for two durations multiplied together",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/charithe/durationcheck",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.37.0"
+  },
+  {
+    "name": "embeddedstructfieldcheck",
+    "desc": "Embedded types should be at the top of the field list of a struct, and there must be an empty line separating embedded fields from regular fields.",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/manuelarte/embeddedstructfieldcheck",
+    "internal": false,
+    "isSlow": false,
+    "since": "v2.2.0"
+  },
+  {
+    "name": "errcheck",
+    "desc": "errcheck is a program for checking for unchecked errors in Go code. These unchecked errors can be critical bugs in some cases",
+    "groups": [
+      "standard"
+    ],
+    "loadMode": 8767,
+    "originalURL": "https://github.com/kisielk/errcheck",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.0.0"
+  },
+  {
+    "name": "errchkjson",
+    "desc": "Checks types passed to the json encoding functions. Reports unsupported types and reports occurrences where the check for the returned error can be omitted.",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/breml/errchkjson",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.44.0"
+  },
+  {
+    "name": "errname",
+    "desc": "Checks that sentinel errors are prefixed with the `Err` and error types are suffixed with the `Error`.",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/Antonboom/errname",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.42.0"
+  },
+  {
+    "name": "errorlint",
+    "desc": "Find code that can cause problems with the error wrapping scheme introduced in Go 1.13.",
+    "loadMode": 8767,
+    "originalURL": "https://codeberg.org/polyfloyd/go-errorlint",
+    "internal": false,
+    "canAutoFix": true,
+    "isSlow": true,
+    "since": "v1.32.0"
+  },
+  {
+    "name": "exhaustive",
+    "desc": "check exhaustiveness of enum switch statements",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/nishanths/exhaustive",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.28.0"
+  },
+  {
+    "name": "exhaustruct",
+    "desc": "Checks if all structure fields are initialized",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/GaijinEntertainment/go-exhaustruct",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.46.0"
+  },
+  {
+    "name": "exptostd",
+    "desc": "Detects functions from golang.org/x/exp/ that can be replaced by std functions.",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/ldez/exptostd",
+    "internal": false,
+    "canAutoFix": true,
+    "isSlow": true,
+    "since": "v1.63.0"
+  },
+  {
+    "name": "forbidigo",
+    "desc": "Forbids identifiers",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/ashanbrown/forbidigo",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.34.0"
+  },
+  {
+    "name": "forcetypeassert",
+    "desc": "Find forced type assertions",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/gostaticanalysis/forcetypeassert",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.38.0"
+  },
+  {
+    "name": "funcorder",
+    "desc": "checks the order of functions, methods, and constructors",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/manuelarte/funcorder",
+    "internal": false,
+    "isSlow": false,
+    "since": "v2.1.0"
+  },
+  {
+    "name": "fatcontext",
+    "desc": "detects nested contexts in loops and function literals",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/Crocmagnon/fatcontext",
+    "internal": false,
+    "canAutoFix": true,
+    "isSlow": true,
+    "since": "v1.58.0"
+  },
+  {
+    "name": "funlen",
+    "desc": "Checks for long functions.",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/ultraware/funlen",
+    "internal": false,
+    "isSlow": false,
+    "since": "v1.18.0"
+  },
+  {
+    "name": "ginkgolinter",
+    "desc": "enforces standards of using ginkgo and gomega",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/nunnatsa/ginkgolinter",
+    "internal": false,
+    "canAutoFix": true,
+    "isSlow": true,
+    "since": "v1.51.0"
+  },
+  {
+    "name": "gocheckcompilerdirectives",
+    "desc": "Checks that go compiler directive comments (//go:) are valid.",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/leighmcculloch/gocheckcompilerdirectives",
+    "internal": false,
+    "isSlow": false,
+    "since": "v1.51.0"
+  },
+  {
+    "name": "gochecknoglobals",
+    "desc": "Check that no global variables exist.",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/leighmcculloch/gochecknoglobals",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.12.0"
+  },
+  {
+    "name": "gochecknoinits",
+    "desc": "Checks that no init functions are present in Go code",
+    "loadMode": 8199,
+    "internal": false,
+    "isSlow": false,
+    "since": "v1.12.0"
+  },
+  {
+    "name": "gochecksumtype",
+    "desc": "Run exhaustiveness checks on Go \"sum types\"",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/alecthomas/go-check-sumtype",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.55.0"
+  },
+  {
+    "name": "gocognit",
+    "desc": "Computes and checks the cognitive complexity of functions",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/uudashr/gocognit",
+    "internal": false,
+    "isSlow": false,
+    "since": "v1.20.0"
+  },
+  {
+    "name": "goconst",
+    "desc": "Finds repeated strings that could be replaced by a constant",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/jgautheron/goconst",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.0.0"
+  },
+  {
+    "name": "gocritic",
+    "desc": "Provides diagnostics that check for bugs, performance and style issues.\nExtensible without recompilation through dynamic rules.\nDynamic rules are written declaratively with AST patterns, filters, report message and optional suggestion.",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/go-critic/go-critic",
+    "internal": false,
+    "canAutoFix": true,
+    "isSlow": true,
+    "since": "v1.12.0"
+  },
+  {
+    "name": "gocyclo",
+    "desc": "Computes and checks the cyclomatic complexity of functions",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/fzipp/gocyclo",
+    "internal": false,
+    "isSlow": false,
+    "since": "v1.0.0"
+  },
+  {
+    "name": "godoclint",
+    "desc": "Checks Golang's documentation practice (godoc)",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/godoc-lint/godoc-lint",
+    "internal": false,
+    "isSlow": false,
+    "since": "v2.5.0"
+  },
+  {
+    "name": "godot",
+    "desc": "Check if comments end in a period",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/tetafro/godot",
+    "internal": false,
+    "canAutoFix": true,
+    "isSlow": false,
+    "since": "v1.25.0"
+  },
+  {
+    "name": "godox",
+    "desc": "Detects usage of FIXME, TODO and other keywords inside comments",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/matoous/godox",
+    "internal": false,
+    "isSlow": false,
+    "since": "v1.19.0"
+  },
+  {
+    "name": "err113",
+    "desc": "Check errors handling expressions",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/Djarvur/go-err113",
+    "internal": false,
+    "canAutoFix": true,
+    "isSlow": true,
+    "since": "v1.26.0"
+  },
+  {
+    "name": "goheader",
+    "desc": "Check if file header matches to pattern",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/denis-tingaikin/go-header",
+    "internal": false,
+    "canAutoFix": true,
+    "isSlow": false,
+    "since": "v1.28.0"
+  },
+  {
+    "name": "mnd",
+    "desc": "An analyzer to detect magic numbers.",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/tommy-muehle/go-mnd",
+    "internal": false,
+    "isSlow": false,
+    "since": "v1.22.0"
+  },
+  {
+    "name": "modernize",
+    "desc": "A suite of analyzers that suggest simplifications to Go code, using modern language and library features.",
+    "loadMode": 8767,
+    "originalURL": "https://pkg.go.dev/golang.org/x/tools/go/analysis/passes/modernize",
+    "internal": false,
+    "isSlow": true,
+    "since": "v2.6.0"
+  },
+  {
+    "name": "gomoddirectives",
+    "desc": "Manage the use of 'replace', 'retract', and 'excludes' directives in go.mod.",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/ldez/gomoddirectives",
+    "internal": false,
+    "isSlow": false,
+    "since": "v1.39.0"
+  },
+  {
+    "name": "gomodguard",
+    "desc": "Allow and blocklist linter for direct Go module dependencies. This is different from depguard where there are different block types for example version constraints and module recommendations.",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/ryancurrah/gomodguard",
+    "internal": false,
+    "isSlow": false,
+    "since": "v1.25.0"
+  },
+  {
+    "name": "goprintffuncname",
+    "desc": "Checks that printf-like functions are named with `f` at the end.",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/golangci/go-printf-func-name",
+    "internal": false,
+    "isSlow": false,
+    "since": "v1.23.0"
+  },
+  {
+    "name": "gosec",
+    "desc": "Inspects source code for security problems",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/securego/gosec",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.0.0"
+  },
+  {
+    "name": "gosmopolitan",
+    "desc": "Report certain i18n/l10n anti-patterns in your Go codebase",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/xen0n/gosmopolitan",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.53.0"
+  },
+  {
+    "name": "govet",
+    "desc": "Vet examines Go source code and reports suspicious constructs. It is roughly the same as 'go vet' and uses its passes.",
+    "groups": [
+      "standard"
+    ],
+    "loadMode": 8767,
+    "originalURL": "https://pkg.go.dev/cmd/vet",
+    "internal": false,
+    "canAutoFix": true,
+    "isSlow": true,
+    "since": "v1.0.0"
+  },
+  {
+    "name": "grouper",
+    "desc": "Analyze expression groups.",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/leonklingele/grouper",
+    "internal": false,
+    "isSlow": false,
+    "since": "v1.44.0"
+  },
+  {
+    "name": "iface",
+    "desc": "Detect the incorrect use of interfaces, helping developers avoid interface pollution.",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/uudashr/iface",
+    "internal": false,
+    "canAutoFix": true,
+    "isSlow": true,
+    "since": "v1.62.0"
+  },
+  {
+    "name": "importas",
+    "desc": "Enforces consistent import aliases",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/julz/importas",
+    "internal": false,
+    "canAutoFix": true,
+    "isSlow": true,
+    "since": "v1.38.0"
+  },
+  {
+    "name": "inamedparam",
+    "desc": "reports interfaces with unnamed method parameters",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/macabu/inamedparam",
+    "internal": false,
+    "isSlow": false,
+    "since": "v1.55.0"
+  },
+  {
+    "name": "ineffassign",
+    "desc": "detects when assignments to existing variables are not used",
+    "groups": [
+      "standard"
+    ],
+    "loadMode": 8199,
+    "originalURL": "https://github.com/gordonklaus/ineffassign",
+    "internal": false,
+    "isSlow": false,
+    "since": "v1.0.0"
+  },
+  {
+    "name": "interfacebloat",
+    "desc": "A linter that checks the number of methods inside an interface.",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/sashamelentyev/interfacebloat",
+    "internal": false,
+    "isSlow": false,
+    "since": "v1.49.0"
+  },
+  {
+    "name": "intrange",
+    "desc": "intrange is a linter to find places where for loops could make use of an integer range.",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/ckaznocha/intrange",
+    "internal": false,
+    "canAutoFix": true,
+    "isSlow": true,
+    "since": "v1.57.0"
+  },
+  {
+    "name": "iotamixing",
+    "desc": "checks if iotas are being used in const blocks with other non-iota declarations.",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/AdminBenni/iota-mixing",
+    "internal": false,
+    "isSlow": false,
+    "since": "v2.5.0"
+  },
+  {
+    "name": "ireturn",
+    "desc": "Accept Interfaces, Return Concrete Types",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/butuzov/ireturn",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.43.0"
+  },
+  {
+    "name": "lll",
+    "desc": "Reports long lines",
+    "loadMode": 8199,
+    "internal": false,
+    "isSlow": false,
+    "since": "v1.8.0"
+  },
+  {
+    "name": "loggercheck",
+    "desc": "Checks key value pairs for common logger libraries (kitlog,klog,logr,slog,zap).",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/timonwong/loggercheck",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.49.0"
+  },
+  {
+    "name": "maintidx",
+    "desc": "maintidx measures the maintainability index of each function.",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/yagipy/maintidx",
+    "internal": false,
+    "isSlow": false,
+    "since": "v1.44.0"
+  },
+  {
+    "name": "makezero",
+    "desc": "Find slice declarations with non-zero initial length",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/ashanbrown/makezero",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.34.0"
+  },
+  {
+    "name": "mirror",
+    "desc": "reports wrong mirror patterns of bytes/strings usage",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/butuzov/mirror",
+    "internal": false,
+    "canAutoFix": true,
+    "isSlow": true,
+    "since": "v1.53.0"
+  },
+  {
+    "name": "misspell",
+    "desc": "Finds commonly misspelled English words",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/golangci/misspell",
+    "internal": false,
+    "canAutoFix": true,
+    "isSlow": false,
+    "since": "v1.8.0"
+  },
+  {
+    "name": "musttag",
+    "desc": "enforce field tags in (un)marshaled structs",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/go-simpler/musttag",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.51.0"
+  },
+  {
+    "name": "nakedret",
+    "desc": "Checks that functions with naked returns are not longer than a maximum size (can be zero).",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/alexkohler/nakedret",
+    "internal": false,
+    "canAutoFix": true,
+    "isSlow": false,
+    "since": "v1.19.0"
+  },
+  {
+    "name": "nestif",
+    "desc": "Reports deeply nested if statements",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/nakabonne/nestif",
+    "internal": false,
+    "isSlow": false,
+    "since": "v1.25.0"
+  },
+  {
+    "name": "nilerr",
+    "desc": "Find the code that returns nil even if it checks that the error is not nil.",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/gostaticanalysis/nilerr",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.38.0"
+  },
+  {
+    "name": "nilnesserr",
+    "desc": "Reports constructs that checks for err != nil, but returns a different nil value error.\nPowered by nilness and nilerr.",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/alingse/nilnesserr",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.63.0"
+  },
+  {
+    "name": "nilnil",
+    "desc": "Checks that there is no simultaneous return of `nil` error and an invalid value.",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/Antonboom/nilnil",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.43.0"
+  },
+  {
+    "name": "nlreturn",
+    "desc": "Checks for a new line before return and branch statements to increase code clarity",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/ssgreg/nlreturn",
+    "internal": false,
+    "canAutoFix": true,
+    "isSlow": false,
+    "since": "v1.30.0"
+  },
+  {
+    "name": "noctx",
+    "desc": "Detects function and method with missing usage of context.Context",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/sonatard/noctx",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.28.0"
+  },
+  {
+    "name": "noinlineerr",
+    "desc": "Disallows inline error handling (`if err := ...; err != nil {`)",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/AlwxSin/noinlineerr",
+    "internal": false,
+    "canAutoFix": true,
+    "isSlow": true,
+    "since": "v2.2.0"
+  },
+  {
+    "name": "nonamedreturns",
+    "desc": "Reports all named returns",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/firefart/nonamedreturns",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.46.0"
+  },
+  {
+    "name": "nosprintfhostport",
+    "desc": "Checks for misuse of Sprintf to construct a host with port in a URL.",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/stbenjam/no-sprintf-host-port",
+    "internal": false,
+    "isSlow": false,
+    "since": "v1.46.0"
+  },
+  {
+    "name": "paralleltest",
+    "desc": "Detects missing usage of t.Parallel() method in your Go test",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/kunwardeep/paralleltest",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.33.0"
+  },
+  {
+    "name": "perfsprint",
+    "desc": "Checks that fmt.Sprintf can be replaced with a faster alternative.",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/catenacyber/perfsprint",
+    "internal": false,
+    "canAutoFix": true,
+    "isSlow": true,
+    "since": "v1.55.0"
+  },
+  {
+    "name": "prealloc",
+    "desc": "Find slice declarations that could potentially be pre-allocated",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/alexkohler/prealloc",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.19.0"
+  },
+  {
+    "name": "predeclared",
+    "desc": "find code that shadows one of Go's predeclared identifiers",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/nishanths/predeclared",
+    "internal": false,
+    "isSlow": false,
+    "since": "v1.35.0"
+  },
+  {
+    "name": "promlinter",
+    "desc": "Check Prometheus metrics naming via promlint",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/yeya24/promlinter",
+    "internal": false,
+    "isSlow": false,
+    "since": "v1.40.0"
+  },
+  {
+    "name": "protogetter",
+    "desc": "Reports direct reads from proto message fields when getters should be used",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/ghostiam/protogetter",
+    "internal": false,
+    "canAutoFix": true,
+    "isSlow": true,
+    "since": "v1.55.0"
+  },
+  {
+    "name": "reassign",
+    "desc": "Checks that package variables are not reassigned",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/curioswitch/go-reassign",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.49.0"
+  },
+  {
+    "name": "recvcheck",
+    "desc": "checks for receiver type consistency",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/raeperd/recvcheck",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.62.0"
+  },
+  {
+    "name": "revive",
+    "desc": "Fast, configurable, extensible, flexible, and beautiful linter for Go. Drop-in replacement of golint.",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/mgechev/revive",
+    "internal": false,
+    "canAutoFix": true,
+    "isSlow": true,
+    "since": "v1.37.0"
+  },
+  {
+    "name": "rowserrcheck",
+    "desc": "checks whether Rows.Err of rows is checked successfully",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/jingyugao/rowserrcheck",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.23.0"
+  },
+  {
+    "name": "sloglint",
+    "desc": "ensure consistent code style when using log/slog",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/go-simpler/sloglint",
+    "internal": false,
+    "canAutoFix": true,
+    "isSlow": true,
+    "since": "v1.55.0"
+  },
+  {
+    "name": "sqlclosecheck",
+    "desc": "Checks that sql.Rows, sql.Stmt, sqlx.NamedStmt, pgx.Query are closed.",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/ryanrolds/sqlclosecheck",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.28.0"
+  },
+  {
+    "name": "spancheck",
+    "desc": "Checks for mistakes with OpenTelemetry/Census spans.",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/jjti/go-spancheck",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.56.0"
+  },
+  {
+    "name": "staticcheck",
+    "desc": "It's the set of rules from staticcheck.",
+    "groups": [
+      "standard"
+    ],
+    "loadMode": 8767,
+    "originalURL": "https://github.com/dominikh/go-tools",
+    "internal": false,
+    "canAutoFix": true,
+    "isSlow": true,
+    "since": "v1.0.0"
+  },
+  {
+    "name": "tagalign",
+    "desc": "check that struct tags are well aligned",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/4meepo/tagalign",
+    "internal": false,
+    "canAutoFix": true,
+    "isSlow": false,
+    "since": "v1.53.0"
+  },
+  {
+    "name": "tagliatelle",
+    "desc": "Checks the struct tags.",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/ldez/tagliatelle",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.40.0"
+  },
+  {
+    "name": "testableexamples",
+    "desc": "linter checks if examples are testable (have an expected output)",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/maratori/testableexamples",
+    "internal": false,
+    "isSlow": false,
+    "since": "v1.50.0"
+  },
+  {
+    "name": "testifylint",
+    "desc": "Checks usage of github.com/stretchr/testify.",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/Antonboom/testifylint",
+    "internal": false,
+    "canAutoFix": true,
+    "isSlow": true,
+    "since": "v1.55.0"
+  },
+  {
+    "name": "testpackage",
+    "desc": "linter that makes you use a separate _test package",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/maratori/testpackage",
+    "internal": false,
+    "isSlow": false,
+    "since": "v1.25.0"
+  },
+  {
+    "name": "thelper",
+    "desc": "thelper detects tests helpers which do not start with the t.Helper() method.",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/kulti/thelper",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.34.0"
+  },
+  {
+    "name": "tparallel",
+    "desc": "tparallel detects inappropriate usage of t.Parallel() method in your Go test codes.",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/moricho/tparallel",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.32.0"
+  },
+  {
+    "name": "typecheck",
+    "desc": "Like the front-end of a Go compiler, parses and type-checks Go code",
+    "loadMode": 8199,
+    "internal": true,
+    "isSlow": false,
+    "since": "v1.3.0"
+  },
+  {
+    "name": "unconvert",
+    "desc": "Remove unnecessary type conversions",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/mdempsky/unconvert",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.0.0"
+  },
+  {
+    "name": "unparam",
+    "desc": "Reports unused function parameters",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/mvdan/unparam",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.9.0"
+  },
+  {
+    "name": "unqueryvet",
+    "desc": "detects SELECT * in SQL queries and SQL builders, preventing performance issues and encouraging explicit column selection",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/MirrexOne/unqueryvet",
+    "internal": false,
+    "isSlow": false,
+    "since": "v2.5.0"
+  },
+  {
+    "name": "unused",
+    "desc": "Checks Go code for unused constants, variables, functions and types",
+    "groups": [
+      "standard"
+    ],
+    "loadMode": 8767,
+    "originalURL": "https://github.com/dominikh/go-tools/tree/HEAD/unused",
+    "internal": false,
+    "isSlow": true,
+    "doesChangeTypes": true,
+    "since": "v1.20.0"
+  },
+  {
+    "name": "usestdlibvars",
+    "desc": "A linter that detect the possibility to use variables/constants from the Go standard library.",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/sashamelentyev/usestdlibvars",
+    "internal": false,
+    "canAutoFix": true,
+    "isSlow": false,
+    "since": "v1.48.0"
+  },
+  {
+    "name": "usetesting",
+    "desc": "Reports uses of functions with replacement inside the testing package.",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/ldez/usetesting",
+    "internal": false,
+    "canAutoFix": true,
+    "isSlow": true,
+    "since": "v1.63.0"
+  },
+  {
+    "name": "varnamelen",
+    "desc": "checks that the length of a variable's name matches its scope",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/blizzy78/varnamelen",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.43.0"
+  },
+  {
+    "name": "wastedassign",
+    "desc": "Finds wasted assignment statements",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/sanposhiho/wastedassign",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.38.0"
+  },
+  {
+    "name": "whitespace",
+    "desc": "Whitespace is a linter that checks for unnecessary newlines at the start and end of functions, if, for, etc.",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/ultraware/whitespace",
+    "internal": false,
+    "canAutoFix": true,
+    "isSlow": false,
+    "since": "v1.19.0"
+  },
+  {
+    "name": "wrapcheck",
+    "desc": "Checks that errors returned from external packages are wrapped",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/tomarrell/wrapcheck",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.32.0"
+  },
+  {
+    "name": "wsl",
+    "desc": "add or remove empty lines",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/bombsimon/wsl",
+    "internal": false,
+    "canAutoFix": true,
+    "isSlow": false,
+    "since": "v1.20.0",
+    "deprecation": {
+      "since": "v2.2.0",
+      "message": "new major version.",
+      "replacement": "wsl_v5"
+    }
+  },
+  {
+    "name": "wsl_v5",
+    "desc": "add or remove empty lines",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/bombsimon/wsl",
+    "internal": false,
+    "canAutoFix": true,
+    "isSlow": true,
+    "since": "v2.2.0"
+  },
+  {
+    "name": "zerologlint",
+    "desc": "Detects the wrong usage of `zerolog` that a user forgets to dispatch with `Send` or `Msg`",
+    "loadMode": 8767,
+    "originalURL": "https://github.com/ykadowak/zerologlint",
+    "internal": false,
+    "isSlow": true,
+    "since": "v1.53.0"
+  },
+  {
+    "name": "nolintlint",
+    "desc": "Reports ill-formed or insufficient nolint directives",
+    "loadMode": 8199,
+    "originalURL": "https://github.com/golangci/golangci-lint/tree/HEAD/pkg/golinters/nolintlint/internal",
+    "internal": false,
+    "canAutoFix": true,
+    "isSlow": false,
+    "since": "v1.26.0"
+  }
+]

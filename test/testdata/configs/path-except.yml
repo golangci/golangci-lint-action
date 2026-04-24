@@ -1,0 +1,19 @@
+version: "2"
+
+linters:
+  settings:
+    forbidigo:
+      forbid:
+        - pattern: fmt\.Print.*
+        - pattern: time.Sleep(# no sleeping!)?
+
+  exclusions:
+    rules:
+      # Apply forbidigo only to test files, exclude
+      # it everywhere else.
+      - path-except: _test\.go
+        linters:
+          - forbidigo
+
+run:
+  relative-path-mode: wd

@@ -1,0 +1,17 @@
+{{- /*
+Creates an exclusion presets configuration snippet.
+
+@example {{% golangci/exclusion-presets-snippet %}}
+*/ -}}
+
+{{- $presets := index $.Site.Data.exclusion_presets -}}
+
+```yaml
+linters:
+  exclusions:
+    presets:
+{{- range $key, $values := $presets }}
+      - {{ $key }}
+{{- end }}
+```
+

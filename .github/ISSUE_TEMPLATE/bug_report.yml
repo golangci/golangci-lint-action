@@ -1,17 +1,49 @@
 name: 🐞 Bug Report
 description: "Create a report to help us improve."
+labels: [bug]
 body:
   - type: checkboxes
     id: terms
     attributes:
       label: Welcome
       options:
-        - label: Yes, I understand that the GitHub action repository is not the repository of golangci-lint itself.
+        - label: Yes, I'm using a binary release within 2 latest [releases](https://github.com/golangci/golangci-lint/releases). Only such installations are supported.
           required: true
-        - label: Yes, I've searched similar issues on GitHub and didn't find any.
+        - label: Yes, I've searched similar [issues on GitHub](https://github.com/golangci/golangci-lint/issues) and didn't find any.
           required: true
-        - label: Yes, I've included all information below (version, config, etc).
+        - label: Yes, I've read the `typecheck` section of the [FAQ](https://golangci-lint.run/docs/welcome/faq/#why-do-you-have-typecheck-errors).
           required: true
+        - label: Yes, I've tried with the standalone [linter](https://golangci-lint.run/docs/linters/) if available (e.g., gocritic, go vet, etc.).
+          required: true
+        - label: I agree to follow this project's [Code of Conduct](https://github.com/golangci/golangci-lint?tab=coc-ov-file)
+          required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you install golangci-lint?
+      options:
+        - I don't know
+        - Official GitHub Action
+        - Official binary
+        - Brew
+        - MacPorts
+        - Chocolatey
+        - Scoop
+        - Docker
+        - go install
+        - Tools pattern
+        - go tool
+        - AUR
+        - Nix
+        - Deb
+        - RPM
+        - Other Linux package manager
+        - Via editor/IDE
+        - asdf/mise-en-place
+        - Other
+    validations:
+      required: true
 
   - type: textarea
     id: problem
@@ -21,29 +53,16 @@ body:
     validations:
       required: true
 
-  - type: input
-    id: golangci-lint-version
+  - type: textarea
+    id: version
     attributes:
       label: Version of golangci-lint
-    validations:
-      required: true
-
-  - type: input
-    id: github-action-version
-    attributes:
-      label: Version of the GitHub Action
-    validations:
-      required: true
-
-  - type: textarea
-    id: workflow-file
-    attributes:
-      label: Workflow file
       value: |-
         <details>
 
-        ```yml
-        <add your file content here>
+        ```console
+        $ golangci-lint --version
+        # Paste output here
         ```
 
         </details>
@@ -53,29 +72,56 @@ body:
   - type: textarea
     id: config
     attributes:
-      label: Golangci-lint configuration
+      label: Configuration
       value: |-
         <details>
 
-        ```yml
-        <add your file content here>
+        ```console
+        # paste configuration file or CLI flags here
         ```
 
         </details>
     validations:
       required: true
 
-  - type: input
+  - type: textarea
     id: go-env
     attributes:
-      label: Go version
+      label: Go environment
+      value: |-
+        <details>
+
+        ```console
+        $ go version && go env
+        # paste output here
+        ```
+
+        </details>
+    validations:
+      required: true
+
+  - type: textarea
+    id: verbose-output
+    attributes:
+      label: Verbose output of running
+      value: |-
+        <details>
+
+        ```console
+        $ golangci-lint cache clean
+        $ golangci-lint run -v
+        # paste output here
+        ```
+
+        </details>
     validations:
       required: true
 
   - type: textarea
     id: code-example
     attributes:
-      label: Code example or link to a public repository
+      label: A minimal reproducible example or link to a public repository
+      description: if your problem is related to a private repository, a minimal reproducible example is required.
       value: |-
         <details>
 
@@ -86,3 +132,18 @@ body:
         </details>
     validations:
       required: true
+
+  - type: checkboxes
+    id: validation
+    attributes:
+      label: Validation
+      options:
+        - label: Yes, I've included all the information above (example, version, config, etc.).
+          required: true
+
+  - type: checkboxes
+    id: supporter
+    attributes:
+      label: Supporter
+      options:
+        - label: I am a [sponsor/backer](https://donate.golangci.org) of this project.

@@ -1,0 +1,8 @@
+version: "2"
+
+formatters:
+  enable:
+    - gofumpt
+  settings:
+    gofumpt:
+      extra-rules: true

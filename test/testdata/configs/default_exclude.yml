@@ -1,0 +1,16 @@
+version: "2"
+
+linters:
+  settings:
+    staticcheck:
+      checks:
+        - all
+
+  exclusions:
+    presets:
+      - std-error-handling
+      - common-false-positives
+      - legacy
+
+run:
+  relative-path-mode: wd

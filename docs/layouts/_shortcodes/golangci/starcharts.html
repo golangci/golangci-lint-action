@@ -1,0 +1,23 @@
+{{- /*
+Displays a starchart for a GitHub repository.
+Supports both light and dark mode.
+
+@param {string} repo The name of the GitHub repository.
+
+@example {{< golangci/starcharts repo="golangci/golangci-lint" >}}
+
+*/ -}}
+{{- $repo := .Get "repo" -}}
+
+<a href="https://starchart.cc/{{ $repo }}" target="_blank">
+  <img
+    alt="Stargazers over time"
+    src="https://starchart.cc/{{ $repo }}.svg"
+    class="hx:block hx:dark:hidden"
+  />
+  <img
+    alt="Stargazers over time"
+    src="https://starchart.cc/{{ $repo }}.svg?variant=dark"
+    class="hx:hidden hx:dark:block"
+  />
+</a>

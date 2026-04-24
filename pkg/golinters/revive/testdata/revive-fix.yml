@@ -1,0 +1,9 @@
+version: "2"
+
+linters:
+  settings:
+    revive:
+      severity: warning
+      rules:
+        - name: errorf
+        - name: range

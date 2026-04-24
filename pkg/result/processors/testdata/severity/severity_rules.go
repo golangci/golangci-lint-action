@@ -1,0 +1,3 @@
+package severity
+
+//go:dosomething

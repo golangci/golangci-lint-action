@@ -1,20 +1,49 @@
 name: 💡 Feature request
 description: "Suggest an idea for this project."
+labels: [enhancement]
 body:
+
   - type: checkboxes
     id: terms
     attributes:
       label: Welcome
       options:
-        - label: Yes, I understand that the GitHub action repository is not the repository of golangci-lint itself.
+        - label: Yes, I've searched similar [issues on GitHub](https://github.com/golangci/golangci-lint/issues) and didn't find any.
           required: true
-        - label: Yes, I've searched similar issues on GitHub and didn't find any.
+        - label: I agree to follow this project's [Code of Conduct](https://github.com/golangci/golangci-lint?tab=coc-ov-file)
           required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you install golangci-lint?
+      options:
+        - I don't know
+        - Official GitHub Action
+        - Official binary
+        - Brew
+        - MacPorts
+        - Chocolatey
+        - Scoop
+        - Docker
+        - go install
+        - Tools pattern
+        - go tool
+        - AUR
+        - Nix
+        - Deb
+        - RPM
+        - Other Linux package manager
+        - Via editor/IDE
+        - asdf/mise-en-place
+        - Other
+    validations:
+      required: true
 
   - type: textarea
     id: problem
     attributes:
-      label: Your feature request related to a problem? Please describe.
+      label: Your feature request related to a problem? Please describe
       placeholder: "A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]"
     validations:
       required: true
@@ -22,7 +51,7 @@ body:
   - type: textarea
     id: solution
     attributes:
-      label: Describe the solution you'd like.
+      label: Describe the solution you'd like
       placeholder: "A clear and concise description of what you want to happen."
     validations:
       required: true
@@ -30,7 +59,7 @@ body:
   - type: textarea
     id: alternatives
     attributes:
-      label: Describe alternatives you've considered.
+      label: Describe alternatives you've considered
       placeholder: "A clear and concise description of any alternative solutions or features you've considered."
     validations:
       required: true
@@ -38,7 +67,15 @@ body:
   - type: textarea
     id: additional
     attributes:
-      label: Additional context.
+      label: Additional context
       placeholder: "Add any other context or screenshots about the feature request here."
     validations:
       required: false
+
+  - type: checkboxes
+    id: supporter
+    attributes:
+      label: Supporter
+      description: If you find golangci-lint valuable, consider [sponsoring the project](https://donate.golangci.org) to help sustain its development. 💛
+      options:
+        - label: I am a [sponsor/backer](https://donate.golangci.org) of this project.

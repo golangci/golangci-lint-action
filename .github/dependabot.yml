@@ -4,6 +4,8 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
   - package-ecosystem: npm
     directory: "/"
     groups:
@@ -13,3 +15,5 @@ updates:
         dependency-type: production
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7

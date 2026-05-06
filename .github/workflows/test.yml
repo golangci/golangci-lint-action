@@ -20,6 +20,8 @@ jobs:
         with:
           node-version: 24.x
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - run: |
           npm install
           npm run all
@@ -48,6 +50,8 @@ jobs:
       pull-requests: read
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v6
         with:
           node-version: 24.x
@@ -81,6 +85,8 @@ jobs:
       pull-requests: read
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v6
         with:
           node-version: 24.x
@@ -111,6 +117,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v6
         with:
           node-version: 24.x
@@ -143,6 +151,8 @@ jobs:
       pull-requests: read
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v6
         with:
           node-version: 24.x
@@ -170,6 +180,8 @@ jobs:
       pull-requests: read
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v6
         with:
           node-version: 24.x

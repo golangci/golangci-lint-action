@@ -29,6 +29,7 @@ jobs:
           # a pull request then we can checkout the head of the pull request.
           # Only include this option if you are running this workflow on pull requests.
           fetch-depth: 2
+          persist-credentials: false
 
       # If this run was triggered by a pull request event then checkout
       # the head of the pull request instead of the merge commit.

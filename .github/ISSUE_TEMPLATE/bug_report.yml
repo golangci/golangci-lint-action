@@ -10,8 +10,6 @@ body:
           required: true
         - label: Yes, I've searched similar issues on GitHub and didn't find any.
           required: true
-        - label: Yes, I've included all information below (version, config, etc).
-          required: true
 
   - type: textarea
     id: problem
@@ -25,6 +23,7 @@ body:
     id: golangci-lint-version
     attributes:
       label: Version of golangci-lint
+      placeholder: golangci-lint has version 2.x.x built with go1.x.x from xxxx on xxxx-xx-xx
     validations:
       required: true
 
@@ -32,6 +31,7 @@ body:
     id: github-action-version
     attributes:
       label: Version of the GitHub Action
+      placeholder: v9.2.0
     validations:
       required: true
 
@@ -69,6 +69,7 @@ body:
     id: go-env
     attributes:
       label: Go version
+      placeholder: go1.25.8
     validations:
       required: true
 
@@ -86,3 +87,19 @@ body:
         </details>
     validations:
       required: true
+
+  - type: checkboxes
+    id: validation
+    attributes:
+      label: Validation
+      options:
+        - label: Yes, I've included all the information above (example, version, config, etc.).
+          required: true
+
+  - type: checkboxes
+    id: supporter
+    attributes:
+      label: Supporter
+      description: If you find golangci-lint valuable, consider [sponsoring the project](https://donate.golangci.org) to help sustain its development. 💛
+      options:
+        - label: I am a [sponsor/backer](https://donate.golangci.org) of this project.

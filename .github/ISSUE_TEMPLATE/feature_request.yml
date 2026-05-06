@@ -42,3 +42,11 @@ body:
       placeholder: "Add any other context or screenshots about the feature request here."
     validations:
       required: false
+
+  - type: checkboxes
+    id: supporter
+    attributes:
+      label: Supporter
+      description: If you find golangci-lint valuable, consider [sponsoring the project](https://donate.golangci.org) to help sustain its development. 💛
+      options:
+        - label: I am a [sponsor/backer](https://donate.golangci.org) of this project.

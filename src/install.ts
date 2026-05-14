@@ -145,7 +145,7 @@ async function installBin(versionInfo: VersionInfo): Promise<string> {
   } else {
     // We want to always overwrite files if the local cache already has them
     const args = ["xz"]
-    if (process.platform.toString() != "darwin") {
+    if (process.platform.toString() != "darwin" && process.platform.toString() != "freebsd") {
       args.push("--overwrite")
     }
     extractedDir = await tc.extractTar(archivePath, process.env.HOME, args)

@@ -3,9 +3,13 @@ updates:
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
-      interval: weekly
+      interval: monthly
     cooldown:
       default-days: 7
+    groups:
+      github-actions:
+        patterns:
+          - "*"  # Group all updates into a single larger pull request.
   - package-ecosystem: npm
     directory: "/"
     groups:
@@ -14,6 +18,6 @@ updates:
       dependencies:
         dependency-type: production
     schedule:
-      interval: weekly
+      interval: monthly
     cooldown:
       default-days: 7

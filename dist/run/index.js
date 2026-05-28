@@ -29643,6 +29643,19 @@ function _generateTmpName(opts) {
 }
 
 /**
+ * Check the prefix and postfix options
+ *
+ * @private
+ */
+function _assertPath(path) {
+  if (path.includes("..")) {
+    throw new Error("Relative value not allowed");
+  }
+
+  return path;
+}
+
+/**
  * Asserts and sanitizes the basic options.
  *
  * @private
@@ -29656,8 +29669,9 @@ function _assertOptionsBase(options) {
 
     // must not fail on valid .<name> or ..<name> or similar such constructs
     const basename = path.basename(name);
-    if (basename === '..' || basename === '.' || basename !== name)
+    if (basename === '..' || basename === '.' || basename !== name) {
       throw new Error(`name option must not contain a path, found "${name}".`);
+    }
   }
 
   /* istanbul ignore else */
@@ -29678,8 +29692,9 @@ function _assertOptionsBase(options) {
   options.unsafeCleanup = !!options.unsafeCleanup;
 
   // for completeness' sake only, also keep (multiple) blanks if the user, purportedly sane, requests us to
-  options.prefix = _isUndefined(options.prefix) ? '' : options.prefix;
-  options.postfix = _isUndefined(options.postfix) ? '' : options.postfix;
+  options.prefix = _isUndefined(options.prefix) ? '' : _assertPath(options.prefix);
+  options.postfix = _isUndefined(options.postfix) ? '' : _assertPath(options.postfix);
+  options.template = _isUndefined(options.template) ? undefined : _assertPath(options.template);
 }
 
 /**
@@ -29695,7 +29710,7 @@ function _getRelativePath(option, name, tmpDir, cb) {
 
     const relativePath = path.relative(tmpDir, resolvedPath);
 
-    if (!resolvedPath.startsWith(tmpDir)) {
+    if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
       return cb(new Error(`${option} option must be relative to "${tmpDir}", found "${relativePath}".`));
     }
 
@@ -29714,7 +29729,7 @@ function _getRelativePathSync(option, name, tmpDir) {
   const resolvedPath = _resolvePathSync(name, tmpDir);
   const relativePath = path.relative(tmpDir, resolvedPath);
 
-  if (!resolvedPath.startsWith(tmpDir)) {
+  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
     throw new Error(`${option} option must be relative to "${tmpDir}", found "${relativePath}".`);
   }
 

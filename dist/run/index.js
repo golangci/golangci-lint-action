@@ -29643,16 +29643,26 @@ function _generateTmpName(opts) {
 }
 
 /**
- * Check the prefix and postfix options
+ * Check the prefix, postfix, and template options.
+ *
+ * Rejects non-string inputs so that a non-string `.includes('..')` cannot evade
+ * the substring check (e.g. an Array whose `.includes('..')` is element-wise,
+ * or a duck-typed object with a custom `.includes`), and so that the value is
+ * not later coerced to a string with traversal sequences via `Array.prototype.join`
+ * or `path.join`.
  *
  * @private
  */
-function _assertPath(path) {
-  if (path.includes("..")) {
+function _assertPath(option, value) {
+  if (typeof value !== 'string') {
+    throw new Error(`${option} option must be a string, got "${typeof value}".`);
+  }
+
+  if (value.includes("..")) {
     throw new Error("Relative value not allowed");
   }
 
-  return path;
+  return value;
 }
 
 /**
@@ -29675,8 +29685,13 @@ function _assertOptionsBase(options) {
   }
 
   /* istanbul ignore else */
-  if (!_isUndefined(options.template) && !options.template.match(TEMPLATE_PATTERN)) {
-    throw new Error(`Invalid template, found "${options.template}".`);
+  if (!_isUndefined(options.template)) {
+    if (typeof options.template !== 'string') {
+      throw new Error(`template option must be a string, got "${typeof options.template}".`);
+    }
+    if (!options.template.match(TEMPLATE_PATTERN)) {
+      throw new Error(`Invalid template, found "${options.template}".`);
+    }
   }
 
   /* istanbul ignore else */
@@ -29692,9 +29707,9 @@ function _assertOptionsBase(options) {
   options.unsafeCleanup = !!options.unsafeCleanup;
 
   // for completeness' sake only, also keep (multiple) blanks if the user, purportedly sane, requests us to
-  options.prefix = _isUndefined(options.prefix) ? '' : _assertPath(options.prefix);
-  options.postfix = _isUndefined(options.postfix) ? '' : _assertPath(options.postfix);
-  options.template = _isUndefined(options.template) ? undefined : _assertPath(options.template);
+  options.prefix = _isUndefined(options.prefix) ? '' : _assertPath('prefix', options.prefix);
+  options.postfix = _isUndefined(options.postfix) ? '' : _assertPath('postfix', options.postfix);
+  options.template = _isUndefined(options.template) ? undefined : _assertPath('template', options.template);
 }
 
 /**

@@ -616,6 +616,23 @@ with:
 
 </details>
 
+#### `no-run-logs-group`
+
+(optional)
+
+This option disables the grouping of logs from golangci-lint run.
+
+<details>
+<summary>Example</summary>
+
+```yaml
+uses: golangci/golangci-lint-action@v9
+with:
+  experimental: "no-run-logs-group"
+```
+
+</details>
+
 ## Annotations
 
 Currently, GitHub parses the action's output and creates [annotations](https://github.blog/2018-12-14-introducing-check-runs-and-annotations/).

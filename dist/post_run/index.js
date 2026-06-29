@@ -59467,15 +59467,23 @@ function modulesAutoDetection(rootDir) {
 async function runLint(binPath) {
     const workingDirectory = getWorkingDirectory();
     const experimental = core.getInput(`experimental`).split(`,`);
+    const noGroup = experimental.includes(`no-run-logs-group`);
     if (experimental.includes(`automatic-module-directories`)) {
         const wds = modulesAutoDetection(workingDirectory);
         const cwd = process.cwd();
         for (const wd of wds) {
-            await core.group(`run golangci-lint in ${path.relative(cwd, wd)}`, () => runGolangciLint(binPath, wd));
+            await optionalGroup(noGroup, `run golangci-lint in ${path.relative(cwd, wd)}`, () => runGolangciLint(binPath, wd));
         }
         return;
     }
-    await core.group(`run golangci-lint`, () => runGolangciLint(binPath, workingDirectory));
+    await optionalGroup(noGroup, `run golangci-lint`, () => runGolangciLint(binPath, workingDirectory));
+}
+async function optionalGroup(noGroup, name, fn) {
+    if (noGroup) {
+        core.info(name);
+        return fn();
+    }
+    return core.group(name, fn);
 }
 async function run() {
     try {

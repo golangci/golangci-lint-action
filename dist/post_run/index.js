@@ -59234,6 +59234,10 @@ async function install(binPath) {
     if (!configFile || configFile === "") {
         return binPath;
     }
+    const installMode = core.getInput(`install-mode`).toLowerCase();
+    if (installMode === "none") {
+        return binPath;
+    }
     core.info(`Found configuration for the plugin module system : ${configFile}`);
     core.info(`Building and installing custom golangci-lint binary...`);
     const startedAt = Date.now();

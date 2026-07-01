@@ -42,6 +42,11 @@ export async function install(binPath: string): Promise<string> {
   if (!configFile || configFile === "") {
     return binPath
   }
+  
+  const installMode = core.getInput(`install-mode`).toLowerCase()
+  if (installMode === "none" ) {
+    return binPath
+  }
 
   core.info(`Found configuration for the plugin module system : ${configFile}`)
 

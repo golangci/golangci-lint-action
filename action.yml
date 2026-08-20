@@ -76,6 +76,7 @@ inputs:
     description: |
       Experimental options for the action.
       List of comma separated options.
+      Available options: `automatic-module-directories`, `no-run-logs-group`
     default: ""
     required: false
 runs:

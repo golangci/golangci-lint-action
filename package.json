@@ -1,6 +1,6 @@
 {
   "name": "golanci-lint-action",
-  "version": "8.0.0",
+  "version": "9.3.0",
   "private": true,
   "description": "golangci-lint github action",
   "main": "dist/main.js",
@@ -38,9 +38,9 @@
     "@types/semver": "^7.7.1",
     "@types/tmp": "^0.2.6",
     "@types/which": "^3.0.4",
-    "tmp": "^0.2.5",
-    "which": "^6.0.1",
-    "yaml": "^2.8.3"
+    "tmp": "^0.2.7",
+    "which": "^7.0.0",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@eslint/compat": "^2.0.5",
@@ -59,6 +59,6 @@
     "typescript": "^5.9.3"
   },
   "overrides": {
-    "undici": "^6.24.0"
+    "undici": "^7.16.0"
   }
 }

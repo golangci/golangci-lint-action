@@ -286,7 +286,7 @@ You will also likely need to add the following `.gitattributes` file to ensure t
 The version of golangci-lint to use.
 
 When `install-mode` is:
-* `binary` (default): the value can be v2.3, v2.3.4, or `latest` to use the latest version.
+* `binary` (default): the value can be v2.3, v2.3.4 (with the `v` prefix or without), or `latest` to use the latest version.
 * `goinstall`: the value can be v2.3.4, `latest`, or the hash of a commit.
 * `none`: the value is ignored.
 

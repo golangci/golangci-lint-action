@@ -69873,6 +69873,13 @@ const path_1 = __importDefault(__nccwpck_require__(16928));
 const install_1 = __nccwpck_require__(90232);
 const versionRe = /^v(\d+)\.(\d+)(?:\.(\d+))?$/;
 const modVersionRe = /github.com\/golangci\/golangci-lint\/v2\s(v\S+)/;
+const versionWithoutPrefixRe = /^\d+\.\d+(?:\.\d+)?$/;
+const normalizeInputVersion = (version) => {
+    if (versionWithoutPrefixRe.test(version)) {
+        return `v${version}`;
+    }
+    return version;
+};
 const parseVersion = (s) => {
     if (s == "latest" || s == "") {
         return null;
@@ -69917,7 +69924,7 @@ const isLessVersion = (a, b) => {
     return a.minor < b.minor;
 };
 const getRequestedVersion = () => {
-    let requestedVersion = core.getInput(`version`);
+    let requestedVersion = normalizeInputVersion(core.getInput(`version`));
     let versionFilePath = core.getInput(`version-file`);
     if (requestedVersion && versionFilePath) {
         core.warning(`Both version (${requestedVersion}) and version-file (${versionFilePath}) inputs are specified, only version will be used`);

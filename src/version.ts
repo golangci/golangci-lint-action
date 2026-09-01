@@ -14,6 +14,15 @@ export type Version = {
 
 const versionRe = /^v(\d+)\.(\d+)(?:\.(\d+))?$/
 const modVersionRe = /github.com\/golangci\/golangci-lint\/v2\s(v\S+)/
+const versionWithoutPrefixRe = /^\d+\.\d+(?:\.\d+)?$/
+
+const normalizeInputVersion = (version: string): string => {
+  if (versionWithoutPrefixRe.test(version)) {
+    return `v${version}`
+  }
+
+  return version
+}
 
 const parseVersion = (s: string): Version => {
   if (s == "latest" || s == "") {
@@ -66,7 +75,7 @@ const isLessVersion = (a: Version, b: Version): boolean => {
 }
 
 const getRequestedVersion = (): Version => {
-  let requestedVersion = core.getInput(`version`)
+  let requestedVersion = normalizeInputVersion(core.getInput(`version`))
   let versionFilePath = core.getInput(`version-file`)
 
   if (requestedVersion && versionFilePath) {
